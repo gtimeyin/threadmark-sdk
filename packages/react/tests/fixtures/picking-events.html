@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Threadmark picking event fixture</title>
+    <style>
+      html, body { margin: 0; min-height: 100%; font: 16px/1.5 system-ui, sans-serif; }
+      #root { display: grid; gap: 28px; padding: 80px; }
+      #custom-target { width: 320px; padding: 24px; background: #f4efe4; }
+      #secondary-target { width: 220px; padding: 16px; border: 0; background: #d8ecdf; color: #173c2d; }
+      #interaction-controls {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        width: 150px;
+        display: grid;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid #d8ddd9;
+        border-radius: 12px;
+        background: #fff;
+      }
+      #animated-target {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        background: #4c8dff;
+        animation: fixture-pulse 1s ease-in-out infinite alternate;
+      }
+      #region-space {
+        width: 300px;
+        height: 150px;
+        border: 1px dashed #b5bbb7;
+        background: #f7f8f7;
+      }
+      @keyframes fixture-pulse {
+        from { transform: translateX(0); }
+        to { transform: translateX(36px); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./picking-events.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,109 @@
+name: Publish React SDK beta
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      shasum: ${{ steps.pack.outputs.shasum }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js without release caches
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Validate release identity and source visibility
+        id: release
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          NPM_VERSION="$(npm --version)" node scripts/check-release.mjs
+          echo "version=$(node -p "JSON.parse(require('fs').readFileSync('packages/react/package.json')).version")" >> "$GITHUB_OUTPUT"
+
+      - name: Test release guards
+        run: node --test tests/release.test.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify the complete release
+        run: npm run verify
+
+      - name: Pack the verified SDK
+        id: pack
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-release"
+          npm pack --workspace threadmark-react --pack-destination "$RUNNER_TEMP/npm-release"
+          tar -tzf "$RUNNER_TEMP/npm-release/threadmark-react-${{ steps.release.outputs.version }}.tgz"
+          echo "shasum=$(sha1sum "$RUNNER_TEMP/npm-release/threadmark-react-${{ steps.release.outputs.version }}.tgz" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve the verified tarball
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-release
+          path: ${{ runner.temp }}/npm-release/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up Node.js for tokenless npm publishing
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Download the verified tarball from this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: npm-release
+          path: release
+
+      - name: Publish the exact tarball with OIDC and provenance
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+          RELEASE_SHASUM: ${{ needs.verify.outputs.shasum }}
+        run: |
+          echo "$RELEASE_SHASUM  release/threadmark-react-$RELEASE_VERSION.tgz" | sha1sum --check
+          npm publish "release/threadmark-react-$RELEASE_VERSION.tgz" --tag beta --access public --provenance --ignore-scripts
+
+      - name: Verify published version and tarball
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+          RELEASE_SHASUM: ${{ needs.verify.outputs.shasum }}
+        run: |
+          test "$(npm view "threadmark-react@$RELEASE_VERSION" version)" = "$RELEASE_VERSION"
+          test "$(npm view "threadmark-react@$RELEASE_VERSION" dist.shasum)" = "$RELEASE_SHASUM"
+          test "$(npm view threadmark-react dist-tags.beta)" = "$RELEASE_VERSION"
+          test -n "$(npm view "threadmark-react@$RELEASE_VERSION" dist.attestations.url)"
+          npm view "threadmark-react@$RELEASE_VERSION" dist.attestations --json

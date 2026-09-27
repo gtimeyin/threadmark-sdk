@@ -1,0 +1,67 @@
+{
+  "name": "threadmark-react",
+  "version": "0.1.0-beta.8",
+  "license": "MIT",
+  "description": "A lightweight React review overlay for structured product feedback.",
+  "keywords": [
+    "annotation",
+    "design-review",
+    "feedback",
+    "react",
+    "screenshot"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gtimeyin/threadmark-sdk.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/gtimeyin/threadmark-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/gtimeyin/threadmark-sdk/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.ts",
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@fontsource/bricolage-grotesque": "^5.3.0",
+    "@fontsource/geist": "^5.3.0",
+    "@fontsource/geist-mono": "^5.3.0",
+    "@playwright/test": "^1.55.0",
+    "@vitejs/plugin-react": "5.0.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "tag": "beta"
+  },
+  "scripts": {
+    "build": "vite build && node scripts/copy-types.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs && npm run test:browser",
+    "test:browser": "playwright test --config tests/playwright.config.mjs",
+    "pack:check": "npm pack --dry-run --json"
+  },
+  "dependencies": {
+    "lucide-react": "^1.31.0",
+    "modern-screenshot": "4.7.0"
+  }
+}

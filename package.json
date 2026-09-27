@@ -1,0 +1,35 @@
+{
+  "name": "review-tool",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "preview": "vite preview",
+    "test:sites": "node --test tests/sites-worker.test.mjs",
+    "test:vercel": "node --test tests/vercel-page-versions.test.mjs",
+    "test:release": "node --test tests/release.test.mjs",
+    "build:sdk": "npm run build --workspace threadmark-react",
+    "test:sdk": "npm run test --workspace threadmark-react",
+    "pack:sdk": "npm run build:sdk && npm run pack:check --workspace threadmark-react",
+    "build:example": "npm run build:sdk && npm run build --workspace threadmark-basic-example",
+    "verify": "npm run test:release && npm run test:sdk && npm run test:vercel && npm run build:example && npm run build && npm run test:sites"
+  },
+  "dependencies": {
+    "@fontsource/bricolage-grotesque": "^5.3.0",
+    "@fontsource/geist": "^5.3.0",
+    "@fontsource/geist-mono": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "@fontsource/newsreader": "^5.3.0",
+    "@vitejs/plugin-react": "5.0.4",
+    "lucide-react": "^1.31.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2"
+  }
+}

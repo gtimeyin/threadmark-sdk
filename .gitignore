@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.DS_Store
+playwright-report/
+test-results/
+.vercel
+.env*
+
+# Local tooling and internal artifacts belong outside the public SDK tree.
+.claude/
+.codex/
+*.log
+/qa/
+/explorations/
+/PRD.md
+/MVP-BACKLOG.md
+/CONNECTOR-CONTRACT.md
+/HOSTED-PRODUCT.md
+/CLOUD-BACKLOG.md
+/design-qa.md
