@@ -6,11 +6,11 @@ function release(overrides = {}) {
   return {
     metadata: {
       name: "threadmark-react",
-      version: "0.1.0-beta.8",
+      version: "0.1.0-beta.9",
       repository: { url: "git+https://github.com/gtimeyin/threadmark-sdk.git" },
       publishConfig: { access: "public", tag: "beta", provenance: true },
     },
-    tag: "v0.1.0-beta.8",
+    tag: "v0.1.0-beta.9",
     refType: "tag",
     repository: "gtimeyin/threadmark-sdk",
     isPrivate: "false",
@@ -21,7 +21,7 @@ function release(overrides = {}) {
 
 test("accepts a matching beta tag from the public source with supported npm", () => {
   for (const npmVersion of ["11.5.1", "11.12.1", "12.0.0"]) {
-    assert.equal(validateRelease(release({ npmVersion })), "0.1.0-beta.8");
+    assert.equal(validateRelease(release({ npmVersion })), "0.1.0-beta.9");
   }
 });
 

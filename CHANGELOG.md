@@ -4,6 +4,12 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [0.1.0-beta.9] — 2026-09-28
+
+### Fixed
+
+- Screenshot evidence now waits briefly for page fonts and embeds available web-font faces, preserving host-page typography without crossing the same-origin asset boundary. Existing saved images are unchanged.
+
 ## [0.1.0-beta.8] — 2026-09-28
 
 ### Added
@@ -101,7 +107,8 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 - Consumer-owned persistence callbacks, hydration, deep links, and conservative target restoration.
 - Package, SSR, browser interaction, npm tarball, example application, and CI verification.
 
-[Unreleased]: https://github.com/gtimeyin/threadmark-sdk/compare/v0.1.0-beta.8...HEAD
+[Unreleased]: https://github.com/gtimeyin/threadmark-sdk/compare/v0.1.0-beta.9...HEAD
+[0.1.0-beta.9]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.8
 [0.1.0-beta.6]: https://www.npmjs.com/package/threadmark-react/v/0.1.0-beta.6
 [0.1.0-beta.5]: https://www.npmjs.com/package/threadmark-react/v/0.1.0-beta.5

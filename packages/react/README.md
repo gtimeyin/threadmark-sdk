@@ -320,6 +320,8 @@ The same built-in boundaries apply to region and selected screenshot-area captur
 
 Snapshot rendering also fails closed on unusually complex documents: more than 20,000 light/shadow DOM elements, a page dimension above 50,000px, or a page area above 100 million CSS pixels. Feedback remains available without image evidence when this safety budget is exceeded.
 
+Snapshots wait briefly for the host page's fonts and embed available web-font faces so captured text keeps the page's typography. Font assets still follow the same-origin fetch boundary; fonts supplied only from an inaccessible cross-origin stylesheet may fall back in the image. Host applications that need exact evidence should serve those fonts from the same origin or include them as data URLs.
+
 ## Page version history
 
 Threadmark can show other deployments for the route currently under review. The React package does not call Vercel directly: fetch deployment records in a trusted server route, combine them with per-build feedback counts, and pass the safe result through `pageVersions`. Use immutable deployment URLs rather than mutable branch aliases.

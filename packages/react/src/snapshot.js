@@ -196,6 +196,22 @@ function captureBackground(documentRef, windowRef) {
   return "#ffffff";
 }
 
+async function waitForPageFonts(documentRef, windowRef, signal) {
+  if (!documentRef.fonts?.ready) return;
+  let timer;
+  try {
+    await Promise.race([
+      documentRef.fonts.ready,
+      new Promise((resolve) => { timer = windowRef.setTimeout(resolve, 2_000); }),
+    ]);
+  } catch {
+    // Font loading can fail independently of feedback capture.
+  } finally {
+    windowRef.clearTimeout(timer);
+  }
+  if (signal?.aborted) throw new DOMException("Snapshot cancelled", "AbortError");
+}
+
 function childElements(node) {
   return node?.children ? [...node.children] : [];
 }
@@ -310,6 +326,7 @@ export async function captureRegionSnapshot({
   const scale = snapshotScale(region, windowRef.devicePixelRatio);
   const backgroundColor = captureBackground(documentRef, windowRef);
   const { domToCanvas } = await import("modern-screenshot");
+  await waitForPageFonts(documentRef, windowRef, signal);
 
   if (signal?.aborted) throw new DOMException("Snapshot cancelled", "AbortError");
   if (windowRef.scrollX !== captureScrollX || windowRef.scrollY !== captureScrollY) {
@@ -337,7 +354,9 @@ export async function captureRegionSnapshot({
       },
       placeholderImage: TRANSPARENT_PIXEL,
     },
-    font: false,
+    // Embed the host's available web fonts into the isolated SVG rasterization.
+    // The fetch options above prevent cross-origin asset requests.
+    font: {},
     timeout: 8_000,
     maximumCanvasSize: 8_192,
     features: { restoreScrollPosition: true },

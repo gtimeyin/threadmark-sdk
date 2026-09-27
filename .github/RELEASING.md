@@ -35,11 +35,11 @@ npm package settings; review that account policy separately before changing it.
 
 1. Update the SDK version, lockfile, and changelog; commit and push to `main`.
 2. Run `npm run verify` and `node --test tests/release.test.mjs`.
-3. Create and push the matching release tag from a commit on `main`. For beta.8:
+3. Create and push the matching release tag from a commit on `main`. For beta.9:
 
    ```sh
-   git tag -a v0.1.0-beta.8 -m "threadmark-react 0.1.0-beta.8"
-   git push origin v0.1.0-beta.8
+   git tag -a v0.1.0-beta.9 -m "threadmark-react 0.1.0-beta.9"
+   git push origin v0.1.0-beta.9
    ```
 
 4. Inspect the **Publish React SDK beta** workflow. It validates the tag and

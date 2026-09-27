@@ -1353,6 +1353,39 @@ test("keeps a selected crop aligned after the page scrolls", async ({ page }) =>
   expect(closeTo(result.pixel, [249, 115, 22]), JSON.stringify(result)).toBe(true);
 });
 
+test("preserves the host page's loaded web font in captured text", async ({ page }) => {
+  await page.setContent(fixtureHtml, { waitUntil: "load" });
+  await page.addScriptTag({ content: fixtureBundle });
+  await page.evaluate(() => document.fonts.load('600 48px "Snapshot Brand"'));
+  const reference = await page.locator("#font-sample").screenshot();
+  const captured = await page.evaluate(() => window.runFontCapture());
+  const similarity = await page.evaluate(async ({ referenceData, capturedData }) => {
+    const decode = async (url) => {
+      const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      canvas.getContext("2d").drawImage(bitmap, 0, 0);
+      bitmap.close();
+      return canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    const referencePixels = await decode(referenceData);
+    const capturedPixels = await decode(capturedData);
+    let matching = 0;
+    let ink = 0;
+    for (let index = 0; index < referencePixels.length; index += 4) {
+      const inReference = referencePixels[index] < 140;
+      const inCapture = capturedPixels[index] < 140;
+      if (inReference || inCapture) {
+        ink += 1;
+        if (inReference === inCapture) matching += 1;
+      }
+    }
+    return matching / ink;
+  }, { referenceData: `data:image/png;base64,${reference.toString("base64")}`, capturedData: captured });
+  expect(similarity).toBeGreaterThan(0.8);
+});
+
 test("ordinary comments keep screenshots and repin history through failure, cancellation and reload", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
   await mountPersistentPickingFixture(page);
