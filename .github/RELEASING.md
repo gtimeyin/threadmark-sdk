@@ -49,6 +49,9 @@ npm package settings; review that account policy separately before changing it.
    project dependencies. Release jobs do not restore dependency caches, and
    actions are pinned to immutable commits.
 5. Confirm the npm version, tarball hash, `beta` tag, and provenance attestation.
+   The verification step waits for registry propagation after npm accepts the
+   upload. If it still fails, check the registry independently: a failed
+   post-publish check does not mean the upload failed.
    Failed runs can be retried only after checking that the version has not
    already been published; npm versions are immutable.
 

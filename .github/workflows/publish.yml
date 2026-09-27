@@ -114,8 +114,20 @@ jobs:
           RELEASE_VERSION: ${{ needs.verify.outputs.version }}
           RELEASE_SHASUM: ${{ needs.verify.outputs.shasum }}
         run: |
-          test "$(npm view "threadmark-react@$RELEASE_VERSION" version)" = "$RELEASE_VERSION"
-          test "$(npm view "threadmark-react@$RELEASE_VERSION" dist.shasum)" = "$RELEASE_SHASUM"
-          test "$(npm view threadmark-react dist-tags.beta)" = "$RELEASE_VERSION"
-          test -n "$(npm view "threadmark-react@$RELEASE_VERSION" dist.attestations.url)"
-          npm view "threadmark-react@$RELEASE_VERSION" dist.attestations --json
+          # npm may acknowledge the upload before registry metadata propagates.
+          # Retry verification only: never retry an immutable-version upload.
+          for attempt in $(seq 1 30); do
+            if test "$(npm view "threadmark-react@$RELEASE_VERSION" version)" = "$RELEASE_VERSION" &&
+               test "$(npm view "threadmark-react@$RELEASE_VERSION" dist.shasum)" = "$RELEASE_SHASUM" &&
+               test "$(npm view threadmark-react dist-tags.beta)" = "$RELEASE_VERSION" &&
+               test -n "$(npm view "threadmark-react@$RELEASE_VERSION" dist.attestations.url)"; then
+              npm view "threadmark-react@$RELEASE_VERSION" dist.attestations --json
+              exit 0
+            fi
+            if [ "$attempt" -lt 30 ]; then
+              echo "Waiting for npm registry metadata ($attempt/30)."
+              sleep 10
+            fi
+          done
+          echo "::error::Published package metadata did not match the verified release within the retry window. Check the registry before any manual retry."
+          exit 1
