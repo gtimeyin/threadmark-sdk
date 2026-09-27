@@ -40,8 +40,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const metadata = JSON.parse(readFileSync(new URL("../packages/react/package.json", import.meta.url), "utf8"));
     const version = validateRelease({
       metadata,
-      tag: process.env.GITHUB_REF_NAME,
-      refType: process.env.GITHUB_REF_TYPE,
+      tag: process.env.RELEASE_TAG ?? process.env.GITHUB_REF_NAME,
+      refType: process.env.RELEASE_TAG ? "tag" : process.env.GITHUB_REF_TYPE,
       repository: process.env.GITHUB_REPOSITORY,
       isPrivate: process.env.REPOSITORY_PRIVATE,
       npmVersion: process.env.NPM_VERSION,

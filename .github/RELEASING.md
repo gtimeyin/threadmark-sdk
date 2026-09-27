@@ -52,6 +52,13 @@ npm package settings; review that account policy separately before changing it.
    Failed runs can be retried only after checking that the version has not
    already been published; npm versions are immutable.
 
+If a workflow-only fix is needed after tagging, leave the release tag unchanged.
+The workflow supports a manual retry on `main` with the existing tag as its
+`tag` input. It requires the tag to match the SDK version and verifies that SDK
+source and dependency manifests are identical to that tag before building from
+`main`. Provenance therefore identifies the actual workflow/build commit.
+Do not retry an already published version.
+
 This workflow deliberately rejects stable or non-beta prerelease versions.
 Changing the stable release policy or removing provenance requires a separate
 maintainer decision. No publication is triggered by an ordinary push to `main`.
