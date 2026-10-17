@@ -15,7 +15,8 @@ export default defineConfig({
     minify: false,
     sourcemap: true,
     rollupOptions: {
-      external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", /^lucide-react(?:\/|$)/],
+      // rrweb stays a runtime dependency; its stylesheet (imported with ?inline) is still bundled.
+      external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", /^lucide-react(?:\/|$)/, /^rrweb$/],
       output: {
         banner: '"use client";',
       },

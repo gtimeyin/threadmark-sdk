@@ -8,6 +8,8 @@ import {
   isLocalHostname,
   isThreadmarkEnabled,
   matchesAllowedHost,
+  normalizeAsk,
+  normalizePollResults,
   threadmarkTarget,
 } from "../src/core.js";
 
@@ -549,4 +551,43 @@ test("a malformed workflow history entry is dropped without discarding the discu
   assert.equal(payload.comment, "Keep this thread");
   assert.equal(payload.workflow.history.length, 200);
   assert.ok(payload.workflow.history.every((item) => item.action === "reopened"));
+});
+
+test("questions and polls are normalized; a poll needs two answers and keeps stable option ids", () => {
+  assert.deepEqual(normalizeAsk({ kind: "question", extra: true }), { kind: "question" });
+  assert.equal(normalizeAsk({ kind: "survey" }), null);
+  assert.equal(normalizeAsk({ kind: "poll", options: [{ label: "Only one" }] }), null);
+  assert.deepEqual(normalizeAsk({
+    kind: "poll",
+    multiple: 1,
+    options: [{ id: "a", label: "  Yes  " }, { id: "a", label: "Duplicate id" }, { label: "" }, { label: "No" }],
+  }), { kind: "poll", multiple: true, options: [{ id: "a", label: "Yes" }, { id: "option-4", label: "No" }] });
+  const many = normalizeAsk({ kind: "poll", options: Array.from({ length: 12 }, (_, index) => ({ label: `Answer ${index}` })) });
+  assert.equal(many.options.length, 8);
+
+  const payload = createFeedbackPayload({
+    projectKey: "p",
+    route: "/",
+    target: { tagName: "button", route: "/" },
+    comment: "Which label?",
+    ask: { kind: "poll", options: [{ id: "x", label: "One" }, { id: "y", label: "Two" }] },
+  });
+  assert.deepEqual(payload.ask, { kind: "poll", multiple: false, options: [{ id: "x", label: "One" }, { id: "y", label: "Two" }] });
+  assert.equal(createFeedbackPayload({ projectKey: "p", route: "/", target: { tagName: "a", route: "/" }, comment: "c" }).ask, undefined);
+});
+
+test("poll results from the host are limited to the poll's own options", () => {
+  const ask = { kind: "poll", multiple: false, options: [{ id: "x", label: "One" }, { id: "y", label: "Two" }] };
+  assert.deepEqual(normalizePollResults({
+    counts: { x: 2, y: "1", z: 9 },
+    total: 3,
+    mine: ["x", "z"],
+    voters: [{ reviewer: { id: "u1", displayName: "Ada" }, optionIds: ["x", "z"] }, { reviewer: null, optionIds: ["y"] }],
+  }, ask), {
+    counts: { x: 2, y: 1 },
+    total: 3,
+    mine: ["x"],
+    voters: [{ reviewer: { id: "u1", displayName: "Ada", avatarUrl: null }, optionIds: ["x"] }],
+  });
+  assert.equal(normalizePollResults({ total: 1 }, { kind: "question" }), null);
 });

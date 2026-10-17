@@ -208,6 +208,15 @@ export function restoreTargetDescriptor(
   if (["region", "screenshot"].includes(target.kind)) {
     return { status: "resolved", element: null, candidates: [] };
   }
+  // Interaction and video recordings with no element steps target the page itself, which always exists.
+  if (
+    String(target.tagName || "").toLowerCase() === "html"
+    && target.locatorCandidates?.domPath === "html"
+    && documentRef.documentElement
+  ) {
+    const element = documentRef.documentElement;
+    return { status: "resolved", element, candidates: [element] };
+  }
 
   const stableId = target.locatorCandidates?.stableId;
   const stableMatches = matchingStableElements(stableId, documentRef, ignoredSelectors);

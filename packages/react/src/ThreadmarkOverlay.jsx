@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import MonitorPlay from "lucide-react/dist/esm/icons/monitor-play.mjs";
+import ChartNoAxesColumn from "lucide-react/dist/esm/icons/chart-no-axes-column.mjs";
+import CircleHelp from "lucide-react/dist/esm/icons/circle-help.mjs";
+import PlusIcon from "lucide-react/dist/esm/icons/plus.mjs";
 import CopyCheck from "lucide-react/dist/esm/icons/copy-check.mjs";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
 import Check from "lucide-react/dist/esm/icons/check.mjs";
@@ -29,6 +33,7 @@ import Filter from "lucide-react/dist/esm/icons/filter.mjs";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.mjs";
 import Undo2 from "lucide-react/dist/esm/icons/undo-2.mjs";
+import Video from "lucide-react/dist/esm/icons/video.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
 import { computePopoverPosition } from "./popover.js";
 import {
@@ -39,6 +44,62 @@ import {
   simplifyMarkupPoints,
   undoMarkupStroke,
 } from "./snapshot.js";
+import {
+  CameraBubble,
+  RecordingCursorLayer,
+  VideoPreview,
+  VideoRecorderBar,
+  VideoSetupPanel,
+  VoiceReplay,
+} from "./VideoFeedback.jsx";
+import { formatClock } from "./videoRecording.js";
+import {
+  EVENT_TYPE,
+  INCREMENTAL_SOURCE,
+  MOUSE_INTERACTION,
+  REPLAY_CONSOLE_EVENT,
+  REPLAY_NETWORK_EVENT,
+  decodeReplayEvents,
+} from "./sessionReplay.js";
+
+// rrweb's player is large, so it loads only when someone opens a playback.
+const ReplayPlayer = lazy(() => import("./ReplayPlayer.jsx"));
+const replayKit = Object.freeze({
+  EVENT_TYPE,
+  INCREMENTAL_SOURCE,
+  MOUSE_INTERACTION,
+  REPLAY_CONSOLE_EVENT,
+  REPLAY_NETWORK_EVENT,
+  decodeReplayEvents,
+  formatClock,
+});
+
+function replayFacts(summary) {
+  const facts = [formatClock(summary?.durationMs)];
+  if (summary?.console?.errors) facts.push(`${summary.console.errors} error${summary.console.errors === 1 ? "" : "s"}`);
+  if (summary?.network?.failed) facts.push(`${summary.network.failed} failed request${summary.network.failed === 1 ? "" : "s"}`);
+  if (summary?.actions?.clicks) facts.push(`${summary.actions.clicks} click${summary.actions.clicks === 1 ? "" : "s"}`);
+  return facts.join(" · ");
+}
+
+/** Draft playback on a new comment: local to the author, removable until posted. */
+function ReplayAttachment({ draft, onToggle, onPreview }) {
+  if (draft.status === "capturing") {
+    return <p className="tm-replay-attachment tm-replay-attachment--pending" role="status">Preparing playback…</p>;
+  }
+  if (draft.status !== "ready") return null;
+  return (
+    <div className={`tm-replay-attachment${draft.removed ? " is-removed" : ""}`}>
+      <MonitorPlay {...iconProps} />
+      <div>
+        <strong>{draft.removed ? "Playback removed" : "Playback attached"}</strong>
+        <span>{draft.removed ? "This comment will be posted without it." : `${replayFacts(draft.summary)} · only you can see it until you post`}</span>
+      </div>
+      {!draft.removed && <button type="button" onClick={onPreview}>Preview</button>}
+      <button type="button" onClick={onToggle}>{draft.removed ? "Attach again" : "Remove"}</button>
+    </div>
+  );
+}
 
 const MIN_SCREENSHOT_SIZE = 24;
 const versionDateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -203,7 +264,8 @@ function interactionEventLabel(event, targets = []) {
   const target = targets[event.targetIndex];
   const name = target?.accessibleName || target?.visibleText || target?.tagName || "page";
   if (event.type === "click") return `Clicked ${name}`;
-  if (event.type === "input") return `Changed ${name}`;
+  // Form fields are never registered as targets, so their values cannot leak into the trace.
+  if (event.type === "input") return target ? `Changed ${name}` : "Changed a form field";
   if (event.type === "keydown") return `Pressed ${event.key === " " ? "Space" : event.key} on ${name}`;
   if (event.type === "scroll") return event.targetIndex == null ? "Scrolled the page" : `Scrolled ${name}`;
   if (event.type === "submit") return `Submitted ${name}`;
@@ -354,15 +416,20 @@ function DeploymentComparison({ original, capture, buildId, originalBuildId, tar
   </>;
 }
 
+function isRecordingEvidence(annotation, item) {
+  return annotation?.payload?.evidence?.some((metadata) => metadata.id === item?.id && metadata.kind === "recording");
+}
+
 function CommentThumbnail({ annotation }) {
-  const evidence = annotation.runtime?.evidence?.find((item) => item.blob);
+  const evidence = annotation.runtime?.evidence
+    ?.find((item) => (item.blob || item.url) && !isRecordingEvidence(annotation, item));
   const [url, setUrl] = useState(null);
   useEffect(() => {
-    if (!evidence?.blob) { setUrl(null); return; }
+    if (!evidence?.blob) { setUrl(evidence?.url || null); return; }
     const next = URL.createObjectURL(evidence.blob);
     setUrl(next);
     return () => URL.revokeObjectURL(next);
-  }, [evidence?.blob]);
+  }, [evidence?.blob, evidence?.url]);
   return url ? <img className="tm-comment-thumbnail" src={url} alt="Saved screenshot" /> : null;
 }
 
@@ -627,6 +694,10 @@ function PencilIcon() {
 
 function InteractionIcon() {
   return <MousePointerClick {...iconProps} />;
+}
+
+function VideoIcon() {
+  return <Video {...iconProps} />;
 }
 
 function StopIcon() {
@@ -1203,6 +1274,116 @@ function ThreadMessage({
   );
 }
 
+const ASK_KINDS = [["comment", "Comment"], ["question", "Question"], ["poll", "Poll"]];
+const MAX_POLL_CHOICES = 8;
+
+/** Whether a new post is a comment, a question to answer in replies, or a poll to vote on. */
+function AskSwitch({ value, onChange, pollsEnabled, disabled }) {
+  return (
+    <div className="tm-ask-switch" role="radiogroup" aria-label="What are you posting?">
+      {ASK_KINDS.filter(([kind]) => kind !== "poll" || pollsEnabled).map(([kind, label]) => (
+        <button
+          key={kind}
+          type="button"
+          role="radio"
+          aria-checked={value === kind}
+          className={value === kind ? "is-active" : ""}
+          disabled={disabled}
+          onClick={() => onChange(kind)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PollEditor({ options, onChange, multiple, onMultipleChange, disabled }) {
+  const update = (index, value) => onChange(options.map((option, at) => (at === index ? value : option)));
+  return (
+    <fieldset className="tm-poll-editor" disabled={disabled}>
+      <legend className="tm-sr-only">Poll answers</legend>
+      {options.map((option, index) => (
+        <div className="tm-poll-editor__row" key={index}>
+          <input
+            aria-label={`Answer ${index + 1}`}
+            placeholder={`Answer ${index + 1}`}
+            maxLength={200}
+            value={option}
+            onChange={(event) => update(index, event.target.value)}
+          />
+          {options.length > 2 && (
+            <button type="button" aria-label={`Remove answer ${index + 1}`} onClick={() => onChange(options.filter((_, at) => at !== index))}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      ))}
+      <div className="tm-poll-editor__footer">
+        {options.length < MAX_POLL_CHOICES && (
+          <button type="button" className="tm-poll-editor__add" onClick={() => onChange([...options, ""])}>
+            <PlusIcon size={13} /> Add answer
+          </button>
+        )}
+        <label className="tm-poll-editor__multiple">
+          <input type="checkbox" checked={multiple} onChange={(event) => onMultipleChange(event.target.checked)} />
+          Allow several answers
+        </label>
+      </div>
+    </fieldset>
+  );
+}
+
+/** A posted poll: answers with live counts; clicking an answer votes (and clicking it again takes it back). */
+function PollCard({ ask, results, closed, onVote }) {
+  const total = results?.total || 0;
+  const mine = results?.mine || [];
+  const toggle = (id) => {
+    if (closed || !onVote) return;
+    const next = ask.multiple
+      ? (mine.includes(id) ? mine.filter((item) => item !== id) : [...mine, id])
+      : (mine.includes(id) ? [] : [id]);
+    onVote(next);
+  };
+  return (
+    <section className="tm-poll" aria-label="Poll">
+      <div className="tm-poll__header">
+        <ChartNoAxesColumn size={14} aria-hidden="true" />
+        <strong>Poll</strong>
+        {ask.multiple && <span>pick any</span>}
+        <span className="tm-poll__total">{total} {total === 1 ? "vote" : "votes"}</span>
+      </div>
+      <div role={ask.multiple ? "group" : "radiogroup"} aria-label="Answers" className="tm-poll__options">
+        {ask.options.map((option) => {
+          const count = results?.counts?.[option.id] || 0;
+          const share = total ? Math.round((count / total) * 100) : 0;
+          const chosen = mine.includes(option.id);
+          const names = (results?.voters || []).filter((voter) => voter.optionIds.includes(option.id)).map((voter) => voter.reviewer.displayName);
+          return (
+            <button
+              key={option.id}
+              type="button"
+              role={ask.multiple ? "checkbox" : "radio"}
+              aria-checked={chosen}
+              className={`tm-poll-option${chosen ? " is-chosen" : ""}`}
+              disabled={closed || !onVote}
+              title={names.length ? names.join(", ") : undefined}
+              onClick={() => toggle(option.id)}
+            >
+              <span className="tm-poll-option__bar" style={{ width: `${share}%` }} aria-hidden="true" />
+              <span className="tm-poll-option__label">{chosen && <Check size={13} aria-hidden="true" />}{option.label}</span>
+              <span className="tm-poll-option__count">{count}{total ? ` · ${share}%` : ""}</span>
+            </button>
+          );
+        })}
+      </div>
+      <small className="tm-poll__hint">
+        {closed ? "This poll is closed." : !onVote ? "Votes can’t be saved here." : mine.length ? "You voted. Click an answer to change your vote." : "Click an answer to vote."}
+      </small>
+    </section>
+  );
+}
+
 function Overlay({
   mode,
   projectAnnotations,
@@ -1227,6 +1408,23 @@ function Overlay({
   screenshotSelection,
   interactionSelection,
   interactionRecording,
+  shadowHost,
+  videoEnabled = false,
+  videoMaxDurationMs,
+  videoSetup,
+  videoRecording,
+  videoSelection,
+  onStartVideo,
+  onVideoSetupChange,
+  onBeginVideoRecording,
+  onCancelVideoSetup,
+  onToggleVideoPause,
+  onRestartVideo,
+  onDiscardVideo,
+  onStopVideo,
+  replayEnabled = false,
+  replayDraft,
+  onToggleReplay,
   drawRect,
   annotations,
   annotationRects,
@@ -1283,6 +1481,14 @@ function Overlay({
   onToolbarPointerMove,
   onToolbarPointerUp,
   onRetrySnapshot,
+  askKind = "comment",
+  onAskKindChange,
+  pollOptions = ["", ""],
+  onPollOptionsChange,
+  pollMultiple = false,
+  onPollMultipleChange,
+  pollsEnabled = false,
+  onVote,
   notice,
   submitting,
   composingScreenshot,
@@ -1290,6 +1496,8 @@ function Overlay({
 }) {
   const targets = editingAnnotation
     ? editingAnnotation.payload.pin ? [editingAnnotation.payload.pin.target] : editingAnnotation.payload.targets || [editingAnnotation.payload.target]
+    : videoSelection
+      ? videoSelection.targets
     : interactionSelection
       ? interactionSelection.targets
       : screenshotSelection
@@ -1301,7 +1509,7 @@ function Overlay({
         : selections.map((selection) => selection.target);
   const primaryTarget = targets[0] || null;
   const captureKind = editingAnnotation?.payload.captureKind
-    || (interactionSelection ? "interaction" : screenshotSelection ? "screenshot" : textSelection ? "text" : regionSelection ? "region" : targets.length > 1 ? "multi" : "element");
+    || (videoSelection ? "video" : interactionSelection ? "interaction" : screenshotSelection ? "screenshot" : textSelection ? "text" : regionSelection ? "region" : targets.length > 1 ? "multi" : "element");
   const selectedCount = targets.length;
   const lastSelection = selections[selections.length - 1];
   const anchorRect = editingAnnotation
@@ -1311,7 +1519,8 @@ function Overlay({
       width: 1,
       height: 1,
     }
-    : interactionSelection?.displayRect
+    : videoSelection?.displayRect
+      || interactionSelection?.displayRect
       || screenshotSelection?.anchorRect
       || textSelection?.displayRect
       || regionSelection?.displayRect
@@ -1321,6 +1530,25 @@ function Overlay({
   const [editingEvidencePreview, setEditingEvidencePreview] = useState(null);
   const [workflowMoreOpen, setWorkflowMoreOpen] = useState(false);
   const [threadPanel, setThreadPanel] = useState(null);
+  const [replayingVideo, setReplayingVideo] = useState(false);
+  const [replayViewer, setReplayViewer] = useState(null);
+  const savedReplay = editingAnnotation?.payload.replay || null;
+  const savedReplayEvidence = savedReplay
+    ? editingAnnotation.runtime?.evidence?.find((item) => item.id === savedReplay.evidenceId)
+    : null;
+  const activeVideo = editingAnnotation?.payload.video || videoSelection?.video || null;
+  const activeVideoEvidence = editingAnnotation
+    ? editingAnnotation.runtime?.evidence?.find((item) => item.id === activeVideo?.evidenceId)
+    : videoSelection?.evidence;
+  const activeVideoMedia = activeVideoEvidence?.blob || activeVideoEvidence?.url
+    ? {
+      blob: activeVideoEvidence.blob || null,
+      url: activeVideoEvidence.blob ? null : activeVideoEvidence.url,
+      mimeType: activeVideoEvidence.blob?.type
+        || editingAnnotation?.payload.evidence?.find((item) => item.id === activeVideo?.evidenceId)?.mimeType
+        || "",
+    }
+    : null;
   const comparisonOpen = Boolean(editingAnnotation && threadPanel === "compare");
   const previousComparisonOpenRef = useRef(false);
   const [carryForwardOpen, setCarryForwardOpen] = useState(false);
@@ -1336,15 +1564,16 @@ function Overlay({
   }, [editingAnnotation?.id]);
 
   useEffect(() => {
-    const evidenceItem = editingAnnotation?.runtime?.evidence?.find((item) => item?.blob);
+    const evidenceItem = editingAnnotation?.runtime?.evidence
+      ?.find((item) => (item?.blob || item?.url) && !isRecordingEvidence(editingAnnotation, item));
     const metadata = editingAnnotation?.payload?.evidence?.find((item) => item.id === evidenceItem?.id);
-    if (!evidenceItem?.blob || !metadata || typeof URL === "undefined") {
-      const unavailable = editingAnnotation?.payload?.evidence?.find((item) => item.quality === "unavailable");
+    if (!(evidenceItem?.blob || evidenceItem?.url) || !metadata || typeof URL === "undefined") {
+      const unavailable = editingAnnotation?.payload?.evidence?.find((item) => item.quality === "unavailable" && item.kind !== "recording");
       setEditingEvidencePreview(unavailable ? { snapshot: { status: "failed", metadata: unavailable } } : null);
       return undefined;
     }
 
-    const previewUrl = URL.createObjectURL(evidenceItem.blob);
+    const previewUrl = evidenceItem.blob ? URL.createObjectURL(evidenceItem.blob) : evidenceItem.url;
     setEditingEvidencePreview({
       snapshot: {
         status: "ready",
@@ -1352,10 +1581,12 @@ function Overlay({
         id: evidenceItem.id,
         previewUrl,
         metadata,
-        blob: evidenceItem.blob,
+        blob: evidenceItem.blob || null,
       },
     });
-    return () => URL.revokeObjectURL(previewUrl);
+    return () => {
+      if (evidenceItem.blob) URL.revokeObjectURL(previewUrl);
+    };
   }, [editingAnnotation?.id, editingAnnotation?.payload.updatedAt]);
 
   useEffect(() => {
@@ -1416,6 +1647,7 @@ function Overlay({
   }, [pendingDelete?.id, pendingDelete?.kind]);
 
   useEffect(() => { setWorkflowMoreOpen(false); setThreadPanel(null); }, [editingAnnotation?.id]);
+  useEffect(() => { setReplayingVideo(false); setReplayViewer(null); }, [editingAnnotation?.id, videoSelection?.id, mode]);
   // The thread options menu closes when the reviewer presses anywhere else in the popover.
   useEffect(() => {
     const popover = popoverRef.current;
@@ -1437,7 +1669,7 @@ function Overlay({
         </button>
       )}
 
-      {mode !== "idle" && !markersHidden && annotations.map((annotation, index) => (
+      {!["idle", "video-recording"].includes(mode) && !markersHidden && !replayingVideo && annotations.map((annotation, index) => (
         <Marker
           key={annotation.id}
           annotation={annotation}
@@ -1467,6 +1699,44 @@ function Overlay({
       )}
       {mode !== "idle" && interactionSelection && (
         <Outline rect={interactionSelection.displayRect} badge={1} grouped />
+      )}
+      {mode === "selected" && videoSelection && !replayingVideo && videoSelection.displayRect.width > 1 && (
+        <Outline rect={videoSelection.displayRect} badge={1} grouped />
+      )}
+
+      {mode === "video-setup" && videoSetup && (
+        <VideoSetupPanel
+          setup={videoSetup}
+          maxDurationMs={videoMaxDurationMs}
+          onChange={onVideoSetupChange}
+          onStart={onBeginVideoRecording}
+          onCancel={onCancelVideoSetup}
+        />
+      )}
+
+      {mode === "video-recording" && videoRecording && (
+        <>
+          <RecordingCursorLayer shadowHost={shadowHost} />
+          {videoSetup?.camera && videoSetup.previewStream?.getVideoTracks?.().length > 0 && (
+            <CameraBubble stream={videoSetup.previewStream} />
+          )}
+          <VideoRecorderBar
+            state={videoRecording}
+            onPause={onToggleVideoPause}
+            onRestart={onRestartVideo}
+            onDiscard={onDiscardVideo}
+            onStop={onStopVideo}
+          />
+        </>
+      )}
+
+      {mode === "selected" && replayingVideo && activeVideo && activeVideoMedia && (
+        <VoiceReplay
+          video={activeVideo}
+          media={activeVideoMedia}
+          author={editingAnnotation?.payload.author || reviewer}
+          onClose={() => setReplayingVideo(false)}
+        />
       )}
 
       {mode === "recording" && interactionRecording && (
@@ -1558,6 +1828,13 @@ function Overlay({
                 label="Record an interaction"
                 onClick={onStartInteraction}
               />
+              {videoEnabled && (
+                <ToolButton
+                  icon={<VideoIcon />}
+                  label="Record video feedback"
+                  onClick={onStartVideo}
+                />
+              )}
               <ToolButton
                 active={paused}
                 icon={<PauseIcon paused={paused} />}
@@ -1620,7 +1897,13 @@ function Overlay({
           pageVersions={pageVersions} onSelectPageVersion={onSelectPageVersion} />
       )}
 
-      {mode === "selected" && primaryTarget && (
+      {replayViewer && (
+        <Suspense fallback={null}>
+          <ReplayPlayer replay={replayViewer.replay} media={replayViewer.media} kit={replayKit} onClose={() => setReplayViewer(null)} />
+        </Suspense>
+      )}
+
+      {mode === "selected" && primaryTarget && !replayingVideo && !replayViewer && (
         <>
           <div
             className="tm-dismiss-layer"
@@ -1656,7 +1939,12 @@ function Overlay({
           >
           {editingAnnotation ? (
           <div className="tm-popover__header tm-popover__header--thread">
-            <h2 id="tm-popover-title">{editingAnnotation.payload.workflow?.status === "resolved" ? "Resolved comment" : "Comment"}</h2>
+            <h2 id="tm-popover-title">{(() => {
+              const noun = editingAnnotation.payload.ask?.kind === "poll" ? "poll" : editingAnnotation.payload.ask?.kind === "question" ? "question" : "comment";
+              return editingAnnotation.payload.workflow?.status === "resolved"
+                ? `${noun === "poll" ? "Closed" : "Resolved"} ${noun}`
+                : `${noun[0].toUpperCase()}${noun.slice(1)}`;
+            })()}</h2>
             <div className="tm-thread-header-actions">
               <button type="button" aria-label="More thread actions" title="More thread actions"
                 aria-haspopup="menu" aria-expanded={workflowMoreOpen} aria-controls="tm-thread-menu" className={workflowMoreOpen ? "is-active" : undefined}
@@ -1708,6 +1996,8 @@ function Overlay({
                 <strong>
                   {editingAnnotation
                     ? `Annotation ${annotations.findIndex((item) => item.id === editingAnnotation.id) + 1}`
+                    : captureKind === "video"
+                      ? `${videoSelection?.video.mode === "tab" ? "Tab" : "Voice + cursor"} recording`
                     : captureKind === "interaction"
                       ? `${interactionSelection?.interaction.events.length || 0} interaction steps`
                     : captureKind === "screenshot"
@@ -1721,6 +2011,8 @@ function Overlay({
                     ? `${primaryTarget.bounds.width} × ${primaryTarget.bounds.height}px region`
                     : captureKind === "screenshot"
                       ? "marked-up area"
+                    : captureKind === "video"
+                      ? `${formatClock(videoSelection?.video.durationMs)} video · ${videoSelection?.video.events.length || 0} steps`
                     : captureKind === "interaction"
                       ? `${formatInteractionDuration(interactionSelection?.interaction.durationMs)} interaction trace`
                     : captureKind === "multi"
@@ -1802,6 +2094,17 @@ function Overlay({
                     </div>
                   ) : null}
                 />
+                {editingAnnotation.payload.ask?.kind === "question" && (
+                  <p className="tm-ask-tag"><CircleHelp size={13} aria-hidden="true" /> Question · answer it with a reply</p>
+                )}
+                {editingAnnotation.payload.ask?.kind === "poll" && (
+                  <PollCard
+                    ask={editingAnnotation.payload.ask}
+                    results={editingAnnotation.poll}
+                    closed={editingAnnotation.payload.workflow?.status === "resolved"}
+                    onVote={pollsEnabled && onVote ? (ids) => onVote(editingAnnotation.id, ids) : null}
+                  />
+                )}
                 {(editingAnnotation.payload.replies || []).map((reply) => (
                   <ThreadMessage
                     key={reply.id}
@@ -1825,15 +2128,22 @@ function Overlay({
               ? `This comment covers ${repinTargetCount} elements. Repinning moves it to the one element you chose; the original ${repinTargetCount} targets, screenshot and discussion stay in its history.`
               : "Confirm this new pin location. The original screenshot and discussion will be preserved."}</p>}
             {!editingAnnotation && !repinning && <div className={`tm-field tm-field--${composerMode}`} key={composerMode}>
+              {composerMode === "new" && onAskKindChange && (
+                <AskSwitch value={askKind} onChange={onAskKindChange} pollsEnabled={pollsEnabled} disabled={submitting} />
+              )}
               <label className="tm-sr-only" htmlFor="tm-comment">
-                {composerMode === "reply" ? "Write a reply" : "What should change?"}
+                {composerMode === "reply" ? "Write a reply" : askKind === "question" ? "Your question" : askKind === "poll" ? "Poll question" : "What should change?"}
               </label>
               <MentionTextarea
                 reviewers={reviewers}
                 id="tm-comment"
                 value={comment}
                 onValueChange={setComment}
-                placeholder={composerMode === "reply" ? "Write a reply…" : "Describe the change…"}
+                placeholder={composerMode === "reply"
+                  ? "Write a reply…"
+                  : askKind === "question"
+                    ? "What do you want to ask about this?"
+                    : askKind === "poll" ? "Ask the poll question…" : "Describe the change…"}
                 maxLength={6000}
                 aria-describedby={comment.length >= 5500 ? "tm-comment-limit" : undefined}
               />
@@ -1841,6 +2151,15 @@ function Overlay({
                 <small id="tm-comment-limit" className="tm-field__limit" aria-live="polite">
                   {6000 - comment.length} characters remaining
                 </small>
+              )}
+              {composerMode === "new" && askKind === "poll" && onPollOptionsChange && (
+                <PollEditor
+                  options={pollOptions}
+                  onChange={onPollOptionsChange}
+                  multiple={pollMultiple}
+                  onMultipleChange={onPollMultipleChange}
+                  disabled={submitting}
+                />
               )}
             </div>
 
@@ -1851,6 +2170,46 @@ function Overlay({
                 selection={editingEvidencePreview || screenshotSelection || regionSelection}
                 readOnly={Boolean(editingEvidencePreview)}
                 onRetry={editingAnnotation ? undefined : screenshotSelection ? onScreenshot : onRetrySnapshot}
+              />
+            )}
+
+            {savedReplay && (
+              <button
+                type="button"
+                className="tm-replay-open"
+                disabled={!(savedReplayEvidence?.blob || savedReplayEvidence?.url)}
+                onClick={() => setReplayViewer({
+                  replay: savedReplay,
+                  media: { blob: savedReplayEvidence?.blob || null, url: savedReplayEvidence?.blob ? null : savedReplayEvidence?.url },
+                })}
+              >
+                <MonitorPlay {...iconProps} />
+                <span>
+                  <strong>View playback</strong>
+                  <small>{savedReplayEvidence ? replayFacts(savedReplay) : "The recording isn’t available on this device."}</small>
+                </span>
+              </button>
+            )}
+
+            {!editingAnnotation && replayEnabled && replayDraft && (
+              <ReplayAttachment
+                draft={replayDraft}
+                onToggle={onToggleReplay}
+                onPreview={() => setReplayViewer({
+                  replay: { durationMs: replayDraft.summary?.durationMs, ...replayDraft.summary },
+                  media: { blob: replayDraft.blob, url: null },
+                })}
+              />
+            )}
+
+            {activeVideo && (
+              <VideoPreview
+                video={activeVideo}
+                media={activeVideoMedia}
+                targets={editingAnnotation?.payload.targets || videoSelection?.targets || []}
+                describeEvent={interactionEventLabel}
+                readOnly={Boolean(editingAnnotation)}
+                onReplay={() => setReplayingVideo(true)}
               />
             )}
 
@@ -1943,8 +2302,10 @@ function Overlay({
                 <div className="tm-delete-confirm" role="alert" key="discard-confirm">
                   <ClearIcon />
                   <div className="tm-delete-confirm__impact">
-                    <strong>{composerMode === "edit" ? "Discard your edits?" : composerMode === "reply" ? "Discard this reply?" : "Discard this comment?"}</strong>
-                    <span>What you typed hasn’t been posted and will be lost.</span>
+                    <strong>{videoSelection && !editingAnnotation ? "Discard this video?" : composerMode === "edit" ? "Discard your edits?" : composerMode === "reply" ? "Discard this reply?" : "Discard this comment?"}</strong>
+                    <span>{videoSelection && !editingAnnotation
+                      ? `The ${formatClock(videoSelection.video.durationMs)} recording${comment.trim() ? " and your comment haven’t" : " hasn’t"} been posted and will be lost.`
+                      : "What you typed hasn’t been posted and will be lost."}</span>
                   </div>
                   <button type="button" className="tm-cancel" onClick={onKeepEditing}>Keep editing</button>
                   <button type="button" className="tm-delete-final" onClick={onBack}>Discard</button>
@@ -1962,6 +2323,7 @@ function Overlay({
                       || (!editingAnnotation && screenshotSelection && !screenshotSelection.snapshot?.approved)
                       || (!editingAnnotation && commentSnapshot?.snapshot?.status === "capturing")
                       || (!repinning && !comment.trim())
+                      || (!editingAnnotation && !repinning && askKind === "poll" && pollOptions.filter((option) => option.trim()).length < 2)
                     }
                   >
                     {submitting
@@ -1973,7 +2335,7 @@ function Overlay({
                           ? "Save"
                           : regionSelection?.snapshot?.status === "capturing" || commentSnapshot?.snapshot?.status === "capturing"
                             ? "Preparing…"
-                            : "Post"}
+                            : askKind === "question" ? "Ask" : askKind === "poll" ? "Post poll" : "Post"}
                   </button>
                 </div>
               ) : null}

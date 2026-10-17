@@ -87,6 +87,21 @@ export function rectContainsCenter(container, item) {
     && centerY <= container.top + container.height;
 }
 
+function formatClockLabel(ms) {
+  const totalSeconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
+function eventDetail(event, targets = []) {
+  const eventTarget = targets?.[event.targetIndex];
+  const eventTargetName = eventTarget?.accessibleName || eventTarget?.visibleText || eventTarget?.tagName;
+  const locator = eventTarget?.locatorCandidates?.stableId;
+  if (event.type === "keydown" && event.key) return ` · ${event.key === " " ? "Space" : event.key}`;
+  if (event.type === "navigation" && event.route) return ` · ${event.route}`;
+  if (!eventTargetName) return "";
+  return locator ? ` · ${eventTargetName} (\`${locator}\`)` : ` · ${eventTargetName}`;
+}
+
 export function formatAnnotationsMarkdown(annotations) {
   const items = Array.isArray(annotations) ? annotations : [];
   if (!items.length) return "";
@@ -106,15 +121,39 @@ export function formatAnnotationsMarkdown(annotations) {
             ? `${Math.round(target.bounds?.width || 0)} × ${Math.round(target.bounds?.height || 0)} screenshot area`
             : kind === "interaction"
               ? `${payload.interaction?.events?.length || 0} steps over ${((payload.interaction?.durationMs || 0) / 1000).toFixed(1)}s`
+            : kind === "video"
+              ? `${payload.video?.mode === "tab" ? "tab recording" : "voice + cursor recording"} · ${formatClockLabel(payload.video?.durationMs)}`
             : target.accessibleName || target.visibleText || target.tagName || "Element";
     const locator = target.locatorCandidates?.stableId || target.locatorCandidates?.domPath;
 
     lines.push(`${index + 1}. **${kind[0].toUpperCase()}${kind.slice(1)} · ${label}**`);
     lines.push(`   ${String(payload.comment || "").replace(/\n/g, "\n   ")}`);
+    if (payload.ask?.kind === "question") lines.push("   - Question: answer in a reply");
+    if (payload.ask?.kind === "poll") {
+      lines.push(`   - Poll${payload.ask.multiple ? " (several answers allowed)" : ""}: ${payload.ask.options.map((option) => option.label).join(" / ")}`);
+    }
     if (payload.author?.displayName) lines.push(`   - Author: ${payload.author.displayName}`);
     for (const reply of payload.replies || []) {
       const replyAuthor = reply.author?.displayName ? ` — ${reply.author.displayName}` : "";
       lines.push(`   - Reply${replyAuthor}: ${String(reply.comment || "").replace(/\n/g, "\n     ")}`);
+    }
+    if (kind === "video") {
+      const recording = payload.evidence?.find((item) => item.id === payload.video?.evidenceId);
+      if (recording?.mimeType) lines.push(`   - Recording: \`${recording.mimeType}\` · ${formatClockLabel(payload.video?.durationMs)} · evidence \`${recording.id}\``);
+      for (const event of payload.video?.events || []) {
+        lines.push(`   - ${formatClockLabel(event.offsetMs)} · ${event.type}${eventDetail(event, payload.targets)}`);
+      }
+      lines.push("   - Privacy: the step timeline omits input values and printable keystrokes");
+    }
+    if (payload.replay) {
+      const replay = payload.replay;
+      lines.push(`   - Playback: ${formatClockLabel(replay.durationMs)} before the comment · ${replay.actions?.clicks || 0} clicks · ${replay.console?.errors || 0} console errors · ${replay.network?.failed || 0} failed requests`);
+      for (const entry of replay.console?.entries || []) {
+        lines.push(`   - ${formatClockLabel(entry.offsetMs)} · console ${entry.level} · ${String(entry.message || "").replace(/\n/g, " ")}`);
+      }
+      for (const entry of replay.network?.entries || []) {
+        lines.push(`   - ${formatClockLabel(entry.offsetMs)} · ${entry.method} ${entry.url} · ${entry.status || "no response"} (${entry.outcome})`);
+      }
     }
     if (kind === "interaction") {
       for (const event of payload.interaction?.events || []) {
@@ -136,19 +175,41 @@ export function formatAnnotationsMarkdown(annotations) {
   return lines.join("\n").trim();
 }
 
-export function pausePage(documentRef, { nonce } = {}) {
-  if (!documentRef?.head) return () => {};
-  const style = documentRef.createElement("style");
-  style.setAttribute("data-threadmark-pause", "");
-  if (nonce) style.nonce = nonce;
-  style.textContent = `
+const PAUSE_CSS = `
     *, *::before, *::after {
       animation-play-state: paused !important;
       transition-property: none !important;
       scroll-behavior: auto !important;
     }
   `;
-  documentRef.head.append(style);
+
+// Constructed stylesheets are not inline styles, so a strict style-src policy cannot block them.
+function adoptPauseSheet(documentRef) {
+  const Sheet = documentRef.defaultView?.CSSStyleSheet;
+  if (!Sheet || !("adoptedStyleSheets" in documentRef) || typeof Sheet.prototype.replaceSync !== "function") return null;
+  try {
+    const sheet = new Sheet();
+    sheet.replaceSync(PAUSE_CSS);
+    documentRef.adoptedStyleSheets = [...documentRef.adoptedStyleSheets, sheet];
+    return () => {
+      documentRef.adoptedStyleSheets = documentRef.adoptedStyleSheets.filter((item) => item !== sheet);
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function pausePage(documentRef, { nonce } = {}) {
+  if (!documentRef?.head) return () => {};
+  let removeStyles = adoptPauseSheet(documentRef);
+  if (!removeStyles) {
+    const style = documentRef.createElement("style");
+    style.setAttribute("data-threadmark-pause", "");
+    if (nonce) style.nonce = nonce;
+    style.textContent = PAUSE_CSS;
+    documentRef.head.append(style);
+    removeStyles = () => style.remove();
+  }
 
   const animations = typeof documentRef.getAnimations === "function"
     ? documentRef.getAnimations().filter((animation) => animation.playState === "running")
@@ -163,7 +224,7 @@ export function pausePage(documentRef, { nonce } = {}) {
   return () => {
     if (restored) return;
     restored = true;
-    style.remove();
+    removeStyles();
     for (const animation of animations) {
       try { animation.play?.(); } catch { /* A removed animation cannot be resumed. */ }
     }

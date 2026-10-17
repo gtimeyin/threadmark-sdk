@@ -101,8 +101,10 @@ export function App() {
   }, []);
 
   const handleFeedbackCreate = useCallback(async (feedback, context) => {
-    await feedbackStore.upsert(feedback, context);
-    const record = { feedback, context };
+    // Poll votes live beside the record, so keep them when a reply or edit saves the thread again.
+    const poll = context?.poll || annotations.find((item) => item.feedback.id === feedback.id)?.context?.poll;
+    const record = { feedback, context: poll ? { ...context, poll } : context };
+    await feedbackStore.upsert(feedback, record.context);
     setAnnotations((current) => [
       ...current.filter((item) => item.feedback.id !== feedback.id),
       record,
@@ -111,7 +113,21 @@ export function App() {
       logEntry(record),
       ...current.filter((item) => item.feedback.id !== feedback.id),
     ].slice(0, MAX_LOG_ENTRIES));
-  }, []);
+  }, [annotations]);
+
+  // A host-owned vote: store this reviewer's choice and return the poll's results.
+  const handlePollVote = useCallback(async (feedback, optionIds) => {
+    const record = annotations.find((item) => item.feedback.id === feedback.id);
+    const voters = (record?.context?.poll?.voters || []).filter((voter) => voter.reviewer.id !== REVIEWER.id);
+    if (optionIds.length) voters.push({ reviewer: REVIEWER, optionIds: [...optionIds] });
+    const counts = {};
+    for (const voter of voters) for (const id of voter.optionIds) counts[id] = (counts[id] || 0) + 1;
+    const poll = { counts, total: voters.length, mine: [...optionIds], voters };
+    const context = { ...(record?.context || { evidence: [] }), poll };
+    await feedbackStore.upsert(record?.feedback || feedback, context);
+    setAnnotations((current) => current.map((item) => (item.feedback.id === feedback.id ? { ...item, context } : item)));
+    return poll;
+  }, [annotations]);
 
   const handleFeedbackDelete = useCallback(async (feedback) => {
     await feedbackStore.remove(feedback.id);
@@ -226,6 +242,8 @@ export function App() {
         onFeedbackClear={handleFeedbackClear}
         onPageVersionSelect={(version) => setActiveBuildId(version.buildId || CURRENT_BUILD_ID)}
         onFeedbackCarryForward={handleCarryForward}
+        onPollVote={handlePollVote}
+        sessionReplay
         onError={(error) => setStatus(`error:${error.code}`)}
       />
 

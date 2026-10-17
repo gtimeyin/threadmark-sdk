@@ -159,6 +159,24 @@ test("interaction capture stays in-page and exposes a privacy-safe replay trace"
   assert.match(declarations, /ThreadmarkInteractionCapture/);
 });
 
+test("video feedback keeps media access in one module and its UI on Lucide icons", async () => {
+  const [source, videoUi, media, declarations] = await Promise.all([
+    readThreadmarkSource(),
+    readFile(resolvePackagePath("./src/VideoFeedback.jsx"), "utf8"),
+    readFile(resolvePackagePath("./src/videoRecording.js"), "utf8"),
+    readFile(resolvePackagePath("./src/index.d.ts"), "utf8"),
+  ]);
+
+  assert.doesNotMatch(`${source}\n${videoUi}`, /getDisplayMedia|getUserMedia|new MediaRecorder|RecorderClass\(/);
+  assert.match(media, /getDisplayMedia\(preferred\)/);
+  assert.match(media, /preferCurrentTab: true/);
+  assert.match(source, /label="Record video feedback"/);
+  assert.match(videoUi, /from "lucide-react\/dist\/esm\/icons\//);
+  assert.doesNotMatch(videoUi, /<(?:svg|path|circle|rect|line|polygon)\b/);
+  assert.match(declarations, /videoRecording\?: boolean \| ThreadmarkVideoRecordingOptions/);
+  assert.match(declarations, /ThreadmarkVideoCapture/);
+});
+
 test("page version history is host-driven and exposes explicit navigation and carry-forward callbacks", async () => {
   const [source, styles, declarations] = await Promise.all([
     readThreadmarkSource(),

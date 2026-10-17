@@ -4,6 +4,27 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [0.1.0-beta.10] — 2026-10-17
+
+### Added
+
+- Video feedback: **Record video feedback** records the current tab with voice and a draggable camera bubble, or voice (and camera) with a pointer track when tab capture is unavailable or declined. A cursor halo and click ripples show the pointer in the video, and voice recordings can be replayed over the live page with a ghost cursor that carries the reviewer's camera or initials. The recording is delivered as a `recording` evidence Blob with `feedback.video` metadata, a pointer track, and the same privacy-safe step timeline as interaction traces. Configure or disable it with the `videoRecording` prop.
+- Markdown export lists each video's timed steps with stable target IDs.
+- Session replay: with `sessionReplay`, Threadmark keeps a masked rrweb recording of the last 30 seconds and attaches it to new comments, with console errors and failed requests. Reviewers can preview or remove it before posting, and saved threads open it in a player with Console, Network, and Actions tabs. It is delivered as `replay` evidence with a `feedback.replay` summary. Every form value is masked, sensitive and ignored regions are blocked, request URLs keep only query names, and bodies and headers are never captured. Console messages and error stacks are scrubbed of credentials, keys, emails, long hex or base64 runs, and URL query values before they are kept. `provider` lets a host supply its own recorder.
+- Questions and polls: with `onPollVote`, the composer offers Comment, Question, and Poll. Polls have 2–8 answers with stable ids (optionally several per person); reviewers vote in the thread and see who chose what, and resolving a poll closes it. Votes stay host-owned: `onPollVote` stores the vote and returns the results, which the host supplies back as `context.poll`.
+- Hosts can supply stored evidence as `{ id, url }` (for example a signed storage URL) instead of a Blob. Threadmark displays it and passes it back unchanged when the thread is saved again.
+
+### Changed
+
+- Tab video records at about 1.2 Mbps, camera-only video at 0.8 Mbps, and audio at 96 kbps, so a 5-minute recording stays under common 50 MB upload caps.
+- The overlay loads its styles through a constructed stylesheet and its fonts as binary data, so it works under strict Content Security Policies without `'unsafe-inline'`. `styleNonce` now applies only to the fallback `<style>` element in browsers without constructable stylesheets.
+- `rrweb` 2.1.6 is a new, exact-pinned dependency. It loads on demand, only when `sessionReplay` records or a saved replay is opened.
+
+### Fixed
+
+- Interaction recordings that contain no element steps now re-anchor to the page instead of always reporting **Target needs repair**.
+- Interaction steps that change a form field are labelled "Changed a form field" instead of "Changed page".
+
 ## [0.1.0-beta.9] — 2026-09-28
 
 ### Fixed

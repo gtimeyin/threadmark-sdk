@@ -65,8 +65,69 @@ On a local hostname, Threadmark renders a **Review page** launcher. Reviewers ca
 - Hold <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> while clicking to add or remove individual elements from an ordered group. Once at least two elements are selected, choose **Comment** in the toolbar.
 - Choose the **Pencil** action and drag around the exact area. Releasing the drag opens that crop directly in the in-page markup tools—there is no separate capture confirmation. Automatic snapshot masking remains part of the capture pipeline, while crop adjustment and reviewer-facing Privacy controls are deferred. Choosing **Use screenshot** finishes the markup and approves that exact crop for attachment; the universal comment popover does not add a second approval checkbox.
 - Choose **Record interaction**, use the page normally, then stop the recording. Threadmark captures a bounded, structured trace of clicks, safe input-change markers, command keys, scrolls, submissions, and same-document navigation. The trace can be played inside the standard comment popover and restored after reload; input values and printable keystrokes are never recorded.
+- Choose **Record video feedback** for a Loom-style walkthrough. See [Video feedback](#video-feedback).
 
 Threadmark derives `captureKind` from the gesture or Pencil action instead of asking the reviewer to classify feedback. Every annotation starts with one required, top-level `comment` string. Reopened annotations present that comment as the start of a discussion and may include author-attributed `replies[]`.
+
+## Video feedback
+
+**Record video feedback** replaces a separate Loom link with a recording that lives on the annotation:
+
+1. An in-page setup card previews the camera and lets the reviewer pick a camera and microphone, turn either off, and choose what to record.
+2. **This tab** records the current tab with `getDisplayMedia` (the browser asks for confirmation) plus the microphone. The camera appears as a draggable bubble on the page, so it is part of the recording. A cursor halo and click ripples make pointer movement unmistakable in the video.
+3. **Voice + cursor** records the microphone (and camera, when on) without screen pixels. It is the automatic fallback when tab capture is unavailable, such as on phones or when the reviewer declines sharing. Saved recordings offer **Replay on page**, which moves a ghost cursor carrying the reviewer's camera or initials along the recorded path over the live page and follows the recorded scroll. Nothing on the page is clicked or changed.
+4. A floating recorder shows the elapsed time against the limit (5 minutes by default) with pause, restart, discard, and stop. Restart and discard ask for confirmation, and <kbd>Escape</kbd> and other Threadmark shortcuts pass through to the host page while recording, so a walkthrough is never lost by accident.
+5. Stopping opens the usual comment popover with the recording and a timed step list. Each step (clicks, form-field changes, command keys, scrolls, submissions, navigation) seeks the recording. The step list follows the interaction-trace privacy rules: no input values and no printable keystrokes. Tab videos are not masked, so they show everything that was visible in the tab.
+
+The media never leaves the browser until the reviewer posts. It is handed to `onFeedbackCreate(feedback, context)` as a Blob in `context.evidence`, next to `feedback.evidence[]` metadata with `kind: "recording"`, the container type (`video/webm`, `video/mp4`, `audio/webm`, …), byte size, duration, and dimensions. `feedback.video` carries the mode, the pointer track (`pointer.samples` as `[offsetMs, x, y]`, `pointer.scrolls` as `[offsetMs, scrollX, scrollY]`), and the step `events[]`. Uploading, transcoding, transcription, and summaries belong to your storage or review service. **Copy annotations** includes each video's timed steps with their stable IDs, so an agent can follow a walkthrough without watching it.
+
+Recordings use about 1.2 Mbps for tab video, so a 5-minute take stays under common 50 MB upload limits.
+
+Once your service has stored a file, hydrate it as `{ id, url }` in `context.evidence` instead of a Blob. The URL must be `https:` (or `http:` on localhost), for example a signed storage URL. Threadmark plays or shows the URL and passes the same `{ id, url }` back to `onFeedbackCreate` when someone replies or edits, so stored files are never uploaded twice.
+
+Turn the recorder off with `videoRecording={false}`, or change the limit with `videoRecording={{ maxDurationMs: 120_000 }}` (5 seconds to 10 minutes).
+
+## Session replay
+
+With `sessionReplay` on, Threadmark keeps a rolling recording of the last 30 seconds of the page in memory, so a comment can show what happened *before* the reviewer opened Threadmark:
+
+```jsx
+<Threadmark projectKey="pk_checkout" sessionReplay />
+```
+
+- Recording uses [rrweb](https://github.com/rrweb-io/rrweb) DOM snapshots, not video. It is loaded on demand and starts when Threadmark mounts. The buffer is trimmed continuously; nothing leaves the browser unless a comment is posted.
+- When a new comment opens, the buffer is frozen and attached as **Playback attached**, with counts of console errors and failed requests. The reviewer can preview it, remove it, or attach it again before posting. Saved threads show **View playback**, which opens a player with **Console**, **Network**, and **Actions** tabs.
+- Every input, select, and textarea value is masked. `[data-threadmark-sensitive]` and `[data-threadmark-ignore]` regions are blocked from the recording, and sensitive text is masked. Threadmark's own UI is never recorded.
+- Console errors and warnings and failed `fetch`/XHR requests are captured with their timing. Request URLs keep the origin, path, and query parameter names, but every query value is replaced with `…`. Request and response bodies and headers are never captured.
+- Console text is scrubbed before it is kept: URLs in messages and stacks keep only their origin, path, and query names; bearer credentials, JWTs, key-looking strings (`sk-…`, `sb_…`, `xox…`, `ghp_…`, `tmk_…` and similar), `password=`/`token:`-style values, email addresses, and long hex or base64 runs are replaced with `[redacted]` or `[email]`.
+
+The recording is handed to `onFeedbackCreate` as a gzipped JSON Blob in `context.evidence`, with `feedback.evidence[]` metadata of `kind: "replay"`. `feedback.replay` carries a summary (duration, viewport, console errors, failed requests, and action counts) that agents and issue trackers can use without opening the recording. **Copy annotations** includes that summary.
+
+Change the history length with `sessionReplay={{ bufferMs: 60_000 }}` (5 seconds to 2 minutes). `provider` replaces the built-in recorder, for example with a browser extension that records in the page's own JavaScript context.
+
+Under a strict Content Security Policy, the overlay loads its styles through a constructed stylesheet and its fonts as binary data, so it needs no `'unsafe-inline'`. rrweb 2.1.6 itself sets a style attribute on a detached element whenever it records a style change, which a `style-src` without `'unsafe-inline'` or `'unsafe-hashes'` reports as a violation. If you enable `sessionReplay` on a page with such a policy, expect those reports, or apply this one-line change (`old.setAttribute("style", m.oldValue)` → `old.style.cssText = m.oldValue`) in your bundler.
+
+## Questions and polls
+
+Pass `onPollVote` and the new-comment composer offers **Comment**, **Question**, and **Poll**. A question is
+a thread answered with replies; a poll has two to eight answers (optionally several per person) that
+reviewers vote on in the thread. The feedback carries `ask: { kind: "question" }` or
+`ask: { kind: "poll", options: [{ id, label }], multiple }`, and option ids stay stable.
+
+Votes are host-owned, like everything else Threadmark stores:
+
+```jsx
+<Threadmark
+  annotations={records /* { feedback, context: { evidence, poll } } */}
+  onPollVote={async (feedback, optionIds) => {
+    // Store the reviewer's choice (an empty list takes it back) and return the poll's results:
+    // { counts: { [optionId]: number }, total, mine: [optionId], voters: [{ reviewer, optionIds }] }
+    return saveVote(feedback.id, optionIds);
+  }}
+/>
+```
+
+Supply current results as `context.poll` on each record. Resolving a poll closes it.
 
 ## Toolbar and markers
 
@@ -74,6 +135,7 @@ The draggable toolbar keeps the active actions compact:
 
 - **Pencil** starts screenshot-area selection; releasing a valid rectangle opens the in-page markup tools immediately;
 - **Record interaction** starts a maximum 15-second structured interaction trace while leaving the host page usable;
+- **Record video feedback** opens the in-page video recorder (camera, microphone, and capture mode);
 - <kbd>P</kbd> pauses or resumes page animations and media;
 - <kbd>H</kbd> hides or shows saved annotation markers;
 - <kbd>C</kbd> copies the current annotations as structured Markdown;
@@ -429,9 +491,11 @@ export function ReviewLayer({
 | `route` | `string` | Optional canonical route; defaults to `window.location.pathname`. |
 | `allowedHosts` | `readonly string[]` | Exact or `*.` wildcard host allowlist. |
 | `ignoredSelectors` | `readonly string[]` | Additional consumer regions excluded from selection. |
-| `styleNonce` | `string` | CSP nonce applied to the Shadow DOM style element. |
+| `styleNonce` | `string` | CSP nonce for the fallback `<style>` element, used only in browsers without constructable stylesheets. |
 | `annotations` | `readonly { feedback, context? }[]` | Authoritative records loaded by the consumer or review service. |
 | `pageVersions` | `readonly ThreadmarkPageVersion[]` | Host-supplied immutable deployment records, availability state, and feedback counts for the active route. |
+| `videoRecording` | `boolean \| { maxDurationMs? }` | Video feedback is on by default; `false` hides the recorder. `maxDurationMs` defaults to 5 minutes and is clamped to 5 seconds–10 minutes. |
+| `sessionReplay` | `boolean \| { bufferMs?, provider? }` | Off by default. Attaches a masked rrweb recording of the moments before a new comment, with console errors and failed requests. `bufferMs` defaults to 30 seconds (5 seconds–2 minutes). |
 | `onReady` | `() => void` | Called once when the overlay is mounted. |
 | `onStatusChange` | `(status) => void` | Reports `disabled`, `ready`, `selecting`, `selected`, `submitting`, `submitted`, or `error`. |
 | `onOpenChange` | `(open) => void` | Reports entry to and exit from Review mode. |
@@ -442,6 +506,7 @@ export function ReviewLayer({
 | `onFeedbackClear` | `(feedback[]) => void \| Promise<void>` | Removes every persisted annotation; rejection keeps them visible. |
 | `onPageVersionSelect` | `(version, { route, url }) => void \| Promise<void>` | Lets the host navigate to the same route on another ready deployment; without it, Threadmark navigates in-page. |
 | `onFeedbackCarryForward` | `(feedback, version, { route, url }) => void \| Promise<void>` | Explicit host-owned copy into another deployment; providing it enables the carry-forward control. |
+| `onPollVote` | `(feedback, optionIds) => PollResults \| Promise<PollResults>` | Stores a poll vote and returns the results; providing it adds Question and Poll to the composer. |
 | `onError` | `(error) => void` | Reports configuration, duplicate-instance, snapshot-capture, submission, or deletion errors. |
 
 ### Utility exports
@@ -478,7 +543,9 @@ If path segments contain customer or record identifiers, pass a templated canoni
 - Region capture currently supports one region per draft; resizing and manual masks are not implemented yet.
 - Region dragging is pointer-first in this alpha; keyboard region initialization and edge adjustment remain a beta accessibility gate.
 - Grouped feedback stores one ordered target group but does not yet create a snapshot per member.
-- Interaction capture replays its structured event trace; it does not record video frames or automatically re-execute actions against the host application.
+- Interaction capture replays its structured event trace; it does not record video frames or automatically re-execute actions against the host application. Use video feedback for a recording.
+- Video feedback records tab pixels without masking. Tab capture needs a desktop browser with `getDisplayMedia`; Chromium-based browsers offer the current tab directly, while Safari and Firefox show their full sharing picker. Recordings are WebM or MP4 depending on the browser, and transcription is not included.
+- Session replay rebuilds the page from DOM snapshots. Canvas, WebGL, video, cross-origin frames, and closed shadow roots appear blank, and replays of pages with cross-origin stylesheets depend on those stylesheets still being reachable.
 - Collaboration, authentication, and agent dispatch are not included yet.
 - Same-origin iframes, cross-origin frames, and closed shadow roots are not selection targets.
 - Production activation is intentionally unavailable.

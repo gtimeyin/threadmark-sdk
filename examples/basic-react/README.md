@@ -13,6 +13,9 @@ The page demonstrates:
 - a live `onFeedbackCreate` log for the top-level `comment`, inferred `captureKind`, `selectedText`, and approved Blob evidence sidecars;
 - consumer-owned IndexedDB persistence wired through `annotations`, `onFeedbackCreate`, `onFeedbackDelete`, and `onFeedbackClear`;
 - a host-supplied page-version picker with feedback counts, unavailable history, simulated version switching, and explicit comment carry-forward;
+- Loom-style video feedback, saved as a `recording` Blob with its timed steps;
+- session replay (`sessionReplay`), which attaches a masked recording of the 30 seconds before each new comment;
+- questions and polls, with votes stored next to each record by the example's own `onPollVote`;
 - controls excluded by Threadmark's built-in sensitive-field policy;
 - regions excluded with `data-threadmark-sensitive` and `data-threadmark-ignore`; and
 - a consumer-defined `.analytics-internal` ignored selector.
@@ -31,6 +34,8 @@ npm run dev
 ```
 
 Open `http://localhost:4174` and select **Review page**. Click one element or highlight native text to open its anchored comment popover. Drag across eligible elements to create a group, or hold <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> and click individual elements before choosing **Comment**. Drag across empty space to create a region and inspect its privacy-filtered local snapshot; masked snapshots attach automatically when the comment is submitted. Choose **Pencil** and drag around the exact screenshot area. Releasing the drag opens markup immediately; draw on the crop and choose **Use screenshot** to approve that exact marked crop for attachment before continuing to the universal comment. There is no second screenshot-approval checkbox. Every annotation submits the same top-level `comment`; text feedback uses `captureKind: "text"` with the quote in `target.selectedText`, while Pencil feedback uses `captureKind: "screenshot"`. Submitted metadata and approved evidence details appear at the bottom of the page.
+
+Choose **Record video feedback** in the toolbar to record this tab with your voice and camera, or voice and cursor only. New comments show **Playback attached** with the moments before you opened the composer; remove it before posting if you don't want it. Switch the composer to **Question** or **Poll** to ask instead of comment, then vote in the saved thread.
 
 The compact toolbar can be dragged by its grip. Its Pencil action opens screenshot markup, and its Feedback panel icon opens saved comments plus a Versions tab with the simulated deployments for this same route. Use <kbd>P</kbd> to pause or resume the page, <kbd>H</kbd> to hide or show markers, <kbd>C</kbd> to copy annotations, <kbd>X</kbd> to clear them, and <kbd>Escape</kbd> to cancel or exit. <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> toggles Review mode.
 

@@ -58,7 +58,7 @@ export function createFeedbackStore({
         key: `${projectKey}:${feedback.route}:${feedback.id}`,
         scope: `${projectKey}:${feedback.route}`,
         feedback,
-        context: { evidence: [...(context?.evidence || [])] },
+        context: { evidence: [...(context?.evidence || [])], ...(context?.poll ? { poll: context.poll } : {}) },
       });
       await transactionDone(transaction);
     },

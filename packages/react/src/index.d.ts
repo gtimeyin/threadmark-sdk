@@ -1,6 +1,6 @@
 import type { ReactPortal } from "react";
 
-export type ThreadmarkCaptureKind = "text" | "element" | "multi" | "region" | "screenshot" | "interaction";
+export type ThreadmarkCaptureKind = "text" | "element" | "multi" | "region" | "screenshot" | "interaction" | "video";
 export type ThreadmarkStatus = "disabled" | "ready" | "selecting" | "selected" | "submitting" | "submitted" | "error";
 export type ThreadmarkPageVersionState = "ready" | "building" | "failed" | "unavailable";
 
@@ -81,8 +81,112 @@ export interface ThreadmarkSnapshotMetadata {
   warnings: string[];
 }
 
+/** A recorded video or voice clip. The Blob itself travels in `ThreadmarkFeedbackContext.evidence`. */
+export interface ThreadmarkRecordingMetadata {
+  id: string;
+  kind: "recording";
+  source: "media-recorder";
+  quality: "captured" | "unavailable";
+  mimeType: "video/webm" | "video/mp4" | "audio/webm" | "audio/mp4" | "audio/ogg" | null;
+  byteSize: number;
+  durationMs: number;
+  pixelSize: { width: number; height: number };
+  hasAudio: boolean;
+  hasVideo: boolean;
+}
+
+/** An rrweb session replay (gzip or plain JSON events). The Blob travels in `ThreadmarkFeedbackContext.evidence`. */
+export interface ThreadmarkReplayMetadata {
+  id: string;
+  kind: "replay";
+  source: "rrweb";
+  quality: "captured" | "unavailable";
+  mimeType: "application/gzip" | "application/json" | null;
+  byteSize: number;
+  durationMs: number;
+  eventCount: number;
+}
+
+export type ThreadmarkEvidenceMetadata = ThreadmarkSnapshotMetadata | ThreadmarkRecordingMetadata | ThreadmarkReplayMetadata;
+
+/** What led to a comment, summarized so agents can act without opening the recording. */
+export interface ThreadmarkReplaySummary {
+  version: 1;
+  /** Id of the `replay` evidence item whose Blob holds the rrweb events. */
+  evidenceId: string;
+  startedAt: string;
+  durationMs: number;
+  eventCount: number;
+  viewport: { width: number; height: number };
+  console: {
+    errors: number;
+    warnings: number;
+    entries: Array<{ offsetMs: number; level: "error" | "warn"; message: string }>;
+  };
+  network: {
+    requests: number;
+    failed: number;
+    /** Failed requests only. URLs keep origin, path, and query names; never values, bodies, or headers. */
+    entries: Array<{
+      offsetMs: number;
+      method: string;
+      url: string;
+      status: number;
+      durationMs: number;
+      outcome: "successful" | "client_error" | "server_error" | "transport_failure" | "incomplete";
+    }>;
+  };
+  actions: { clicks: number; inputs: number; navigations: number };
+}
+
+export interface ThreadmarkReplayCapture {
+  blob: Blob;
+  summary: Omit<ThreadmarkReplaySummary, "version" | "evidenceId" | "startedAt">;
+  startedAt: string;
+}
+
+export interface ThreadmarkSessionReplayOptions {
+  /** How much history to keep before review starts, in milliseconds. Default 30 000 (5 000–120 000). */
+  bufferMs?: number;
+  /**
+   * Replaces the built-in recorder, for example with a browser extension that records in the page's
+   * own context. `hold` runs when review starts and `release` when it ends.
+   */
+  provider?:
+    | (() => Promise<ThreadmarkReplayCapture | null>)
+    | {
+      capture: () => Promise<ThreadmarkReplayCapture | null>;
+      hold?: () => void;
+      release?: () => void;
+    };
+}
+
+/**
+ * Evidence travels as a local Blob when it was just captured. Hosts that already stored it may pass
+ * `{ id, url }` instead (an https URL such as a signed storage URL); Threadmark displays the URL and
+ * hands it back unchanged on later saves.
+ */
+export type ThreadmarkEvidenceSource = { id: string; blob: Blob } | { id: string; url: string };
+
 export interface ThreadmarkFeedbackContext {
-  evidence: Array<{ id: string; blob: Blob }>;
+  evidence: ThreadmarkEvidenceSource[];
+  /** Current results when the feedback is a poll (supplied by the host). */
+  poll?: ThreadmarkPollResults;
+}
+
+/** A question answered in replies, or a poll answered by votes. Option ids stay stable. */
+export type ThreadmarkAsk =
+  | { kind: "question" }
+  | { kind: "poll"; options: { id: string; label: string }[]; multiple: boolean };
+
+export interface ThreadmarkPollResults {
+  /** Votes per option id. */
+  counts: Record<string, number>;
+  /** How many people voted. */
+  total: number;
+  /** The current reviewer's chosen option ids. */
+  mine: string[];
+  voters?: { reviewer: ThreadmarkReviewer; optionIds: string[] }[];
 }
 
 export type ThreadmarkInteractionEvent =
@@ -99,6 +203,35 @@ export interface ThreadmarkInteractionCapture {
   durationMs: number;
   /** Privacy-safe interaction events. Input values and printable keystrokes are never included. */
   events: ThreadmarkInteractionEvent[];
+}
+
+/**
+ * Loom-style video feedback. `tab` records the current tab with voice and an optional camera bubble;
+ * `voice` records voice (and camera) and replays the pointer path over the live page.
+ */
+export interface ThreadmarkVideoCapture {
+  version: 1;
+  mode: "tab" | "voice";
+  startedAt: string;
+  durationMs: number;
+  /** Id of the `recording` evidence item whose Blob holds the media. */
+  evidenceId: string;
+  camera: boolean;
+  microphone: boolean;
+  viewport: { width: number; height: number };
+  pointer: {
+    /** `[offsetMs, clientX, clientY]` in CSS pixels, sampled at most every 50ms. */
+    samples: Array<[number, number, number]>;
+    /** `[offsetMs, scrollX, scrollY]` window scroll positions. */
+    scrolls: Array<[number, number, number]>;
+  };
+  /** The same privacy-safe step timeline as interaction captures, timed against the recording. */
+  events: ThreadmarkInteractionEvent[];
+}
+
+export interface ThreadmarkVideoRecordingOptions {
+  /** Longest recording in milliseconds. Defaults to 5 minutes; clamped to 5 seconds–10 minutes. */
+  maxDurationMs?: number;
 }
 
 export interface ThreadmarkReply {
@@ -164,8 +297,11 @@ export interface ThreadmarkFeedback {
   captureKind?: ThreadmarkCaptureKind;
   target: ThreadmarkTargetDescriptor;
   targets?: ThreadmarkTargetDescriptor[];
-  evidence?: ThreadmarkSnapshotMetadata[];
+  evidence?: ThreadmarkEvidenceMetadata[];
   interaction?: ThreadmarkInteractionCapture;
+  video?: ThreadmarkVideoCapture;
+  replay?: ThreadmarkReplaySummary;
+  ask?: ThreadmarkAsk;
   comment: string;
   replies?: ThreadmarkReply[];
   createdAt: string;
@@ -186,6 +322,9 @@ export interface ThreadmarkError {
     | "snapshot_capture_failed"
     | "feedback_submit_failed"
     | "feedback_delete_failed"
+    | "video_capture_failed"
+    | "replay_unavailable"
+    | "poll_vote_failed"
     | (string & {});
   message: string;
 }
@@ -210,6 +349,18 @@ export interface ThreadmarkProps {
   annotations?: readonly ThreadmarkAnnotationRecord[];
   /** Host-supplied deployment history. Fetch this on the server; never expose a Vercel token here. */
   pageVersions?: readonly ThreadmarkPageVersion[];
+  /**
+   * Loom-style video feedback with voice, an optional camera bubble, and a pointer track.
+   * Enabled by default; `false` hides the recorder. The browser asks before any camera, microphone,
+   * or tab capture starts.
+   */
+  videoRecording?: boolean | ThreadmarkVideoRecordingOptions;
+  /**
+   * Always-on session replay. Off by default. When on, Threadmark keeps an in-memory rrweb recording of
+   * the page (inputs masked; sensitive, ignored, and Threadmark regions blocked) with console and network
+   * activity, and offers the lead-up to each new comment as a removable attachment.
+   */
+  sessionReplay?: boolean | ThreadmarkSessionReplayOptions;
   onReady?: () => void;
   onStatusChange?: (status: ThreadmarkStatus) => void;
   onOpenChange?: (open: boolean) => void;
@@ -240,6 +391,11 @@ export interface ThreadmarkProps {
     version: ThreadmarkPageVersion,
     context: ThreadmarkPageVersionContext,
   ) => void | Promise<void>;
+  /**
+   * Stores the reviewer's vote on a poll (an empty list takes it back) and returns the poll's new results.
+   * Providing it adds Comment / Question / Poll to the new-comment composer; without it, posts are comments.
+   */
+  onPollVote?: (feedback: ThreadmarkFeedback, optionIds: string[]) => ThreadmarkPollResults | Promise<ThreadmarkPollResults>;
   onError?: (error: ThreadmarkError) => void;
 }
 
@@ -264,8 +420,10 @@ export declare function createFeedbackPayload(options: {
   target: ThreadmarkTargetDescriptor;
   targets?: ThreadmarkTargetDescriptor[];
   captureKind?: ThreadmarkCaptureKind;
-  evidence?: ThreadmarkSnapshotMetadata[];
+  evidence?: ThreadmarkEvidenceMetadata[];
   interaction?: ThreadmarkInteractionCapture;
+  video?: ThreadmarkVideoCapture;
+  replay?: ThreadmarkReplaySummary;
   comment: string;
   replies?: readonly ThreadmarkReply[];
   author?: ThreadmarkReviewer | null;

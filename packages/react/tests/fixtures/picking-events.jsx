@@ -15,7 +15,28 @@ window.__threadmarkRejectNextSave = false;
 window.__threadmarkVersionSelections = [];
 window.__threadmarkCarryForwards = [];
 
-const persistenceEnabled = new URLSearchParams(window.location.search).has("persist");
+const fixtureParams = new URLSearchParams(window.location.search);
+// ?polls=1 stores poll votes in memory, the way a host's onPollVote would.
+const pollsEnabled = fixtureParams.get("polls") === "1";
+window.__threadmarkVotes = {};
+function fixturePollVote(feedback, optionIds) {
+  const votes = (window.__threadmarkVotes[feedback.id] ||= {});
+  if (optionIds.length) votes.fixture_reviewer = optionIds;
+  else delete votes.fixture_reviewer;
+  const counts = {};
+  for (const ids of Object.values(votes)) for (const id of ids) counts[id] = (counts[id] || 0) + 1;
+  return {
+    counts,
+    total: Object.keys(votes).length,
+    mine: votes.fixture_reviewer || [],
+    voters: Object.entries(votes).map(([id, ids]) => ({ reviewer: { id, displayName: id === "fixture_reviewer" ? "Emily R." : "Sam Okafor" }, optionIds: ids })),
+  };
+}
+const persistenceEnabled = fixtureParams.has("persist");
+const sessionReplay = fixtureParams.has("replay") ? { bufferMs: 30_000 } : undefined;
+const videoRecording = fixtureParams.has("novideo")
+  ? false
+  : fixtureParams.has("videomax") ? { maxDurationMs: Number(fixtureParams.get("videomax")) } : undefined;
 const feedbackStore = createFeedbackStore({
   databaseName: "threadmark-browser-lifecycle",
   projectKey: "privacy-browser-fixture",
@@ -119,6 +140,8 @@ function Fixture() {
         styleNonce={styleNonce}
         reviewers={[{ id: "fixture_reviewer", displayName: "Emily R." }, { id: "sam", displayName: "Sam Okafor" }]}
         buildId={buildId}
+        videoRecording={videoRecording}
+        sessionReplay={sessionReplay}
         pageVersions={[
           {
             id: "fixture-current",
@@ -182,6 +205,7 @@ function Fixture() {
         onFeedbackCarryForward={(feedback, version, context) => {
           window.__threadmarkCarryForwards.push({ feedback, version, context });
         }}
+        onPollVote={pollsEnabled ? fixturePollVote : undefined}
       />
     </>
   );
