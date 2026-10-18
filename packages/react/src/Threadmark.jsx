@@ -846,7 +846,10 @@ export function Threadmark({
     }
     let active = true;
     let session = null;
-    startSessionReplay({ bufferMs: replayOptions.bufferMs, blockSelectors: ignoredSelectors })
+    startSessionReplay({
+      bufferMs: replayOptions.bufferMs, blockSelectors: ignoredSelectors,
+      onError: () => safeCall(callbacks.onError, { code: "replay_unavailable", message: "Session replay could not start on this page." }),
+    })
       .then((started) => {
         if (!active) {
           started.stop();

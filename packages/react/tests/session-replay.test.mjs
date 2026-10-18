@@ -260,3 +260,103 @@ test("feedback keeps a bounded replay summary tied to its stored replay", async 
   assert.doesNotMatch(JSON.stringify(payload), /4242|secret/);
   assert.equal(createFeedbackPayload({ ...base, replay: { evidenceId: "missing" } }).replay, undefined, "a summary without its stored replay is dropped");
 });
+
+function recorderWindow(readyState = "complete") {
+  const listeners = new Map();
+  const windowRef = {
+    location: { href: "https://app.test/review?token=private#fragment" },
+    console: { error() {}, warn() {}, log() {}, info() {}, debug() {} },
+    fetch: async () => ({ status: 200 }),
+    addEventListener: (type, fn) => listeners.set(type, fn),
+    removeEventListener: (type) => listeners.delete(type),
+    document: {
+      readyState,
+      addEventListener: (type, fn) => listeners.set(type, fn),
+      removeEventListener: (type) => listeners.delete(type),
+    },
+  };
+  return { windowRef, listeners };
+}
+
+test("raw snapshots and mutations scrub URL credentials without mutating recorder events", async () => {
+  let emit;
+  const record = (options) => { emit = options.emit; return () => {}; };
+  const { windowRef } = recorderWindow();
+  const session = await startSessionReplay({ windowRef, loadRecorder: async () => record });
+  const now = Date.now();
+  const initial = { ...meta(now), data: { href: "https://user:PASS@node.test/path?token=URL_SECRET#FRAGMENT_SECRET" } };
+  const snapshot = { ...full(now), data: { node: { attributes: { href: "/path?q=ATTR_SECRET#FRAGMENT_SECRET", srcset: "/a?token=SRCSET_SECRET 1x, /b 2x", style: 'background:url(https://cdn.test/img?key=STYLE_SECRET);mask:url(/private?token=RELATIVE_STYLE_SECRET)' }, childNodes: [] } } };
+  emit(initial, true);
+  emit(snapshot);
+  emit({ type: 3, timestamp: now, data: { source: 0, attributes: [{ id: 1, attributes: { src: "https://cdn.test/img?token=MUTATION_SECRET#FRAGMENT_SECRET" } }], adds: [{ node: { attributes: { action: "/submit?token=ADD_SECRET" } } }] } });
+  const events = await decodeReplayEvents((await session.capture()).blob);
+  assert.doesNotMatch(JSON.stringify(events), /PASS|URL_SECRET|FRAGMENT_SECRET|ATTR_SECRET|SRCSET_SECRET|STYLE_SECRET|RELATIVE_STYLE_SECRET|MUTATION_SECRET|ADD_SECRET/);
+  assert.match(initial.data.href, /URL_SECRET/, "rrweb's original objects remain intact");
+  assert.match(snapshot.data.node.attributes.href, /ATTR_SECRET/);
+  assert.match(events[0].data.href, /node.test\/path\?token=…$/);
+  session.stop();
+});
+
+test("console credentials, nested objects, errors and rejection stacks are scrubbed before capture", async () => {
+  const { windowRef, listeners } = recorderWindow();
+  const entries = [];
+  const restore = instrumentPage({ windowRef, onConsole: (entry) => entries.push(entry), onNetwork() {} });
+  windowRef.console.log("Authorization: Bearer BEARER_SECRET", { access_token: "OBJECT_SECRET", nested: { password: "PASSWORD_SECRET" } });
+  windowRef.console.warn('apiKey="API_SECRET" token=TOKEN_SECRET');
+  windowRef.console.log("token=", "SPLIT_SECRET");
+  const error = new Error("Failed https://user:PASS@api.test/x?key=ERROR_SECRET#FRAGMENT_SECRET");
+  error.stack = "Error: token=STACK_SECRET\n at https://app.test/x?token=STACK_URL_SECRET#FRAGMENT_SECRET";
+  windowRef.console.error(error);
+  listeners.get("error")({ error, filename: "https://app.test/x?token=SOURCE_SECRET", lineno: 1, colno: 2 });
+  listeners.get("unhandledrejection")({ reason: error });
+  assert.doesNotMatch(JSON.stringify(entries), /BEARER_SECRET|OBJECT_SECRET|PASSWORD_SECRET|API_SECRET|TOKEN_SECRET|SPLIT_SECRET|PASS@|ERROR_SECRET|FRAGMENT_SECRET|STACK_SECRET|STACK_URL_SECRET|SOURCE_SECRET/);
+  assert.match(JSON.stringify(entries), /redacted/);
+  restore();
+});
+
+test("event overflow takes one non-reentrant checkout and leaves a replayable bounded buffer", async () => {
+  let emit;
+  let depth = 0;
+  let maxDepth = 0;
+  let checkouts = 0;
+  const now = Date.now();
+  const record = (options) => { emit = options.emit; emit(meta(now), true); emit(full(now)); return () => {}; };
+  record.takeFullSnapshot = () => {
+    checkouts++;
+    maxDepth = Math.max(maxDepth, ++depth);
+    assert.ok(depth < 2, "checkout must not recursively request itself");
+    emit(meta(now), true);
+    emit(full(now));
+    depth--;
+  };
+  const { windowRef } = recorderWindow();
+  const session = await startSessionReplay({ windowRef, loadRecorder: async () => record });
+  for (let i = 0; i < 40_000; i++) emit(click(now));
+  const events = await decodeReplayEvents((await session.capture()).blob);
+  assert.equal(checkouts, 1);
+  assert.equal(maxDepth, 1);
+  assert.equal(events[0].type, EVENT_TYPE.Meta);
+  assert.equal(events[1].type, EVENT_TYPE.FullSnapshot);
+  assert.ok(events.length < 10);
+  session.stop();
+});
+
+test("immediate and deferred startup failures restore globals and remove every listener", async () => {
+  for (const readyState of ["complete", "loading"]) {
+    const { windowRef, listeners } = recorderWindow(readyState);
+    const originalFetch = windowRef.fetch;
+    const originalConsole = windowRef.console.log;
+    const errors = [];
+    const start = () => startSessionReplay({ windowRef, onError: (error) => errors.push(error), loadRecorder: async () => () => { throw new Error("recorder failed"); } });
+    if (readyState === "complete") await assert.rejects(start(), /recorder failed/);
+    else {
+      const session = await start();
+      listeners.get("DOMContentLoaded")();
+      assert.equal(errors[0].message, "recorder failed");
+      session.stop();
+    }
+    assert.equal(windowRef.fetch, originalFetch);
+    assert.equal(windowRef.console.log, originalConsole);
+    assert.equal(listeners.size, 0);
+  }
+});

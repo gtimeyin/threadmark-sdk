@@ -4,7 +4,12 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
-## [0.1.0-beta.10] — 2026-10-17
+## [0.1.0-beta.10] — 2026-10-18
+
+### Fixed
+
+- Sanitize replay URL metadata and snapshot/mutation URLs before buffering; scrub console credentials and error stacks.
+- Prevent recursive full snapshots at the replay event limit and restore browser instrumentation after recorder startup failures.
 
 ### Added
 

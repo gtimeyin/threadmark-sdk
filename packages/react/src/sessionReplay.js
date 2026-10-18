@@ -53,17 +53,40 @@ export function sanitizeReplayUrl(raw, base = globalThis.location?.href || "http
   }
 }
 
+const SECRET_KEY = /^(?:authorization|proxy-authorization|cookie|set-cookie|password|passwd|secret|token|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|session[_-]?(?:id|token))$/i;
+
+/** Best-effort scrubbing of recognizable credentials; arbitrary unlabelled PII still needs host masking. */
+export function scrubReplayText(value) {
+  return scrubConsoleText(String(value)
+    .replace(/url\(\s*(["']?)(.*?)\1\s*\)/gi, (_, quote, url) => `url("${sanitizeReplayUrl(url)}")`));
+}
+
+/** Clone recorder events so sanitizing never mutates rrweb's own snapshot/mutation state. */
+export function sanitizeReplayEvent(event, base) {
+  const visit = (value, key = "") => {
+    if (typeof value === "string") {
+      if (/^(?:href|src|action|formaction|poster|xlink:href|background|data)$/i.test(key)) return sanitizeReplayUrl(value, base);
+      if (/^srcset$/i.test(key)) return ""; // Candidates can contain commas/data URLs; fail closed.
+      return scrubReplayText(value);
+    }
+    if (Array.isArray(value)) return value.map((item) => visit(item));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, SECRET_KEY.test(name) ? "[redacted]" : visit(item, name)]));
+  };
+  return visit(event);
+}
+
 function describeValue(value, depth = 0) {
-  if (value instanceof Error) return `${value.name}: ${value.message}`;
+  if (value instanceof Error) return scrubReplayText(`${value.name}: ${value.message}`);
   if (value === null || ["number", "boolean", "undefined", "bigint"].includes(typeof value)) return String(value);
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return scrubReplayText(value);
   if (typeof value === "function") return `[function ${value.name || "anonymous"}]`;
   if (typeof value === "symbol") return value.toString();
   if (typeof Element !== "undefined" && value instanceof Element) return `<${value.tagName.toLowerCase()}>`;
   if (depth > 1) return Array.isArray(value) ? "[…]" : "{…}";
   try {
     if (Array.isArray(value)) return `[${value.slice(0, 10).map((item) => describeValue(item, depth + 1)).join(", ")}]`;
-    const entries = Object.entries(value).slice(0, 10).map(([key, item]) => `${key}: ${describeValue(item, depth + 1)}`);
+    const entries = Object.entries(value).slice(0, 10).map(([key, item]) => `${key}: ${SECRET_KEY.test(key) ? "[redacted]" : describeValue(item, depth + 1)}`);
     return `{${entries.join(", ")}}`;
   } catch {
     return "[object]";
@@ -118,8 +141,7 @@ export function scrubConsoleText(text, base = globalThis.location?.href || "http
 
 /** One bounded, scrubbed line per console call; objects are summarized, never serialized in full. */
 export function describeConsoleArgs(args) {
-  const line = Array.from(args || []).map((value) => describeValue(value)).join(" ").replace(/\s+/g, " ").trim();
-  return scrubConsoleText(line.slice(0, MAX_MESSAGE_LENGTH * 4)).slice(0, MAX_MESSAGE_LENGTH);
+  return scrubReplayText(Array.from(args || []).map((value) => describeValue(value)).join(" ")).replace(/\s+/g, " ").trim().slice(0, MAX_MESSAGE_LENGTH);
 }
 
 /**
@@ -278,7 +300,7 @@ export function instrumentPage({ windowRef = globalThis.window, onConsole, onNet
     consoleRef[level] = function threadmarkConsole(...args) {
       try {
         const error = args.find((value) => value instanceof Error);
-        onConsole({ level, message: describeConsoleArgs(args), stack: error?.stack ? scrubConsoleText(String(error.stack).slice(0, MAX_STACK_LENGTH)) : undefined });
+        onConsole({ level, message: describeConsoleArgs(args), stack: error?.stack ? scrubReplayText(error.stack).slice(0, MAX_STACK_LENGTH) : undefined });
       } catch {
         // Recording must never break the page's own logging.
       }
@@ -292,7 +314,7 @@ export function instrumentPage({ windowRef = globalThis.window, onConsole, onNet
       onConsole({
         level: "error",
         message: describeConsoleArgs([event.error || event.message || "Uncaught error"]),
-        stack: event.error?.stack ? scrubConsoleText(String(event.error.stack).slice(0, MAX_STACK_LENGTH)) : undefined,
+        stack: event.error?.stack ? scrubReplayText(event.error.stack).slice(0, MAX_STACK_LENGTH) : undefined,
         source: event.filename ? `${sanitizeReplayUrl(event.filename)}:${event.lineno || 0}:${event.colno || 0}` : undefined,
       });
     } catch { /* ignore */ }
@@ -303,7 +325,7 @@ export function instrumentPage({ windowRef = globalThis.window, onConsole, onNet
       onConsole({
         level: "error",
         message: `Unhandled rejection: ${describeConsoleArgs([reason])}`.slice(0, MAX_MESSAGE_LENGTH),
-        stack: reason?.stack ? scrubConsoleText(String(reason.stack).slice(0, MAX_STACK_LENGTH)) : undefined,
+        stack: reason?.stack ? scrubReplayText(reason.stack).slice(0, MAX_STACK_LENGTH) : undefined,
       });
     } catch { /* ignore */ }
   };
@@ -379,6 +401,7 @@ export async function startSessionReplay({
   bufferMs = DEFAULT_REPLAY_BUFFER_MS,
   blockSelectors = [],
   maskTextSelectors = [],
+  onError,
   loadRecorder = () => import("rrweb").then((module) => module.record),
 } = {}) {
   const record = await loadRecorder();
@@ -397,29 +420,52 @@ export async function startSessionReplay({
     onNetwork: (entry) => addCustom(REPLAY_NETWORK_EVENT, entry),
   });
 
+  const documentRef = windowRef.document;
+  let snapshotInProgress = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    documentRef.removeEventListener("DOMContentLoaded", beginWhenReady);
+    try { stopRecording?.(); } finally { restore(); buffer.clear(); }
+  };
   const begin = () => {
     if (stopped || stopRecording) return;
-    stopRecording = record({
-      emit(event, isCheckout) {
-        const { overflow } = buffer.push(event, isCheckout);
-        if (overflow) record.takeFullSnapshot?.(true);
-      },
-      checkoutEveryNms: REPLAY_CHECKOUT_MS,
-      maskAllInputs: true,
-      maskInputOptions: { password: true, email: true, tel: true, text: true, textarea: true, number: true, search: true, select: true },
-      blockSelector: ["[data-threadmark-root]", "[data-threadmark-sensitive]", "[data-threadmark-ignore]", ...blockSelectors].join(","),
-      maskTextSelector: ["[data-threadmark-sensitive]", ...maskTextSelectors].join(",") || null,
-      recordCanvas: false,
-      collectFonts: false,
-      inlineImages: false,
-      recordCrossOriginIframes: false,
-      slimDOMOptions: "all",
-      sampling: { mousemove: 50, scroll: 150, media: 800, input: "last" },
-    }) || null;
-    for (const [tag, payload] of pending.splice(0)) record.addCustomEvent?.(tag, payload);
+    try {
+      stopRecording = record({
+        emit(event, isCheckout) {
+          if (stopped) return;
+          const { overflow } = buffer.push(sanitizeReplayEvent(event, windowRef.location?.href), isCheckout);
+          if (overflow && !snapshotInProgress) {
+            // Start a fresh replayable segment before requesting a synchronous rrweb checkout.
+            // Otherwise its Meta event is still over budget and recursively requests another snapshot.
+            buffer.clear();
+            snapshotInProgress = true;
+            try { record.takeFullSnapshot?.(true); } finally { snapshotInProgress = false; }
+          }
+        },
+        checkoutEveryNms: REPLAY_CHECKOUT_MS,
+        maskAllInputs: true,
+        maskInputOptions: { password: true, email: true, tel: true, text: true, textarea: true, number: true, search: true, select: true },
+        blockSelector: ["[data-threadmark-root]", "[data-threadmark-sensitive]", "[data-threadmark-ignore]", ...blockSelectors].join(","),
+        maskTextSelector: ["[data-threadmark-sensitive]", ...maskTextSelectors].join(",") || null,
+        recordCanvas: false,
+        collectFonts: false,
+        inlineImages: false,
+        recordCrossOriginIframes: false,
+        slimDOMOptions: "all",
+        sampling: { mousemove: 50, scroll: 150, media: 800, input: "last" },
+      }) || null;
+      if (!stopRecording) throw new Error("Session replay recorder did not start.");
+      for (const [tag, payload] of pending.splice(0)) record.addCustomEvent?.(tag, payload);
+    } catch (error) {
+      stop();
+      throw error;
+    }
   };
-  const documentRef = windowRef.document;
-  if (documentRef.readyState === "loading") documentRef.addEventListener("DOMContentLoaded", begin, { once: true });
+  const beginWhenReady = () => {
+    try { begin(); } catch (error) { onError?.(error); }
+  };
+  if (documentRef.readyState === "loading") documentRef.addEventListener("DOMContentLoaded", beginWhenReady, { once: true });
   else begin();
 
   return {
@@ -433,12 +479,6 @@ export async function startSessionReplay({
       const blob = await encodeEvents(events);
       return { blob, summary, startedAt: new Date(events[0].timestamp).toISOString() };
     },
-    stop() {
-      stopped = true;
-      documentRef.removeEventListener("DOMContentLoaded", begin);
-      stopRecording?.();
-      restore();
-      buffer.clear();
-    },
+    stop,
   };
 }

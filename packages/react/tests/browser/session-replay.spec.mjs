@@ -37,7 +37,7 @@ async function mountFixture(page) {
     if (url.pathname.startsWith("/api/")) return route.fulfill({ status: 500, contentType: "application/json", body: "{\"error\":\"boom\"}" });
     return route.fulfill({ status: 200, contentType: "text/html", body: pickingHtml.replace("</body>", '<script src="/threadmark-fixture.js"></script></body>') });
   });
-  await page.goto("http://localhost/picking-events?replay=1", { waitUntil: "load" });
+  await page.goto("http://localhost/picking-events?replay=1&token=URL_REPLAY_SECRET#FRAGMENT_REPLAY_SECRET", { waitUntil: "load" });
   await expect.poll(() => page.evaluate(() => window.__threadmarkHydrated)).toBe(true);
   return pageErrors;
 }
@@ -58,6 +58,11 @@ test("a new comment carries a removable, privacy-safe playback with console, net
   await page.locator("#secondary-target").click();
   await page.evaluate(async () => {
     console.error("Checkout total is undefined", { cart: 3 });
+    console.warn("Authorization: Bearer CONSOLE_REPLAY_SECRET", { password: "OBJECT_REPLAY_SECRET" });
+    const link = document.createElement("a");
+    link.href = "/account?token=ATTRIBUTE_REPLAY_SECRET#ATTRIBUTE_FRAGMENT_SECRET";
+    link.textContent = "Account";
+    document.body.append(link);
     await fetch("/api/checkout?card=4242", { method: "POST" });
   });
   await page.waitForTimeout(600);
@@ -108,9 +113,9 @@ test("a new comment carries a removable, privacy-safe playback with console, net
   const stored = await page.evaluate(async (id) => {
     const item = window.__threadmarkFeedbackContexts.at(-1).evidence.find((entry) => entry.id === id);
     const text = await new Response(item.blob.stream().pipeThrough(new DecompressionStream("gzip"))).text();
-    return { size: item.blob.size, type: item.blob.type, leaksTypedText: text.includes("private launch plan"), leaksCard: text.includes("4242"), events: JSON.parse(text).length };
+    return { size: item.blob.size, type: item.blob.type, leaksTypedText: text.includes("private launch plan"), leaksCard: text.includes("4242"), leaksSecrets: /URL_REPLAY_SECRET|FRAGMENT_REPLAY_SECRET|CONSOLE_REPLAY_SECRET|OBJECT_REPLAY_SECRET|ATTRIBUTE_REPLAY_SECRET|ATTRIBUTE_FRAGMENT_SECRET/.test(text), events: JSON.parse(text).length };
   }, replayEvidence.id);
-  expect(stored).toMatchObject({ size: replayEvidence.byteSize, type: "application/gzip", leaksTypedText: false, leaksCard: false });
+  expect(stored).toMatchObject({ size: replayEvidence.byteSize, type: "application/gzip", leaksTypedText: false, leaksCard: false, leaksSecrets: false });
   expect(stored.events).toBeGreaterThan(5);
 
   await page.locator(".tm-marker").first().click();
