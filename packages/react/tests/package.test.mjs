@@ -93,38 +93,62 @@ async function collectBuiltModuleGraph(entryUrl) {
   return { files, bareImports };
 }
 
-test("the tours entry exposes only the stable target helpers for now", async () => {
+test("the tours entry exposes exactly the documented player API", async () => {
   const tours = await import("threadmark-react/tours");
   const sdk = await import("threadmark-react");
 
-  assert.deepEqual(Object.keys(tours).sort(), ["THREADMARK_TARGET_ATTRIBUTE", "threadmarkTarget"]);
+  assert.deepEqual(Object.keys(tours).sort(), [
+    "THREADMARK_TARGET_ATTRIBUTE",
+    "ThreadmarkTours",
+    "TourValidationError",
+    "checkTourTheme",
+    "defineTour",
+    "threadmarkTarget",
+    "useThreadmarkTours",
+    "validateTour",
+  ]);
   assert.equal(tours.THREADMARK_TARGET_ATTRIBUTE, sdk.THREADMARK_TARGET_ATTRIBUTE);
   assert.deepEqual(tours.threadmarkTarget(" checkout.submit "), sdk.threadmarkTarget("checkout.submit"));
   assert.throws(() => tours.threadmarkTarget("not a valid id"), TypeError);
 
   const declarations = await readFile(resolvePackagePath("./dist/tours.d.ts"), "utf8");
-  assert.match(declarations, /export declare function threadmarkTarget/);
-  assert.match(declarations, /export declare const THREADMARK_TARGET_ATTRIBUTE/);
+  for (const name of ["ThreadmarkTours", "useThreadmarkTours", "defineTour", "validateTour", "checkTourTheme", "threadmarkTarget"]) {
+    assert.match(declarations, new RegExp(`export declare (?:function|const|class) ${name}\\b`), name);
+  }
 });
 
-test("the tours entry never reaches review, capture, or icon code and stays small", async () => {
+test("the tour player renders nothing on the server and mounts only in the browser", async () => {
+  const { ThreadmarkTours } = await import("threadmark-react/tours");
+  const markup = renderToString(React.createElement(ThreadmarkTours, { tours: [] }, React.createElement("main", null, "App")));
+  assert.equal(markup, "<main>App</main>");
+});
+
+test("the tours entry never reaches review, capture, or icon code", async () => {
   const { files, bareImports } = await collectBuiltModuleGraph(resolvePackagePath("./dist/tours.js"));
-  const forbiddenPackages = ["rrweb", "modern-screenshot", "@solar-icons/react", "react-dom"];
+  const allowedPackages = new Set(["react", "react/jsx-runtime", "react-dom"]);
 
   for (const specifier of bareImports) {
-    assert.ok(
-      !forbiddenPackages.some((name) => specifier === name || specifier.startsWith(`${name}/`)),
-      `tours entry must not import ${specifier}`,
-    );
+    assert.ok(allowedPackages.has(specifier), `tours entry must not import ${specifier}`);
   }
   for (const [href, code] of files) {
     assert.ok(!href.endsWith("/dist/index.js"), "tours entry must not import the review entry");
-    assert.doesNotMatch(code, /data-threadmark-root|getDisplayMedia|getUserMedia|domToBlob/, `${href} contains review or capture code`);
+    assert.doesNotMatch(code, /data-threadmark-root|getDisplayMedia|getUserMedia|domToBlob|innerHTML|dangerouslySetInnerHTML|fetch\(|XMLHttpRequest|sendBeacon/, `${href} contains review, capture, HTML-injection, or network code`);
   }
+});
 
-  // Budget for the whole player once it lands; today this is only the stable-ID helpers.
-  const gzippedBytes = gzipSync(Buffer.from([...files.values()].join("\n"))).length;
-  assert.ok(gzippedBytes < 12 * 1024, `tours entry is ${gzippedBytes} bytes gzipped; budget is 12 KB`);
+test("an app using the tour player ships under 12 KB minified and gzipped", async () => {
+  const { buildSync } = await import("esbuild");
+  const result = buildSync({
+    stdin: { contents: 'export { ThreadmarkTours, useThreadmarkTours, threadmarkTarget } from "./dist/tours.js";', resolveDir: packageDirectory, loader: "js" },
+    bundle: true,
+    minify: true,
+    format: "esm",
+    write: false,
+    external: ["react", "react-dom", "react/jsx-runtime"],
+    logLevel: "silent",
+  });
+  const gzippedBytes = gzipSync(result.outputFiles[0].contents).length;
+  assert.ok(gzippedBytes < 12 * 1024, `the tour player is ${gzippedBytes} bytes minified and gzipped; the budget is 12 KB`);
 });
 
 test("stable target helpers live in leaf modules the tours entry can share", async () => {

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/threadmark-react/tour.schema.json",
+  "id": "parcel-welcome",
+  "title": "Welcome to Parcel",
+  "showTo": { "path": "/" },
+  "start": "manual",
+  "steps": [
+    {
+      "id": "headline",
+      "target": "release-hero-heading",
+      "title": "Every release starts here",
+      "body": "This page walks through one release, from first look to sign-off."
+    },
+    {
+      "id": "confidence",
+      "target": "release-confidence-chart",
+      "title": "Check how ready it is",
+      "body": "The confidence chart sums up tests, reviews, and open questions."
+    },
+    {
+      "id": "approve",
+      "target": "approve-release-button",
+      "title": "Approve when it feels right",
+      "body": "Give it a try. The tour finishes when you press it.",
+      "next": "click"
+    }
+  ]
+}

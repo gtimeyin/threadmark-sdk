@@ -197,6 +197,52 @@ The helper returns the corresponding data attribute:
 
 Use durable, non-sensitive product vocabulary. IDs accept 1–120 letters, numbers, dots, underscores, colons, or hyphens. They should be unique on the rendered page and must not contain user IDs, account data, tokens, or copy that changes frequently. Threadmark intentionally does not capture arbitrary native DOM IDs.
 
+## Product tours (experimental)
+
+`threadmark-react/tours` plays product tours in production. It's a separate entry point that never loads the review overlay, captures nothing, and makes no network requests; an app using it ships under 12 KB minified and gzipped. Because it runs in production, install the package as a regular dependency (`npm install threadmark-react@beta`) when you use tours.
+
+A tour is a data file. Steps point at the same stable IDs used for feedback, so a tour keeps working through layout changes:
+
+```json
+{
+  "$schema": "https://unpkg.com/threadmark-react/tour.schema.json",
+  "id": "welcome",
+  "title": "Welcome",
+  "showTo": { "path": "/projects", "traits": { "signedUpAt": { "within": "7d" } } },
+  "start": { "after": "pageLoad", "wait": "2s" },
+  "steps": [
+    { "id": "new-project", "target": "projects.new", "title": "Start something new" },
+    { "id": "invite", "page": "/team", "target": "team.invite", "title": "Bring your people in", "next": "click",
+      "phone": { "target": "nav.menu", "title": "Invite lives in the menu" } }
+  ]
+}
+```
+
+```jsx
+import { ThreadmarkTours, useThreadmarkTours } from "threadmark-react/tours";
+import welcome from "./tours/welcome.tour.json";
+
+<ThreadmarkTours
+  tours={[welcome]}
+  user={{ id: session.userId, traits: { signedUpAt: session.createdAt } }}
+  navigate={(path) => router.push(path)}
+/>;
+
+// Anywhere in the app, e.g. a Help menu:
+const tours = useThreadmarkTours();
+tours.start("welcome");
+```
+
+- **Who and when.** `showTo` takes a `path` (exact, or ending in `*`), a `device`, and `traits` matched against the `user` you pass in. `start` is `"pageLoad"`, a wait after load, `{ "on": "event.name" }` (raise it with `tours.emit()`), or `"manual"`. `repeat` and `afterSkip` decide whether it comes back. By default a visit gets at most one new tour, with a day between tours; change this with `rules={{ perVisit, gap }}`.
+- **Progress.** With no setup, progress stays in this browser. To keep it across devices, pass `progress` (the records you loaded) and `onProgressChange` (save each record; it's awaited). Progress records the step ids people have seen, so reordering or adding steps resumes them at the first step they haven't seen. Finished or skipped beats an older in-progress copy.
+- **Across pages.** Steps continue on the previous step's page unless they set `page`. With `navigate`, Next takes people there; otherwise the tour points them to it. If they wander off, the tour pauses in a small bar.
+- **When the element isn't there.** Each step waits up to `waitFor.timeout` (5s by default) for its target. If it never appears, or more than one element has the ID, the tour doesn't guess: it offers to skip ahead and sends a `targetMissing` event.
+- **Phones and accessibility.** Cards sit beside their target when there's room and become a bottom sheet when there isn't. Focus moves to each step's title and returns where it was afterwards; ← and → move between steps and Esc pauses. Reduced motion and forced colors are respected.
+- **Your look.** Cards inherit your page's font. Set colours, radius, and font with `theme` or the `--tm-tour-*` CSS custom properties. `checkTourTheme(theme)` lists any text pairs below 4.5:1 contrast, with a nearby colour that passes.
+- **Events and notes.** `onTourEvent` receives `started`, `resumed`, `stepShown`, `stepCompleted`, `targetMissing`, `paused`, `skipped`, and `finished`; send them to your analytics if you like. Passing `onTourNote` adds "Something unclear here?" to each step and hands you the note.
+
+Validate hand-written tours with `defineTour()`, which throws a `TourValidationError` listing every problem by path. Invalid tours never play; `<ThreadmarkTours>` reports them through `onError`. The JSON Schema gives editors autocomplete for `.tour.json` files.
+
 ## Universal comments
 
 Threadmark asks one question for every annotation: **What should change?** The answer is submitted as the top-level `comment` value, whether the reviewer clicked an element, highlighted text, selected a group, dragged a region, marked up a selected screenshot area, or recorded an interaction trace. This keeps the capture step lightweight while still allowing a reviewer to describe the requested change directly.

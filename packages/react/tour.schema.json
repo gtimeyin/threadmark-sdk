@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/threadmark-react/tour.schema.json",
+  "title": "Threadmark tour",
+  "description": "A product tour that points at elements tagged with threadmarkTarget(). Schema v1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "steps"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "$ref": "#/$defs/stableId", "description": "Stable tour id, used for saved progress." },
+    "title": { "$ref": "#/$defs/title" },
+    "showTo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "pattern": "^/[^\\s?#]*\\*?$", "description": "Page the tour starts on. End with * to match a prefix." },
+        "device": { "enum": ["any", "desktop", "phone"], "default": "any" },
+        "traits": {
+          "type": "object",
+          "description": "Conditions on the traits your app passes in user.traits.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": ["string", "number", "boolean"] },
+              { "type": "array", "minItems": 1, "items": { "type": ["string", "number", "boolean"] } },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["within"],
+                "properties": { "within": { "$ref": "#/$defs/duration" } }
+              }
+            ]
+          }
+        },
+        "when": { "description": "Function escape hatch; only valid in defineTour() files, never in JSON." }
+      }
+    },
+    "start": {
+      "oneOf": [
+        { "enum": ["pageLoad", "manual"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["after", "wait"],
+          "properties": { "after": { "const": "pageLoad" }, "wait": { "$ref": "#/$defs/duration" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["on"],
+          "properties": { "on": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$" } }
+        }
+      ],
+      "default": "pageLoad"
+    },
+    "repeat": { "enum": ["once", "untilFinished", "everyVisit"], "default": "once" },
+    "afterSkip": {
+      "oneOf": [{ "const": "never" }, { "$ref": "#/$defs/duration" }],
+      "default": "never"
+    },
+    "steps": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/step" } }
+  },
+  "$defs": {
+    "stableId": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,119}$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "body": { "type": "string", "minLength": 1, "maxLength": 600 },
+    "duration": { "type": "string", "pattern": "^\\d+(\\.\\d+)?(ms|s|m|h|d)$" },
+    "style": { "enum": ["spotlight", "tooltip", "modal"] },
+    "placement": { "enum": ["auto", "top", "bottom", "left", "right", "sheet"] },
+    "next": { "enum": ["button", "click"] },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "page": { "type": "string", "pattern": "^/[^\\s?#]*$" },
+        "target": { "$ref": "#/$defs/stableId", "description": "A threadmarkTarget() id. Optional only for modal steps." },
+        "title": { "$ref": "#/$defs/title" },
+        "body": { "$ref": "#/$defs/body" },
+        "style": { "$ref": "#/$defs/style", "default": "spotlight" },
+        "placement": { "$ref": "#/$defs/placement", "default": "auto" },
+        "next": { "$ref": "#/$defs/next", "default": "button" },
+        "arrive": { "enum": ["navigate", "point"], "default": "navigate" },
+        "waitFor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "timeout": { "$ref": "#/$defs/duration", "default": "5s" } }
+        },
+        "phone": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "target": { "$ref": "#/$defs/stableId" },
+            "title": { "$ref": "#/$defs/title" },
+            "body": { "$ref": "#/$defs/body" },
+            "style": { "$ref": "#/$defs/style" },
+            "placement": { "$ref": "#/$defs/placement" },
+            "next": { "$ref": "#/$defs/next" }
+          }
+        }
+      }
+    }
+  }
+}
