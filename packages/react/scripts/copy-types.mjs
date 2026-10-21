@@ -1,3 +1,5 @@
 import { copyFile } from "node:fs/promises";
 
-await copyFile(new URL("../src/index.d.ts", import.meta.url), new URL("../dist/index.d.ts", import.meta.url));
+for (const name of ["index.d.ts", "tours.d.ts"]) {
+  await copyFile(new URL(`../src/${name}`, import.meta.url), new URL(`../dist/${name}`, import.meta.url));
+}

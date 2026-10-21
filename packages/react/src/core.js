@@ -11,7 +11,7 @@ import {
   RECORDING_MIME_TYPES,
 } from "./videoRecording.js";
 
-export const THREADMARK_TARGET_ATTRIBUTE = "data-threadmark-id";
+export { THREADMARK_TARGET_ATTRIBUTE, isValidThreadmarkTargetId, threadmarkTarget } from "./targetId.js";
 
 export const DEFAULT_ALLOWED_HOSTS = Object.freeze([
   "localhost",
@@ -22,7 +22,6 @@ export const DEFAULT_ALLOWED_HOSTS = Object.freeze([
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const REVIEW_ENVIRONMENTS = new Set(["local", "development", "preview", "staging"]);
-const STABLE_TARGET_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,119}$/;
 const CAPTURE_KINDS = new Set(["text", "element", "multi", "region", "screenshot", "interaction", "video"]);
 const INTERACTION_EVENT_TYPES = new Set(["click", "input", "keydown", "scroll", "submit", "navigation"]);
 const INTERACTION_KEYS = new Set([
@@ -96,21 +95,6 @@ export function isThreadmarkEnabled({
   }
 
   return matchesAllowedHost(hostname, allowedHosts);
-}
-
-export function threadmarkTarget(id) {
-  const normalized = String(id || "").trim();
-  if (!normalized) throw new TypeError("threadmarkTarget(id) requires a non-empty stable id.");
-  if (!isValidThreadmarkTargetId(normalized)) {
-    throw new TypeError(
-      "threadmarkTarget(id) accepts 1–120 letters, numbers, dots, underscores, colons, or hyphens.",
-    );
-  }
-  return { [THREADMARK_TARGET_ATTRIBUTE]: normalized };
-}
-
-export function isValidThreadmarkTargetId(id) {
-  return STABLE_TARGET_ID_PATTERN.test(String(id || ""));
 }
 
 function clean(value) {

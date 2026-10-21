@@ -4,6 +4,10 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+### Added
+
+- Experimental `threadmark-react/tours` entry, the future home of the production tour player. It currently exports only `threadmarkTarget` and `THREADMARK_TARGET_ATTRIBUTE`, without the review overlay or capture code; a package test enforces that and a 12 KB gzipped budget.
+
 ## [0.1.0-beta.11] — 2026-10-21
 
 ### Added
