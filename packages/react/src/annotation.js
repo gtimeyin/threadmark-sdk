@@ -55,12 +55,16 @@ export function shortcutAction(event) {
   if (typing) return null;
 
   if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === "f") return "toggle";
-  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null;
+  if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  if (event.shiftKey) return key === "c" ? "copy" : null;
 
   return {
+    c: "comment",
+    s: "sketch",
+    r: "interaction",
+    v: "video",
     p: "pause",
     h: "visibility",
-    c: "copy",
     x: "clear",
   }[key] || null;
 }

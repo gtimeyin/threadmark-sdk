@@ -1,18 +1,18 @@
 import { useEffect, useId, useRef, useState } from "react";
-import AudioLines from "lucide-react/dist/esm/icons/audio-lines.mjs";
-import Circle from "lucide-react/dist/esm/icons/circle.mjs";
-import Mic from "lucide-react/dist/esm/icons/mic.mjs";
-import MicOff from "lucide-react/dist/esm/icons/mic-off.mjs";
-import Monitor from "lucide-react/dist/esm/icons/monitor.mjs";
-import MousePointer2 from "lucide-react/dist/esm/icons/mouse-pointer-2.mjs";
-import Pause from "lucide-react/dist/esm/icons/pause.mjs";
-import Play from "lucide-react/dist/esm/icons/play.mjs";
-import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.mjs";
-import Square from "lucide-react/dist/esm/icons/square.mjs";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
-import Video from "lucide-react/dist/esm/icons/video.mjs";
-import VideoOff from "lucide-react/dist/esm/icons/video-off.mjs";
-import X from "lucide-react/dist/esm/icons/x.mjs";
+import { SoundwaveIcon as AudioLines } from "@solar-icons/react/linear/soundwave";
+import { RecordCircleIcon as Circle } from "@solar-icons/react/linear/record-circle";
+import { MicrophoneIcon as Mic } from "@solar-icons/react/linear/microphone";
+import { VolumeCrossIcon as MicOff } from "@solar-icons/react/linear/volume-cross";
+import { MonitorIcon as Monitor } from "@solar-icons/react/linear/monitor";
+import { CursorIcon as MousePointer2 } from "@solar-icons/react/linear/cursor";
+import { PauseIcon as Pause } from "@solar-icons/react/linear/pause";
+import { PlayIcon as Play } from "@solar-icons/react/linear/play";
+import { RestartIcon as RotateCcw } from "@solar-icons/react/linear/restart";
+import { StopIcon as Square } from "@solar-icons/react/linear/stop";
+import { TrashBinTrashIcon as Trash2 } from "@solar-icons/react/linear/trash-bin-trash";
+import { VideocameraIcon as Video } from "@solar-icons/react/linear/videocamera";
+import { VideocameraOffIcon as VideoOff } from "@solar-icons/react/linear/videocamera-off";
+import { CloseIcon as X } from "@solar-icons/react/linear/close";
 import {
   activeEventIndex,
   formatClock,
@@ -191,7 +191,7 @@ export function VideoSetupPanel({ setup, maxDurationMs, onChange, onStart, onCan
       </p>
 
       <footer className="tm-video-setup__actions">
-        <button type="button" className="tm-cancel" onClick={onCancel}>Cancel</button>
+        <button type="button" className="tm-cancel" aria-keyshortcuts="Escape" onClick={onCancel}>Back to Comment</button>
         <button
           type="button"
           className="tm-video-start"

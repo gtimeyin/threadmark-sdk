@@ -227,7 +227,7 @@ export function summarizeReplay(events) {
       if (entry.level === "error") errors += 1;
       if (entry.level === "warn") warnings += 1;
       if ((entry.level === "error" || entry.level === "warn") && consoleEntries.length < MAX_REPLAY_ENTRIES) {
-        // Scrubbed again: a custom replay provider may hand over entries it built itself.
+        // Scrubbed again: a replay provider (the extension) may hand over entries it built itself.
         consoleEntries.push({ offsetMs: offset(event), level: entry.level, message: scrubConsoleText(String(entry.message || "").slice(0, MAX_MESSAGE_LENGTH * 4)).slice(0, MAX_MESSAGE_LENGTH) });
       }
     } else if (event.type === EVENT_TYPE.Custom && event.data?.tag === REPLAY_NETWORK_EVENT) {

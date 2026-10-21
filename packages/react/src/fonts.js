@@ -2,7 +2,7 @@
 // overlay never requests fonts from a third party. @font-face rules do not apply inside a shadow
 // root, so the faces are registered on the document under prefixed names that cannot collide with
 // the host application's own fonts. Faces are handed over as bytes, not data: URLs, so a strict
-// font-src policy (common on production sites under review) cannot block them.
+// font-src policy (common on production sites reviewed through the extension) cannot block them.
 import geist400 from "@fontsource/geist/files/geist-latin-400-normal.woff2?inline";
 import geist500 from "@fontsource/geist/files/geist-latin-500-normal.woff2?inline";
 import geist600 from "@fontsource/geist/files/geist-latin-600-normal.woff2?inline";

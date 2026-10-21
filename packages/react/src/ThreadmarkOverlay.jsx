@@ -1,40 +1,44 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import MonitorPlay from "lucide-react/dist/esm/icons/monitor-play.mjs";
-import ChartNoAxesColumn from "lucide-react/dist/esm/icons/chart-no-axes-column.mjs";
-import CircleHelp from "lucide-react/dist/esm/icons/circle-help.mjs";
-import PlusIcon from "lucide-react/dist/esm/icons/plus.mjs";
-import CopyCheck from "lucide-react/dist/esm/icons/copy-check.mjs";
-import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
-import Check from "lucide-react/dist/esm/icons/check.mjs";
-import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
-import CircleCheck from "lucide-react/dist/esm/icons/circle-check.mjs";
-import Ellipsis from "lucide-react/dist/esm/icons/ellipsis.mjs";
-import Link2 from "lucide-react/dist/esm/icons/link-2.mjs";
-import MapPinPen from "lucide-react/dist/esm/icons/map-pin-pen.mjs";
-import CopyPlus from "lucide-react/dist/esm/icons/copy-plus.mjs";
-import GitCompare from "lucide-react/dist/esm/icons/git-compare.mjs";
-import MousePointerClick from "lucide-react/dist/esm/icons/mouse-pointer-click.mjs";
-import Eye from "lucide-react/dist/esm/icons/eye.mjs";
-import EyeOff from "lucide-react/dist/esm/icons/eye-off.mjs";
-import GripVertical from "lucide-react/dist/esm/icons/grip-vertical.mjs";
-import GitBranch from "lucide-react/dist/esm/icons/git-branch.mjs";
-import History from "lucide-react/dist/esm/icons/history.mjs";
-import ExternalLink from "lucide-react/dist/esm/icons/external-link.mjs";
-import MessageSquare from "lucide-react/dist/esm/icons/message-square.mjs";
-import MessagesSquare from "lucide-react/dist/esm/icons/messages-square.mjs";
-import Pause from "lucide-react/dist/esm/icons/pause.mjs";
-import Pencil from "lucide-react/dist/esm/icons/pencil.mjs";
-import Play from "lucide-react/dist/esm/icons/play.mjs";
-import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.mjs";
-import Search from "lucide-react/dist/esm/icons/search.mjs";
-import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
-import Square from "lucide-react/dist/esm/icons/square.mjs";
-import Filter from "lucide-react/dist/esm/icons/filter.mjs";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
-import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.mjs";
-import Undo2 from "lucide-react/dist/esm/icons/undo-2.mjs";
-import Video from "lucide-react/dist/esm/icons/video.mjs";
-import X from "lucide-react/dist/esm/icons/x.mjs";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { VideoFramePlayHorizontalIcon as MonitorPlay } from "@solar-icons/react/linear/video-frame-play-horizontal";
+import { BotIcon as Bot } from "@solar-icons/react/linear/bot";
+import { ChecklistIcon as ListChecks } from "@solar-icons/react/linear/checklist";
+import { LoaderIcon as LoaderCircle } from "@solar-icons/react/linear/loader";
+import { ChartIcon as ChartNoAxesColumn } from "@solar-icons/react/linear/chart";
+import { QuestionCircleIcon as CircleHelp } from "@solar-icons/react/linear/question-circle";
+import { AddIcon as PlusIcon } from "@solar-icons/react/linear/add";
+import { CopyCheckIcon as CopyCheck } from "@solar-icons/react/linear/copy-check";
+import { AltArrowDownIcon as ChevronDown } from "@solar-icons/react/linear/alt-arrow-down";
+import { CheckIcon as Check } from "@solar-icons/react/linear/check";
+import { ArrowUpIcon as ArrowUp } from "@solar-icons/react/linear/arrow-up";
+import { CheckCircleIcon as CircleCheck } from "@solar-icons/react/linear/check-circle";
+import { MenuDotsIcon as Ellipsis } from "@solar-icons/react/linear/menu-dots";
+import { LinkIcon as Link2 } from "@solar-icons/react/linear/link";
+import { MapPointIcon as MapPinPen } from "@solar-icons/react/linear/map-point";
+import { CopyAddIcon as CopyPlus } from "@solar-icons/react/linear/copy-add";
+import { GitDiffIcon as GitCompare } from "@solar-icons/react/linear/git-diff";
+import { CursorSquareIcon as MousePointerClick } from "@solar-icons/react/linear/cursor-square";
+import { CursorIcon as Cursor } from "@solar-icons/react/linear/cursor";
+import { EyeIcon as Eye } from "@solar-icons/react/linear/eye";
+import { EyeClosedIcon as EyeOff } from "@solar-icons/react/linear/eye-closed";
+import { GripVerticalIcon as GripVertical } from "@solar-icons/react/linear/grip-vertical";
+import { GitBranchIcon as GitBranch } from "@solar-icons/react/linear/git-branch";
+import { HistoryIcon as History } from "@solar-icons/react/linear/history";
+import { ArrowToTopRightIcon as ExternalLink } from "@solar-icons/react/linear/arrow-to-top-right";
+import { ChatSquareIcon as MessageSquare } from "@solar-icons/react/linear/chat-square";
+import { DialogIcon as MessagesSquare } from "@solar-icons/react/linear/dialog";
+import { PauseIcon as Pause } from "@solar-icons/react/linear/pause";
+import { Pen2Icon as Pencil } from "@solar-icons/react/linear/pen-2";
+import { PlayIcon as Play } from "@solar-icons/react/linear/play";
+import { RestartIcon as RotateCcw } from "@solar-icons/react/linear/restart";
+import { MagnifierIcon as Search } from "@solar-icons/react/linear/magnifier";
+import { ShieldCheckIcon as ShieldCheck } from "@solar-icons/react/linear/shield-check";
+import { StopIcon as Square } from "@solar-icons/react/linear/stop";
+import { FilterIcon as Filter } from "@solar-icons/react/linear/filter";
+import { TrashBinTrashIcon as Trash2 } from "@solar-icons/react/linear/trash-bin-trash";
+import { DangerTriangleIcon as TriangleAlert } from "@solar-icons/react/linear/danger-triangle";
+import { UndoLeftIcon as Undo2 } from "@solar-icons/react/linear/undo-left";
+import { VideocameraIcon as Video } from "@solar-icons/react/linear/videocamera";
+import { CloseIcon as X } from "@solar-icons/react/linear/close";
 import { computePopoverPosition } from "./popover.js";
 import {
   addMarkupStroke,
@@ -433,7 +437,104 @@ function CommentThumbnail({ annotation }) {
   return url ? <img className="tm-comment-thumbnail" src={url} alt="Saved screenshot" /> : null;
 }
 
-function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion }) {
+const NEXT_STEP_TAG_LABELS = { bug: "Bug", polish: "Polish", copy: "Copy", idea: "Idea", question: "Question" };
+
+function nextStepsStatusLine(status) {
+  if (status.state === "generating") return "Updating from the latest feedback…";
+  if (status.state === "pending") return "New feedback came in. The list updates shortly.";
+  if (status.state === "failed") return `Couldn't update the list${status.error ? `: ${status.error}` : "."}`;
+  if (status.state === "off" || !status.generatedAt) return null;
+  const ago = formatMessageTime(status.generatedAt);
+  return ago === "Now" ? "Updated just now" : /^\d+[mh]$/.test(ago) ? `Updated ${ago} ago` : `Updated ${ago}`;
+}
+
+function nextStepProvenance(step) {
+  if (step.completed) {
+    if (step.completedVia === "resolved") return "Done: every thread behind it was resolved";
+    return `Done${step.completedBy ? ` by ${step.completedBy.displayName}` : ""}${step.completedVia === "agent" ? " through an AI agent" : ""}`;
+  }
+  return step.source === "person" ? "Added by your team" : "Suggested from reviewers' feedback";
+}
+
+function NextStepRow({ step, open, onToggle, canTick, onDone, onOpenSource }) {
+  return (
+    <li className={`tm-next-step${step.completed ? " is-done" : ""}${open ? " is-open" : ""}`}>
+      <div className="tm-next-step__row">
+        <input type="checkbox" className="tm-next-step__check" checked={step.completed} disabled={!canTick}
+          onChange={(event) => onDone(step, event.target.checked)}
+          aria-label={`${step.completed ? "Mark not done" : "Mark done"}: ${step.title}`} />
+        <button type="button" className="tm-next-step__summary" aria-expanded={open} onClick={onToggle}>
+          <span className="tm-next-step__title">{step.title}</span>
+          {(step.tag || step.sources.length > 0 || step.completedVia === "agent") && <span className="tm-next-step__meta">
+            {step.tag && <span className={`tm-step-tag tm-step-tag--${step.tag}`}>{NEXT_STEP_TAG_LABELS[step.tag]}</span>}
+            {step.sources.length > 0 && <span className="tm-next-step__count"><MessageSquare size={12} aria-hidden="true" />{step.sources.length}</span>}
+            {step.completedVia === "agent" && <span className="tm-next-step__count"><Bot size={12} aria-hidden="true" />Agent</span>}
+          </span>}
+        </button>
+      </div>
+      {open && <div className="tm-next-step__details">
+        {step.notes && <p className="tm-next-step__notes">{step.notes}</p>}
+        {step.sources.length > 0 && <ul className="tm-next-step__sources" aria-label="Feedback behind this step">
+          {step.sources.map((source) => <li key={source.feedbackId}>
+            <button type="button" onClick={() => onOpenSource(source)}>
+              <span className="tm-next-step__source-who">
+                <strong>{source.author || "Reviewer"}</strong>
+                {source.route && <span>{source.route}</span>}
+                {source.status === "resolved" && <span className="tm-next-step__resolved">Resolved</span>}
+              </span>
+              {source.quote && <q>{source.quote}</q>}
+            </button>
+          </li>)}
+        </ul>}
+        <p className="tm-next-step__provenance">{nextStepProvenance(step)}</p>
+      </div>}
+    </li>
+  );
+}
+
+/** The host's next steps: a checklist to tick off, each step opening to the feedback behind it. */
+function NextStepsTab({ nextSteps, canTick, onDone, onOpenSource }) {
+  const [openId, setOpenId] = useState(null);
+  const [showDone, setShowDone] = useState(true);
+  const open = nextSteps.steps.filter((step) => !step.completed);
+  const done = nextSteps.steps.filter((step) => step.completed);
+  const total = nextSteps.steps.length;
+  const working = nextSteps.status.state === "generating" || nextSteps.status.state === "pending";
+  const statusLine = nextStepsStatusLine(nextSteps.status);
+  const row = (step) => <NextStepRow key={step.id} step={step} open={openId === step.id} canTick={canTick}
+    onToggle={() => setOpenId((current) => current === step.id ? null : step.id)} onDone={onDone} onOpenSource={onOpenSource} />;
+  return (
+    <div className="tm-next-steps" role="tabpanel" aria-label="Next steps">
+      {(total > 0 || statusLine) && <div className="tm-next-steps__summary">
+        {total > 0 && <>
+          <p className="tm-next-steps__progress"><strong>{done.length} of {total}</strong> done</p>
+          <div className="tm-next-steps__bar" role="progressbar" aria-label="Steps done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done.length}>
+            <span style={{ width: `${Math.round((done.length / total) * 100)}%` }} />
+          </div>
+        </>}
+        {statusLine && <p className={`tm-next-steps__status${nextSteps.status.state === "failed" ? " is-warn" : ""}`} role="status">
+          {working && <LoaderCircle size={12} className="tm-next-steps__spin" aria-hidden="true" />}{statusLine}
+        </p>}
+      </div>}
+      {total === 0 ? <div className="tm-comments-empty"><ListChecks size={26} />
+        <strong>{working ? "Writing next steps…" : "Waiting on feedback"}</strong>
+        <p>{working ? "They appear here in a moment." : "Comments turn into clear next steps as they come in."}</p>
+      </div> : <>
+        <ol className="tm-next-steps__list">{open.map(row)}</ol>
+        {open.length === 0 && <p className="tm-next-steps__all-done">Everything here is done.</p>}
+        {done.length > 0 && <div className="tm-next-steps__done">
+          <button type="button" className="tm-next-steps__done-toggle" aria-expanded={showDone} onClick={() => setShowDone((current) => !current)}>
+            <ChevronDown size={14} aria-hidden="true" />Done ({done.length})
+          </button>
+          {showDone && <ol className="tm-next-steps__list">{done.map(row)}</ol>}
+        </div>}
+      </>}
+    </div>
+  );
+}
+
+function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
+  nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps }) {
   const [controls, setControls] = useState("collapsed");
   const [filterOpen, setFilterOpen] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState(false);
@@ -566,18 +667,26 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
             </button>}
           </div>}
           </div></>}
+          {tab === "next-steps" && onCopyNextSteps && <button type="button" aria-label="Copy the open steps for an AI agent" title="Copy the open steps as a prompt for an AI agent"
+            disabled={!nextSteps?.steps.some((step) => !step.completed)} onClick={onCopyNextSteps}>
+            <Bot size={17} />
+          </button>}
           <button type="button" aria-label="Close feedback panel" onClick={onClose}><X size={18} /></button>
         </div>
       </header>
-      {pageVersions.length > 0 && <div className="tm-panel-tabs" role="tablist" aria-label="Feedback views">
+      {(pageVersions.length > 0 || nextSteps) && <div className="tm-panel-tabs" role="tablist" aria-label="Feedback views">
         <button type="button" role="tab" aria-selected={tab === "comments"} onClick={() => onTabChange("comments")}>
           Comments <span>{annotations.length}</span>
         </button>
-        <button type="button" role="tab" aria-selected={tab === "versions"} onClick={() => onTabChange("versions")}>
+        {nextSteps && <button type="button" role="tab" aria-selected={tab === "next-steps"} onClick={() => onTabChange("next-steps")}>
+          Next steps <span>{nextSteps.steps.filter((step) => !step.completed).length}</span>
+        </button>}
+        {pageVersions.length > 0 && <button type="button" role="tab" aria-selected={tab === "versions"} onClick={() => onTabChange("versions")}>
           Versions <span>{pageVersions.length}</span>
-        </button>
+        </button>}
       </div>}
-      {tab === "versions" ? <PageVersionList versions={pageVersions} onSelect={onSelectPageVersion} /> : <>
+      {tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
+        : tab === "versions" ? <PageVersionList versions={pageVersions} onSelect={onSelectPageVersion} /> : <>
       {controls === "search" && <div id="tm-comments-search-controls" className="tm-comments-search">
         <input ref={searchRef} aria-label="Search comments" placeholder="Search comments and replies…" value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>}
@@ -613,6 +722,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
         {annotations.length > 0 && <button type="button" onClick={() => { setQuery(""); setReviewerId(""); setFilter("all"); setStatus("all"); setPage(""); setBuild(""); }}>Clear filters</button>}
       </div>}
       </>}
+      <p className="tm-icon-credit"><a href="https://www.figma.com/community/file/1166831539721848736" target="_blank" rel="noreferrer">Solar icons by 480 Design</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a></p>
     </aside>
   );
 }
@@ -714,6 +824,73 @@ function ClearIcon() {
 
 function GripIcon() {
   return <GripVertical {...iconProps} />;
+}
+
+// A toolbar dropdown: focus moves into it on open, arrow keys move between items, and Escape or
+// Tab closes it and returns focus to the button that opened it.
+function ToolbarMenu({ id, label, below, triggerRef, onClose, children }) {
+  const menuRef = useRef(null);
+  const items = () => [...(menuRef.current?.querySelectorAll('[role^="menuitem"]:not(:disabled)') || [])];
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const enabled = items();
+      (enabled.find((item) => item.dataset.autofocus === "true") || enabled[0])?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const close = (event) => {
+      const path = event.composedPath();
+      if (path.includes(menuRef.current) || path.includes(triggerRef.current)) return;
+      onClose(false);
+    };
+    window.addEventListener("pointerdown", close, true);
+    return () => window.removeEventListener("pointerdown", close, true);
+  }, [onClose, triggerRef]);
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape" || event.key === "Tab") {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); }
+      onClose(event.key === "Escape");
+      return;
+    }
+    const enabled = items();
+    const index = enabled.indexOf(menuRef.current?.getRootNode().activeElement);
+    const next = {
+      ArrowDown: enabled[(index + 1) % enabled.length],
+      ArrowUp: enabled[(index - 1 + enabled.length) % enabled.length],
+      Home: enabled[0],
+      End: enabled[enabled.length - 1],
+    }[event.key];
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+  };
+
+  return (
+    <div ref={menuRef} id={id} className={`tm-toolbar-menu${below ? " tm-toolbar-menu--below" : ""}`} role="menu" aria-label={label}
+      data-menu-open="true" onKeyDown={onKeyDown}>
+      {children}
+    </div>
+  );
+}
+
+function ToolbarMenuItem({ icon, label, description, shortcut, keyshortcuts, checked, danger, badge, ...props }) {
+  return (
+    <button type="button" role={typeof checked === "boolean" ? "menuitemcheckbox" : "menuitem"} aria-checked={checked}
+      aria-keyshortcuts={keyshortcuts} className={danger ? "is-danger" : undefined} {...props}>
+      <span className={`tm-toolbar-menu__icon${description ? " tm-toolbar-menu__icon--tile" : ""}`}>{icon}</span>
+      <span className="tm-toolbar-menu__text">
+        <span className="tm-toolbar-menu__label">{label}</span>
+        {description && <span className="tm-toolbar-menu__description">{description}</span>}
+      </span>
+      {typeof checked === "boolean" && <Check size={15} className={`tm-toolbar-menu__check${checked ? "" : " is-off"}`} aria-hidden="true" />}
+      {badge}
+      {shortcut && <kbd aria-hidden="true">{shortcut}</kbd>}
+    </button>
+  );
 }
 
 function ToolButton({ active, disabled = false, icon, label, onClick }) {
@@ -875,7 +1052,9 @@ function ScreenshotAreaSelector({ onComplete, onCancel }) {
           <span>Drag around the exact area you want to mark up.</span>
         </div>
         <div className="tm-capture-instruction__actions">
-          <button type="button" className="tm-capture-cancel" onClick={onCancel}>Cancel</button>
+          <button type="button" className="tm-capture-cancel" aria-keyshortcuts="Escape" onClick={onCancel}>
+            Back to Comment<kbd aria-hidden="true">Esc</kbd>
+          </button>
         </div>
       </div>
       {rect && (
@@ -1467,6 +1646,13 @@ function Overlay({
   onCopyAnnotationLink,
   onShowVersions,
   onSelectPageVersion,
+  nextSteps = null,
+  nextStepsOpen = false,
+  onShowNextSteps = () => {},
+  canTickNextSteps = false,
+  onNextStepDone,
+  onOpenNextStepSource,
+  onCopyNextSteps,
   onCarryFeedbackForward,
   onBeginReply,
   onCancelReply,
@@ -1558,6 +1744,23 @@ function Overlay({
     return restoration && restoration.status !== "resolved";
   });
   const carryForwardVersions = pageVersions.filter((version) => !version.current && version.state === "ready");
+  const [toolbarMenu, setToolbarMenu] = useState(null);
+  const toolbarMenuRef = useRef(null);
+  toolbarMenuRef.current = toolbarMenu;
+  const toolsTriggerRef = useRef(null);
+  const moreTriggerRef = useRef(null);
+  const closeToolbarMenu = useCallback((restoreFocus) => {
+    const trigger = toolbarMenuRef.current === "tools" ? toolsTriggerRef.current : moreTriggerRef.current;
+    setToolbarMenu(null);
+    if (restoreFocus) trigger?.focus();
+  }, []);
+  const runToolbarItem = (run) => () => { setToolbarMenu(null); run(); };
+  // A dragged toolbar near the top of the window opens its menus downward.
+  const toolbarMenusBelow = Boolean(toolbarPosition && typeof window !== "undefined" && toolbarPosition.top < window.innerHeight / 2);
+
+  useEffect(() => { if (mode !== "picking") setToolbarMenu(null); }, [mode]);
+  // Pressing X arms Clear; the More menu opens so the confirmation is visible.
+  useEffect(() => { if (clearArmed && mode === "picking") setToolbarMenu("more"); }, [clearArmed, mode]);
 
   useEffect(() => {
     setCarryForwardOpen(false);
@@ -1786,13 +1989,13 @@ function Overlay({
               <span>{Math.round(drawRect.width)} × {Math.round(drawRect.height)}</span>
             </div>
           )}
-          <div className="tm-gesture-hint" aria-hidden="true">
+          {!toolbarMenu && <div className="tm-gesture-hint" aria-hidden="true">
             {selectedCount >= 2
               ? `${selectedCount} elements selected`
               : drawRect
                 ? "Release to annotate this selection"
                 : repinning ? "Click a new element · Escape to cancel repinning" : "Click · select text · drag an area"}
-          </div>
+          </div>}
           <div
             className="tm-modebar"
             role="toolbar"
@@ -1818,58 +2021,72 @@ function Overlay({
             </button>
             <div className="tm-toolbar-divider" />
             <div className="tm-tool-group tm-toolbar-tools">
-              <ToolButton
-                icon={<PencilIcon />}
-                label="Select screenshot area to mark up"
-                onClick={onScreenshot}
-              />
-              <ToolButton
-                icon={<InteractionIcon />}
-                label="Record an interaction"
-                onClick={onStartInteraction}
-              />
-              {videoEnabled && (
-                <ToolButton
-                  icon={<VideoIcon />}
-                  label="Record video feedback"
-                  onClick={onStartVideo}
-                />
-              )}
-              <ToolButton
-                active={paused}
-                icon={<PauseIcon paused={paused} />}
-                label={paused ? "Resume page (P)" : "Pause animations (P)"}
-                onClick={onPause}
-              />
-              <ToolButton
-                active={markersHidden}
-                disabled={!annotations.length}
-                icon={<EyeIcon hidden={markersHidden} />}
-                label={markersHidden ? "Show markers (H)" : "Hide markers (H)"}
-                onClick={onVisibility}
-              />
-              <ToolButton
-                disabled={!annotations.length}
-                icon={<CopyIcon />}
-                label="Copy annotations (C)"
-                onClick={onCopy}
-              />
-              {brokenAnnotations.length > 0 && (
-                <ToolButton
-                  active
-                  icon={<WarningIcon />}
-                  label={`${brokenAnnotations.length} annotation target${brokenAnnotations.length === 1 ? "" : "s"} need repair`}
-                  onClick={() => onEditAnnotation(brokenAnnotations[0].id)}
-                />
-              )}
-              <ToolButton
-                active={clearArmed}
-                disabled={!annotations.length && !selectedCount}
-                icon={<ClearIcon />}
-                label={clearArmed ? "Confirm clear annotations (X)" : "Clear annotations (X)"}
-                onClick={onClearAll}
-              />
+              <button ref={toolsTriggerRef} type="button" className={`tm-tool-switch${toolbarMenu === "tools" ? " is-open" : ""}`}
+                aria-label="Feedback tools: Comment" title="Feedback tools" aria-haspopup="menu" aria-expanded={toolbarMenu === "tools"}
+                aria-controls={toolbarMenu === "tools" ? "tm-tool-menu" : undefined}
+                data-menu-open={toolbarMenu === "tools" ? "true" : undefined}
+                onKeyDown={(event) => { if (event.key === "Escape" && toolbarMenu) closeToolbarMenu(true); }}
+                onClick={() => setToolbarMenu((open) => (open === "tools" ? null : "tools"))}>
+                <Cursor {...iconProps} />
+                <ChevronDown size={13} className="tm-tool-switch__chevron" aria-hidden="true" />
+              </button>
+              <button ref={moreTriggerRef} type="button" className={`tm-toolbar-more${toolbarMenu === "more" ? " is-open" : ""}`}
+                aria-label={brokenAnnotations.length
+                  ? `More actions, ${brokenAnnotations.length} lost comment${brokenAnnotations.length === 1 ? "" : "s"}`
+                  : "More actions"}
+                title="More actions" aria-haspopup="menu" aria-expanded={toolbarMenu === "more"}
+                aria-controls={toolbarMenu === "more" ? "tm-more-menu" : undefined}
+                data-menu-open={toolbarMenu === "more" ? "true" : undefined}
+                onKeyDown={(event) => { if (event.key === "Escape" && toolbarMenu) closeToolbarMenu(true); }}
+                onClick={() => setToolbarMenu((open) => (open === "more" ? null : "more"))}>
+                <Ellipsis {...iconProps} />
+                {brokenAnnotations.length > 0
+                  ? <span className="tm-toolbar-more__flag tm-toolbar-more__flag--repair" aria-hidden="true" />
+                  : (paused || markersHidden) && <span className="tm-toolbar-more__flag" aria-hidden="true" />}
+              </button>
             </div>
+            {toolbarMenu === "tools" && (
+              <ToolbarMenu id="tm-tool-menu" label="Feedback tools" below={toolbarMenusBelow} triggerRef={toolsTriggerRef} onClose={closeToolbarMenu}>
+                <ToolbarMenuItem role="menuitemradio" aria-checked="true" data-autofocus="true"
+                  icon={<Cursor size={17} />} label="Comment" description="Click, select text, or drag an area"
+                  shortcut="C" keyshortcuts="C" onClick={() => closeToolbarMenu(true)} />
+                <ToolbarMenuItem role="menuitemradio" aria-checked="false"
+                  icon={<PencilIcon />} label="Sketch on a screenshot" description="Crop an area and draw on it"
+                  shortcut="S" keyshortcuts="S" onClick={runToolbarItem(onScreenshot)} />
+                <ToolbarMenuItem role="menuitemradio" aria-checked="false"
+                  icon={<InteractionIcon />} label="Record an interaction" description="Up to 15 seconds of clicks and steps"
+                  shortcut="R" keyshortcuts="R" onClick={runToolbarItem(onStartInteraction)} />
+                {videoEnabled && (
+                  <ToolbarMenuItem role="menuitemradio" aria-checked="false"
+                    icon={<VideoIcon />} label="Record a video" description="Your tab, voice, and camera"
+                    shortcut="V" keyshortcuts="V" onClick={runToolbarItem(onStartVideo)} />
+                )}
+              </ToolbarMenu>
+            )}
+            {toolbarMenu === "more" && (
+              <ToolbarMenu id="tm-more-menu" label="More actions" below={toolbarMenusBelow} triggerRef={moreTriggerRef} onClose={closeToolbarMenu}>
+                <ToolbarMenuItem icon={<PauseIcon paused={paused} />} label="Pause animations" checked={paused}
+                  shortcut="P" keyshortcuts="P" onClick={runToolbarItem(onPause)} />
+                <ToolbarMenuItem icon={<EyeIcon hidden={markersHidden} />} label="Hide comment pins" checked={markersHidden}
+                  disabled={!annotations.length} shortcut="H" keyshortcuts="H" onClick={runToolbarItem(onVisibility)} />
+                <div className="tm-toolbar-menu__separator" role="separator" />
+                <ToolbarMenuItem icon={<CopyIcon />} label="Copy as Markdown" disabled={!annotations.length}
+                  shortcut="⇧C" keyshortcuts="Shift+C" onClick={runToolbarItem(onCopy)} />
+                {brokenAnnotations.length > 0 && (
+                  <ToolbarMenuItem icon={<WarningIcon />} label="Repair lost comments"
+                    aria-label={`Repair lost comments: ${brokenAnnotations.length} target${brokenAnnotations.length === 1 ? "" : "s"} need repair`}
+                    badge={<span className="tm-toolbar-menu__badge" aria-hidden="true">{brokenAnnotations.length}</span>}
+                    onClick={runToolbarItem(() => onEditAnnotation(brokenAnnotations[0].id))} />
+                )}
+                <div className="tm-toolbar-menu__separator" role="separator" />
+                <ToolbarMenuItem danger icon={<ClearIcon />}
+                  label={clearArmed ? "Click again to clear all" : "Clear all comments"}
+                  aria-label={clearArmed ? "Confirm clear annotations (X)" : undefined}
+                  data-autofocus={clearArmed ? "true" : undefined}
+                  disabled={!annotations.length && !selectedCount} shortcut="X" keyshortcuts="X"
+                  onClick={clearArmed ? runToolbarItem(onClearAll) : onClearAll} />
+              </ToolbarMenu>
+            )}
             {selectedCount >= 2 && (
               <button type="button" className="tm-button--primary" onClick={onComment}>
                 Comment {selectedCount}
@@ -1892,9 +2109,11 @@ function Overlay({
       {allCommentsOpen && ["picking", "selected"].includes(mode) && (
         <AllCommentsPanel annotations={projectAnnotations} restorations={annotationRestorations} reviewer={reviewer}
           route={pageVersionRoute} hidden={mode !== "picking"} onClose={onCloseAllComments} onOpen={onOpenListedAnnotation}
-          tab={versionHistoryOpen && pageVersions.length ? "versions" : "comments"}
-          onTabChange={(tab) => onShowVersions(tab === "versions")}
-          pageVersions={pageVersions} onSelectPageVersion={onSelectPageVersion} />
+          tab={versionHistoryOpen && pageVersions.length ? "versions" : nextStepsOpen && nextSteps ? "next-steps" : "comments"}
+          onTabChange={(tab) => { onShowVersions(tab === "versions"); onShowNextSteps(tab === "next-steps"); }}
+          pageVersions={pageVersions} onSelectPageVersion={onSelectPageVersion}
+          nextSteps={nextSteps} canTickNextSteps={canTickNextSteps} onNextStepDone={onNextStepDone}
+          onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps} />
       )}
 
       {replayViewer && (

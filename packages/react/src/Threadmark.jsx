@@ -1,3 +1,4 @@
+import { captureEnvironment } from "./captureEnvironment.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -43,6 +44,7 @@ import {
   restoreTextTargetDescriptor,
 } from "./target.js";
 import { normalizePageVersions } from "./versionHistory.js";
+import { normalizeNextSteps } from "./nextSteps.js";
 import { resolveSessionReplayOptions, startSessionReplay } from "./sessionReplay.js";
 import {
   CAMERA_VIDEO_BITS_PER_SECOND,
@@ -173,6 +175,7 @@ function recordToAnnotation(record) {
       updatedAt: source.updatedAt,
       projectKey: source.projectKey,
       environment: source.environment,
+      captureEnvironment: source.captureEnvironment,
       buildId: source.buildId || undefined,
       route: source.route,
       target: source.target,
@@ -415,6 +418,7 @@ export function Threadmark({
   styleNonce,
   annotations: persistedAnnotations,
   pageVersions,
+  nextSteps,
   videoRecording,
   sessionReplay,
   onReady,
@@ -428,6 +432,8 @@ export function Threadmark({
   onPageVersionSelect,
   onFeedbackCarryForward,
   onPollVote,
+  onNextStepDone,
+  onNextStepsCopy,
   onError,
 }) {
   const [portalRoot, setPortalRoot] = useState(null);
@@ -473,6 +479,9 @@ export function Threadmark({
   const [deleting, setDeleting] = useState(false);
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [nextStepsOpen, setNextStepsOpen] = useState(false);
+  // Ticks shown at once while the host stores them; the next `nextSteps` from the host replaces them.
+  const [nextStepTicks, setNextStepTicks] = useState({});
   const [carryingVersionId, setCarryingVersionId] = useState(null);
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -511,6 +520,8 @@ export function Threadmark({
     onPageVersionSelect: useLatest(onPageVersionSelect),
     onFeedbackCarryForward: useLatest(onFeedbackCarryForward),
     onPollVote: useLatest(onPollVote),
+    onNextStepDone: useLatest(onNextStepDone),
+    onNextStepsCopy: useLatest(onNextStepsCopy),
     onError: useLatest(onError),
   };
   const modeRef = useLatest(mode);
@@ -553,6 +564,17 @@ export function Threadmark({
     route: activeRoute,
     currentUrl: observedLocation || browserHref,
   }), [activeRoute, browserHref, buildId, observedLocation, pageVersions]);
+  const normalizedNextSteps = useMemo(() => normalizeNextSteps(nextSteps), [nextSteps]);
+  useEffect(() => { setNextStepTicks({}); }, [nextSteps]);
+  const shownNextSteps = useMemo(() => {
+    if (!normalizedNextSteps || !Object.keys(nextStepTicks).length) return normalizedNextSteps;
+    const steps = normalizedNextSteps.steps.map((step) => {
+      if (!Object.hasOwn(nextStepTicks, step.id) || nextStepTicks[step.id] === step.completed) return step;
+      const done = nextStepTicks[step.id];
+      return { ...step, completed: done, completedVia: done ? "person" : null, completedBy: done && reviewer?.displayName ? { displayName: String(reviewer.displayName) } : null };
+    });
+    return { ...normalizedNextSteps, steps: [...steps.filter((step) => !step.completed), ...steps.filter((step) => step.completed)] };
+  }, [normalizedNextSteps, nextStepTicks, reviewer?.displayName]);
 
   const safeCall = useCallback((callbackRef, ...args) => {
     try {
@@ -738,8 +760,8 @@ export function Threadmark({
     const host = document.createElement("div");
     host.setAttribute("data-threadmark-root", "");
     const shadow = host.attachShadow({ mode: "open" });
-    // A constructed stylesheet is not an inline style, so strict style-src policies (common on
-    // production sites under review) cannot block it. Older engines fall back to a nonce'd <style>.
+    // A constructed stylesheet is not an inline style, so strict style-src policies (and pages reviewed
+    // through the browser extension) cannot block it. Older engines fall back to a nonce'd <style>.
     const css = overlayStyles + videoStyles + replayerStyles;
     let adopted = false;
     try {
@@ -2099,6 +2121,16 @@ export function Threadmark({
       }
       if (mode === "idle") return;
       if (mode === "recording" || mode === "video-setup") return;
+      // Tool keys switch away from Comment only from the toolbar's own state; anywhere else they
+      // belong to the open composer or capture and pass through.
+      if (["comment", "sketch", "interaction", "video"].includes(action)) {
+        if (mode !== "picking" || (action === "video" && !videoOptions.enabled)) return;
+        event.preventDefault();
+        if (action === "sketch") startScreenshotSelection();
+        if (action === "interaction") startInteractionRecording();
+        if (action === "video") startVideoSetup();
+        return;
+      }
       event.preventDefault();
       if (action === "pause") togglePause();
       if (action === "visibility") toggleMarkers();
@@ -2123,6 +2155,10 @@ export function Threadmark({
     toggleMarkers,
     copyAnnotations,
     requestClearAll,
+    startScreenshotSelection,
+    startInteractionRecording,
+    startVideoSetup,
+    videoOptions.enabled,
     versionHistoryOpen,
     allCommentsOpen,
   ]);
@@ -3004,6 +3040,52 @@ export function Threadmark({
     }
   }, [annotationsRef, callbacks.onError, callbacks.onPollVote, safeCall, showNotice]);
 
+  // Next steps are the host's: ticks show at once and go to the host, which supplies the updated list.
+  const tickNextStep = useCallback(async (step, done) => {
+    if (!callbacks.onNextStepDone.current) return;
+    setNextStepTicks((current) => ({ ...current, [step.id]: done }));
+    try {
+      await callbacks.onNextStepDone.current(step, done);
+    } catch (error) {
+      setNextStepTicks((current) => {
+        const next = { ...current };
+        delete next[step.id];
+        return next;
+      });
+      showNotice("The step wasn’t updated. Try again.");
+      safeCall(callbacks.onError, { code: "next_step_failed", message: error?.message || "The step could not be updated." });
+    }
+  }, [callbacks.onError, callbacks.onNextStepDone, safeCall, showNotice]);
+
+  const copyNextSteps = useCallback(async () => {
+    try {
+      await callbacks.onNextStepsCopy.current?.(shownNextSteps?.steps || []);
+      showNotice("Copied the open steps as a prompt for your AI agent.");
+    } catch (error) {
+      showNotice("The steps weren’t copied. Try again.");
+      safeCall(callbacks.onError, { code: "next_steps_copy_failed", message: error?.message || "The steps could not be copied." });
+    }
+  }, [callbacks.onError, callbacks.onNextStepsCopy, safeCall, shownNextSteps, showNotice]);
+
+  /** A thread behind a step: opened here, or on its own page through the thread link. */
+  const openNextStepSource = (source) => {
+    const route = projectAnnotations.find((item) => item.id === source.feedbackId)?.payload.route || source.route;
+    if (route && sanitizeRoute(route) !== activeRoute) {
+      const destination = new URL(window.location.href);
+      destination.pathname = route; destination.search = ""; destination.hash = "";
+      destination.searchParams.set("threadmark", source.feedbackId);
+      window.location.assign(destination.href);
+      return;
+    }
+    if (!annotationsRef.current.some((item) => item.id === source.feedbackId)) {
+      showNotice("That thread isn’t available on this page.");
+      return;
+    }
+    const element = annotationRestorations[source.feedbackId]?.results?.find((result) => result.element)?.element;
+    element?.scrollIntoView({ block: "center", behavior: "instant" });
+    editAnnotation(source.feedbackId);
+  };
+
   const submitFeedback = async (event) => {
     event.preventDefault();
     const editing = annotationsRef.current.find((annotation) => annotation.id === editingIdRef.current) || null;
@@ -3123,6 +3205,7 @@ export function Threadmark({
         }]
         : snapshotMetadata;
       let payload = createFeedbackPayload({
+        captureEnvironment: editing ? editing.payload.captureEnvironment : captureEnvironment(window),
         id: editing?.payload.id,
         now: editing?.payload.createdAt,
         updatedAt: new Date().toISOString(),
@@ -3359,6 +3442,13 @@ export function Threadmark({
       onCopyAnnotationLink={copyAnnotationLink}
       onShowVersions={setVersionHistoryOpen}
       onSelectPageVersion={selectPageVersion}
+      nextSteps={shownNextSteps}
+      nextStepsOpen={nextStepsOpen}
+      onShowNextSteps={setNextStepsOpen}
+      canTickNextSteps={Boolean(shownNextSteps?.canEdit && callbacks.onNextStepDone.current)}
+      onNextStepDone={tickNextStep}
+      onOpenNextStepSource={openNextStepSource}
+      onCopyNextSteps={callbacks.onNextStepsCopy.current ? copyNextSteps : undefined}
       onCarryFeedbackForward={callbacks.onFeedbackCarryForward.current ? carryFeedbackForward : null}
       onBeginReply={beginReply}
       onCancelReply={cancelReply}

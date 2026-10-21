@@ -1,3 +1,4 @@
+import { normalizeCaptureEnvironment } from "./captureEnvironment.js";
 import {
   MAX_REPLAY_ENTRIES,
   sanitizeReplayUrl,
@@ -508,6 +509,7 @@ export function createFeedbackPayload({
   updatedAt = now,
   projectKey,
   environment,
+  captureEnvironment,
   buildId,
   route,
   target,
@@ -549,6 +551,9 @@ export function createFeedbackPayload({
     author: normalizeReviewer(author),
     lastEditedBy: normalizeReviewer(lastEditedBy),
   };
+
+  const capturedEnvironment = normalizeCaptureEnvironment(captureEnvironment);
+  if (capturedEnvironment) payload.captureEnvironment = capturedEnvironment;
 
   const normalizePin = (value) => {
     const target = normalizeTarget(value?.target, value?.route || route);

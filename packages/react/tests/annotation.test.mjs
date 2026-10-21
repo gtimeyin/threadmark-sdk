@@ -45,15 +45,20 @@ test("maps annotation shortcuts and ignores unrelated or modified keys", () => {
   assert.equal(shortcutAction({ key: "Escape" }), "escape");
 
   for (const [key, expected] of Object.entries({
+    c: "comment",
+    s: "sketch",
+    r: "interaction",
+    v: "video",
     p: "pause",
     h: "visibility",
-    c: "copy",
     x: "clear",
   })) {
     assert.equal(shortcutAction({ key }), expected, key);
     assert.equal(shortcutAction({ key: key.toUpperCase() }), expected, key.toUpperCase());
   }
 
+  assert.equal(shortcutAction({ key: "C", shiftKey: true }), "copy");
+  assert.equal(shortcutAction({ key: "c", shiftKey: true, metaKey: true }), null);
   assert.equal(shortcutAction({ key: "p", shiftKey: true }), null);
   assert.equal(shortcutAction({ key: "h", metaKey: true }), null);
   assert.equal(shortcutAction({ key: "f", metaKey: true }), null);

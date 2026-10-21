@@ -94,6 +94,12 @@ async function mountPersistentPickingFixture(page) {
   });
 }
 
+// The toolbar keeps the feedback tools and the other actions in two menus.
+async function chooseToolbarItem(page, trigger, label) {
+  await page.locator(`.tm-modebar button[aria-label^="${trigger}"]`).click();
+  await page.locator(".tm-toolbar-menu button", { hasText: label }).click();
+}
+
 async function setComposerComment(page, comment) {
   await page.evaluate((value) => {
     const textarea = document.querySelector("[data-threadmark-root]").shadowRoot.querySelector("#tm-comment");
@@ -253,10 +259,7 @@ test("Feedback uses readable glass in both tabs and a solid high-contrast fallba
 
 test("records and restores a privacy-safe interaction trace while leaving the page usable", async ({ page }) => {
   await mountPersistentPickingFixture(page);
-  await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]").shadowRoot
-      .querySelector('button[aria-label="Record an interaction"]').click();
-  });
+  await chooseToolbarItem(page, "Feedback tools", "Record an interaction");
   await expect.poll(() => page.evaluate(() => Boolean(
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-interaction-recorder"),
   ))).toBe(true);
@@ -476,7 +479,11 @@ test("native text-range dragging still works while host pointer handlers stay bl
   await page.mouse.move(bounds.x + 245, bounds.y + 30, { steps: 8 });
   await page.mouse.up();
 
-  await expect.poll(() => page.evaluate(() => window.getSelection().toString().trim().length)).toBeGreaterThan(0);
+  // The drag made a native text range, which Threadmark outlines as a text comment. (The page's own selection is
+  // cleared once the comment field takes focus, so reading it directly raced with that.)
+  await expect.poll(() => page.evaluate(() => Boolean(
+    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-outline--text"),
+  ))).toBe(true);
   await expect.poll(() => page.evaluate(() => Boolean(
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-popover"),
   ))).toBe(true);
@@ -573,7 +580,7 @@ test("toolbar shortcuts pause the page, hide markers, copy feedback, and confirm
   await page.keyboard.press("p");
   await expect(page.locator("#animated-target")).toHaveCSS("animation-play-state", "running");
 
-  await page.keyboard.press("c");
+  await page.keyboard.press("Shift+C");
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("Lock down the toolbar shortcuts.");
 
   await page.keyboard.press("x");
@@ -581,8 +588,52 @@ test("toolbar shortcuts pause the page, hide markers, copy feedback, and confirm
     document.querySelector("[data-threadmark-root]")?.shadowRoot
       .querySelector('[aria-label="Confirm clear annotations (X)"]'),
   ))).toBe(true);
+  await expect(page.locator("#tm-more-menu")).toBeVisible();
   await page.keyboard.press("x");
   await expect.poll(markerCount).toBe(0);
+});
+
+test("the toolbar groups feedback tools and other actions into keyboard-friendly menus", async ({ page }) => {
+  await mountPickingFixture(page);
+  const toolbar = page.getByRole("toolbar", { name: "Threadmark annotation tools" });
+  const tools = toolbar.getByRole("button", { name: "Feedback tools: Comment" });
+
+  await tools.click();
+  const toolMenu = page.getByRole("menu", { name: "Feedback tools" });
+  await expect(toolMenu.getByRole("menuitemradio")).toHaveText([
+    /Comment/, /Sketch on a screenshot/, /Record an interaction/, /Record a video/,
+  ]);
+  await expect(toolMenu.getByRole("menuitemradio", { name: /^Comment/ })).toBeFocused();
+  await expect(toolMenu.getByRole("menuitemradio", { name: /^Comment/ })).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("ArrowDown");
+  await expect(toolMenu.getByRole("menuitemradio", { name: /^Sketch/ })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(toolMenu.getByRole("menuitemradio", { name: /^Record a video/ })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(toolMenu).toHaveCount(0);
+  await expect(tools).toBeFocused();
+  await expect(toolbar).toBeVisible();
+
+  await toolbar.getByRole("button", { name: "More actions" }).click();
+  const moreMenu = page.getByRole("menu", { name: "More actions" });
+  await expect(moreMenu.getByRole("menuitemcheckbox", { name: /Pause animations/ })).toHaveAttribute("aria-checked", "false");
+  await expect(moreMenu.getByRole("menuitem", { name: /Copy as Markdown/ })).toBeDisabled();
+  await moreMenu.getByRole("menuitemcheckbox", { name: /Pause animations/ }).click();
+  await expect(moreMenu).toHaveCount(0);
+  await expect(page.locator("#animated-target")).toHaveCSS("animation-play-state", "paused");
+  await expect(toolbar.locator(".tm-toolbar-more__flag")).toBeVisible();
+
+  // Tool shortcuts start a capture; Back to Comment (or Escape) returns to the toolbar.
+  await page.keyboard.press("s");
+  const backToComment = page.getByRole("button", { name: /Back to Comment/ });
+  await expect(backToComment).toBeVisible();
+  await expect(toolbar).toHaveCount(0);
+  await backToComment.click();
+  await expect(toolbar).toBeVisible();
+  await page.keyboard.press("s");
+  await expect(backToComment).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(toolbar).toBeVisible();
 });
 
 test("a failed async save keeps the exact draft open and can be retried", async ({ page }) => {
@@ -646,12 +697,9 @@ test("saved targets re-anchor after replacement and fail visibly when stable IDs
   await page.evaluate(() => window.__threadmarkDuplicatePrimary(true));
   await expect.poll(() => page.evaluate(() => {
     const shadow = document.querySelector("[data-threadmark-root]")?.shadowRoot;
-    return Boolean(shadow?.querySelector('button[aria-label*="need repair"]'));
+    return Boolean(shadow?.querySelector('button[aria-label="More actions, 1 lost comment"] .tm-toolbar-more__flag--repair'));
   })).toBe(true);
-  await page.evaluate(() => {
-    const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
-    shadow.querySelector('button[aria-label*="need repair"]').click();
-  });
+  await chooseToolbarItem(page, "More actions", "Repair lost comments");
   await expect.poll(() => page.evaluate(() => {
     const shadow = document.querySelector("[data-threadmark-root]")?.shadowRoot;
     return {
@@ -1016,10 +1064,7 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
 
 test("pencil markup stays aligned to the selected crop and submits one approved Blob sidecar", async ({ page }) => {
   await mountPickingFixture(page);
-  await page.evaluate(() => {
-    const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
-    shadow.querySelector('button[aria-label="Select screenshot area to mark up"]').click();
-  });
+  await chooseToolbarItem(page, "Feedback tools", "Sketch on a screenshot");
 
   const target = await page.locator("#custom-target").boundingBox();
   const crop = {
@@ -1101,10 +1146,7 @@ test("pencil markup stays aligned to the selected crop and submits one approved 
 
 test("pencil tools change pen style, undo, clear, and cancel without creating feedback", async ({ page }) => {
   await mountPickingFixture(page);
-  await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]").shadowRoot
-      .querySelector('button[aria-label="Select screenshot area to mark up"]').click();
-  });
+  await chooseToolbarItem(page, "Feedback tools", "Sketch on a screenshot");
 
   const target = await page.locator("#custom-target").boundingBox();
   await page.mouse.move(target.x + 16, target.y + 12);
@@ -1168,10 +1210,7 @@ test("pencil tools change pen style, undo, clear, and cancel without creating fe
 
 test("reopening a screenshot annotation restores its approved preview", async ({ page }) => {
   await mountPickingFixture(page);
-  await page.evaluate(() => {
-    const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
-    shadow.querySelector('button[aria-label="Select screenshot area to mark up"]').click();
-  });
+  await chooseToolbarItem(page, "Feedback tools", "Sketch on a screenshot");
 
   const target = await page.locator("#custom-target").boundingBox();
   await page.mouse.move(target.x + 10, target.y + 10);
@@ -1211,10 +1250,7 @@ test("reopening a screenshot annotation restores its approved preview", async ({
 
 test("persisted screenshot annotations survive reload, edit, and delete", async ({ page }) => {
   await mountPersistentPickingFixture(page);
-  await page.evaluate(() => {
-    const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
-    shadow.querySelector('button[aria-label="Select screenshot area to mark up"]').click();
-  });
+  await chooseToolbarItem(page, "Feedback tools", "Sketch on a screenshot");
 
   const target = await page.locator("#custom-target").boundingBox();
   await page.mouse.move(target.x + 10, target.y + 10);
@@ -1403,7 +1439,7 @@ test("ordinary comments keep screenshots and repin history through failure, canc
 
   // Simulate a deployment removing the old element. The thread and evidence remain accessible.
   await page.evaluate(() => window.__threadmarkShowSecondary(false));
-  await page.locator('button[aria-label*="need repair"]').click();
+  await chooseToolbarItem(page, "More actions", "Repair lost comments");
   await expect(page.locator('.tm-repair-state')).toBeVisible();
   await expect(page.locator('.tm-snapshot img')).toBeVisible();
   await page.locator('.tm-repair-state button').click();
@@ -1412,7 +1448,7 @@ test("ordinary comments keep screenshots and repin history through failure, canc
   await page.locator('.tm-cancel').click();
   expect(await page.evaluate(() => window.__threadmarkFeedback.length)).toBe(1);
 
-  await page.locator('button[aria-label*="need repair"]').click();
+  await chooseToolbarItem(page, "More actions", "Repair lost comments");
   await page.locator('.tm-repair-state button').click();
   await page.locator('#custom-target').click({ position: { x: 80, y: 25 } });
   await page.evaluate(() => { window.__threadmarkRejectNextSave = true; });
@@ -1490,7 +1526,7 @@ test("a region pin needs repair on a new build and repinning retains its origina
   const original = await page.evaluate(() => window.__threadmarkFeedback[0]);
   expect(original.captureKind).toBe('region');
   await page.evaluate(() => window.__threadmarkSetBuild('fixture-build-next'));
-  await page.locator('button[aria-label*="need repair"]').click();
+  await chooseToolbarItem(page, "More actions", "Repair lost comments");
   await page.locator('.tm-repair-state button').click();
   await page.locator('#custom-target').click({ position: { x: 80, y: 25 } });
   await page.locator('.tm-submit').click();

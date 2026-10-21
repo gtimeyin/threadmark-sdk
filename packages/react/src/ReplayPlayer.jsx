@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import Pause from "lucide-react/dist/esm/icons/pause.mjs";
-import Play from "lucide-react/dist/esm/icons/play.mjs";
-import X from "lucide-react/dist/esm/icons/x.mjs";
+import { PauseIcon as Pause } from "@solar-icons/react/linear/pause";
+import { PlayIcon as Play } from "@solar-icons/react/linear/play";
+import { CloseIcon as X } from "@solar-icons/react/linear/close";
 
 // This chunk loads lazily. Helpers arrive through the `kit` prop instead of imports, so the SDK's entry
 // stays one self-contained file and no shared chunk is split out of it.
@@ -109,7 +109,7 @@ function buildTimeline(events, getNode, kit) {
  * Plays an rrweb replay in a large dialog above the page, with its console, network, and action
  * timelines. Every row seeks the replay. Nothing on the live page is touched.
  */
-export default function ReplayPlayer({ replay, media, kit, onClose }) {
+export default function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
   const { EVENT_TYPE, decodeReplayEvents, formatClock } = kit;
   const stageRef = useRef(null);
   const replayerRef = useRef(null);
@@ -128,6 +128,7 @@ export default function ReplayPlayer({ replay, media, kit, onClose }) {
   }, [events, replay?.durationMs]);
 
   useEffect(() => {
+    if (embedded) return undefined;
     closeRef.current?.focus();
     const onKeyDown = (event) => {
       if (event.key !== "Escape") return;
@@ -137,19 +138,31 @@ export default function ReplayPlayer({ replay, media, kit, onClose }) {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+  }, [onClose, embedded]);
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    setStatus("loading");
+    setEvents([]);
+    setCurrent(0);
+    setPlaying(false);
+    setSpeed(1);
+    setTimeline({ console: [], network: [], actions: [] });
     (async () => {
-      const blob = media?.blob || (media?.url ? await (await fetch(media.url)).blob() : null);
+      let blob = media?.blob;
+      if (!blob && media?.url) {
+        const response = await fetch(media.url, { signal: controller.signal });
+        if (!response.ok) throw new Error("unavailable");
+        blob = await response.blob();
+      }
       const decoded = await decodeReplayEvents(blob);
       if (!decoded.length) throw new Error("empty");
       if (active) setEvents(decoded);
     })().catch(() => {
       if (active) setStatus("error");
     });
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); };
   }, [media?.blob, media?.url]);
 
   useEffect(() => {
@@ -198,7 +211,7 @@ export default function ReplayPlayer({ replay, media, kit, onClose }) {
         frame = requestAnimationFrame(tick);
       };
       frame = requestAnimationFrame(tick);
-    }).catch(() => setStatus("error"));
+    }).catch(() => { if (!cancelled) setStatus("error"); });
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
@@ -244,17 +257,17 @@ export default function ReplayPlayer({ replay, media, kit, onClose }) {
   ];
 
   return (
-    <div className="tm-replay-dialog" role="dialog" aria-modal="true" aria-label="Session playback">
-      <div className="tm-replay-dialog__scrim" onClick={onClose} />
+    <div className={`tm-replay-dialog${embedded ? " tm-replay-dialog--embedded" : ""}`} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : "true"} aria-label="Session playback">
+      {!embedded && <div className="tm-replay-dialog__scrim" onClick={onClose} />}
       <section className="tm-replay-dialog__panel">
         <header className="tm-replay-dialog__header">
           <div>
             <strong>Playback</strong>
             <span>{formatClock(duration)} before the comment · inputs hidden · nothing on this page is changed</span>
           </div>
-          <button ref={closeRef} type="button" className="tm-video-icon-button" aria-label="Close playback" onClick={onClose}>
+          {!embedded && <button ref={closeRef} type="button" className="tm-video-icon-button" aria-label="Close playback" onClick={onClose}>
             <X {...iconProps} />
-          </button>
+          </button>}
         </header>
         <div className="tm-replay-dialog__body">
           <div className="tm-replay-dialog__viewer">
@@ -272,7 +285,7 @@ export default function ReplayPlayer({ replay, media, kit, onClose }) {
                 type="range"
                 min="0"
                 max={Math.max(1, duration)}
-                step="100"
+                step="1"
                 value={Math.min(current, duration)}
                 disabled={status !== "ready"}
                 aria-label="Playback position"

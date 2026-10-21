@@ -4,6 +4,24 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [0.1.0-beta.11] — 2026-10-21
+
+### Added
+
+- Next steps: with `nextSteps`, the Feedback panel gets a **Next steps** tab with progress, status, tags, and the quotes behind each step (which open their threads). `onNextStepDone` ticks steps (shown at once, put back if the host rejects) and `onNextStepsCopy` adds **Copy for agent**. Steps are shown as plain text; the SDK never loads or stores them.
+- New comments include `feedback.captureEnvironment`: coarse browser and version, operating system, device category, viewport and pixel ratio, online status, and the browser's connection estimates. No raw user agent, IP address, device model, or high-entropy hints are collected, and edits keep the original context.
+
+### Changed
+
+- The review toolbar is now grip, a feedback tools menu, a **More actions** menu, **Feedback**, and Close. The tools menu holds Comment, Sketch on a screenshot, Record an interaction, and Record a video; More holds Pause animations, Hide comment pins, Copy as Markdown, Repair lost comments, and Clear all. Both menus support arrow keys, Home, End, and Escape.
+- Tool shortcuts: <kbd>C</kbd> Comment, <kbd>S</kbd> Sketch, <kbd>R</kbd> Record an interaction, <kbd>V</kbd> Record a video. **Copy as Markdown** moves from <kbd>C</kbd> to <kbd>Shift</kbd>+<kbd>C</kbd>. <kbd>X</kbd> opens the More menu to show its clear confirmation.
+- The screenshot-area and video setup steps say **Back to Comment** instead of Cancel.
+- Functional icons use Solar Linear (`@solar-icons/react`, exact-pinned) instead of Lucide; `lucide-react` is no longer a dependency. The Threadmark logo is unchanged.
+
+### Fixed
+
+- A saved playback whose URL can't be loaded shows an error instead of an empty player, and closing a playback cancels its download.
+
 ## [0.1.0-beta.10] — 2026-10-18
 
 ### Fixed
@@ -133,7 +151,9 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 - Consumer-owned persistence callbacks, hydration, deep links, and conservative target restoration.
 - Package, SSR, browser interaction, npm tarball, example application, and CI verification.
 
-[Unreleased]: https://github.com/gtimeyin/threadmark-sdk/compare/v0.1.0-beta.9...HEAD
+[Unreleased]: https://github.com/gtimeyin/threadmark-sdk/compare/v0.1.0-beta.11...HEAD
+[0.1.0-beta.11]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.11
+[0.1.0-beta.10]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.10
 [0.1.0-beta.9]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.8
 [0.1.0-beta.6]: https://www.npmjs.com/package/threadmark-react/v/0.1.0-beta.6

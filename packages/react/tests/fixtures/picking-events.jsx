@@ -32,6 +32,21 @@ function fixturePollVote(feedback, optionIds) {
     voters: Object.entries(votes).map(([id, ids]) => ({ reviewer: { id, displayName: id === "fixture_reviewer" ? "Emily R." : "Sam Okafor" }, optionIds: ids })),
   };
 }
+// ?nextsteps=1 supplies a checklist the way a review service would; =readonly can't be ticked; =fail rejects ticks.
+const nextStepsMode = fixtureParams.get("nextsteps");
+window.__threadmarkNextStepTicks = [];
+window.__threadmarkNextStepCopies = [];
+const FIXTURE_NEXT_STEPS = [
+  {
+    id: "step-buy", title: "Fix the Buy button on mobile", notes: "- Tapping it does nothing\n- Seen on iPhone 15", tag: "bug", source: "ai", completed: false,
+    sources: [{ feedbackId: "thread-elsewhere", quote: "Buy does nothing when I tap it", route: "/checkout", author: "Sam Okafor", status: "open" }],
+  },
+  {
+    id: "step-hero", title: "<b>Shorten</b> the hero heading", notes: "", tag: "copy", source: "ai", completed: false,
+    sources: [{ feedbackId: "thread-missing", quote: "The heading wraps", route: "/picking-events", author: "Emily R.", status: "resolved" }],
+  },
+  { id: "step-plan", title: "Pick the plan name", tag: "question", source: "person", completed: true, completedVia: "agent", completedBy: { displayName: "Emily R." }, sources: [] },
+];
 const persistenceEnabled = fixtureParams.has("persist");
 const sessionReplay = fixtureParams.has("replay") ? { bufferMs: 30_000 } : undefined;
 const videoRecording = fixtureParams.has("novideo")
@@ -55,6 +70,11 @@ function Fixture() {
   const [duplicatePrimary, setDuplicatePrimary] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [styleNonce, setStyleNonce] = useState("fixture-nonce-0");
+  const [nextSteps, setNextSteps] = useState(() => (nextStepsMode ? {
+    steps: FIXTURE_NEXT_STEPS,
+    status: { state: "ready", generatedAt: new Date(Date.now() - 5 * 60_000).toISOString() },
+    canEdit: nextStepsMode !== "readonly",
+  } : null));
 
   useEffect(() => {
     if (!persistenceEnabled) {
@@ -206,6 +226,19 @@ function Fixture() {
           window.__threadmarkCarryForwards.push({ feedback, version, context });
         }}
         onPollVote={pollsEnabled ? fixturePollVote : undefined}
+        nextSteps={nextSteps}
+        onNextStepDone={nextStepsMode ? async (step, done) => {
+          window.__threadmarkNextStepTicks.push([step.id, done]);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          if (nextStepsMode === "fail") throw new Error("Fixture next-step failure");
+          setNextSteps((current) => ({
+            ...current,
+            steps: current.steps.map((item) => (item.id === step.id
+              ? { ...item, completed: done, completedVia: done ? "person" : null, completedBy: done ? { displayName: "Emily R." } : null }
+              : item)),
+          }));
+        } : undefined}
+        onNextStepsCopy={nextStepsMode ? (steps) => { window.__threadmarkNextStepCopies.push(steps.map((step) => step.id)); } : undefined}
       />
     </>
   );

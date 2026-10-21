@@ -49,7 +49,8 @@ test("declares a side-effect-free React package with external peer dependencies"
   assert.match(packageJson.peerDependencies?.["react-dom"] || "", /19/);
   assert.equal(packageJson.dependencies?.react, undefined);
   assert.equal(packageJson.dependencies?.["react-dom"], undefined);
-  assert.match(packageJson.dependencies?.["lucide-react"] || "", /^\^1\./);
+  assert.equal(packageJson.dependencies?.["@solar-icons/react"], "2.3.3");
+  assert.equal(packageJson.dependencies?.["lucide-react"], undefined);
 });
 
 test("all declared root export targets exist after the package build", async () => {
@@ -90,12 +91,12 @@ test("the browser bundle preserves its client boundary and external React import
   assert.match(bundle, /^"use client";/);
   assert.match(bundle, /from "react"/);
   assert.match(bundle, /from "react-dom"/);
-  assert.match(bundle, /from "lucide-react\/dist\/esm\/icons\//);
+  assert.match(bundle, /from "@solar-icons\/react\/linear\//);
 });
 
-test("the review chrome uses Lucide components instead of authored icon paths", async () => {
+test("the review chrome uses Solar Linear components instead of authored icon paths", async () => {
   const source = await readThreadmarkSource();
-  assert.match(source, /from "lucide-react\/dist\/esm\/icons\//);
+  assert.match(source, /from "@solar-icons\/react\/linear\//);
   assert.doesNotMatch(source, /<(?:path|circle|rect|line|polygon)\b/);
 });
 
@@ -159,7 +160,7 @@ test("interaction capture stays in-page and exposes a privacy-safe replay trace"
   assert.match(declarations, /ThreadmarkInteractionCapture/);
 });
 
-test("video feedback keeps media access in one module and its UI on Lucide icons", async () => {
+test("video feedback keeps media access in one module and its UI on Solar Linear icons", async () => {
   const [source, videoUi, media, declarations] = await Promise.all([
     readThreadmarkSource(),
     readFile(resolvePackagePath("./src/VideoFeedback.jsx"), "utf8"),
@@ -170,8 +171,8 @@ test("video feedback keeps media access in one module and its UI on Lucide icons
   assert.doesNotMatch(`${source}\n${videoUi}`, /getDisplayMedia|getUserMedia|new MediaRecorder|RecorderClass\(/);
   assert.match(media, /getDisplayMedia\(preferred\)/);
   assert.match(media, /preferCurrentTab: true/);
-  assert.match(source, /label="Record video feedback"/);
-  assert.match(videoUi, /from "lucide-react\/dist\/esm\/icons\//);
+  assert.match(source, /label="Record a video"/);
+  assert.match(videoUi, /from "@solar-icons\/react\/linear\//);
   assert.doesNotMatch(videoUi, /<(?:svg|path|circle|rect|line|polygon)\b/);
   assert.match(declarations, /videoRecording\?: boolean \| ThreadmarkVideoRecordingOptions/);
   assert.match(declarations, /ThreadmarkVideoCapture/);

@@ -189,6 +189,44 @@ export interface ThreadmarkPollResults {
   voters?: { reviewer: ThreadmarkReviewer; optionIds: string[] }[];
 }
 
+/** Where a next step came from: one thread, with the words that led to it. */
+export interface ThreadmarkNextStepSource {
+  feedbackId: string;
+  quote?: string;
+  /** The thread's page path; a source on another page opens there through its thread link. */
+  route?: string | null;
+  author?: string | null;
+  status?: "open" | "resolved";
+}
+
+/** One item of the host's next steps checklist. */
+export interface ThreadmarkNextStep {
+  id: string;
+  title: string;
+  notes?: string;
+  tag?: "bug" | "polish" | "copy" | "idea" | "question" | null;
+  /** Written by the host's AI from feedback, or added by a person. */
+  source?: "ai" | "person";
+  completed: boolean;
+  completedVia?: "person" | "agent" | "resolved" | null;
+  completedBy?: { displayName: string } | null;
+  completedAt?: string | null;
+  sources?: ThreadmarkNextStepSource[];
+}
+
+export interface ThreadmarkNextSteps {
+  steps: readonly ThreadmarkNextStep[];
+  /** Whether the list is current: shown above it. */
+  status?: {
+    state?: "ready" | "pending" | "generating" | "failed" | "off";
+    generatedAt?: string | null;
+    error?: string | null;
+    openThreads?: number | null;
+  };
+  /** `false` shows the checklist read-only. Defaults to true. */
+  canEdit?: boolean;
+}
+
 export type ThreadmarkInteractionEvent =
   | { type: "click"; offsetMs: number; targetIndex?: number; button: number; x?: number; y?: number }
   | { type: "input"; offsetMs: number; targetIndex?: number; inputType: string }
@@ -288,10 +326,20 @@ export interface ThreadmarkWorkflow {
     at: string; actor: ThreadmarkReviewer | null; buildId: string | null; assignee?: ThreadmarkReviewer | null }>;
 }
 
+/** Coarse, browser-reported capture context; never used for authorization. */
+export interface ThreadmarkCaptureEnvironment {
+  browser?: string;
+  os?: string;
+  device?: "mobile" | "tablet" | "desktop";
+  viewport?: { width?: number; height?: number; devicePixelRatio?: number };
+  connection?: { online?: boolean; effectiveType?: "slow-2g" | "2g" | "3g" | "4g"; downlinkMbps?: number; rttMs?: number };
+}
+
 export interface ThreadmarkFeedback {
   id: string;
   projectKey: string;
   environment: string;
+  captureEnvironment?: ThreadmarkCaptureEnvironment;
   buildId: string | null;
   route: string;
   captureKind?: ThreadmarkCaptureKind;
@@ -325,6 +373,8 @@ export interface ThreadmarkError {
     | "video_capture_failed"
     | "replay_unavailable"
     | "poll_vote_failed"
+    | "next_step_failed"
+    | "next_steps_copy_failed"
     | (string & {});
   message: string;
 }
@@ -349,6 +399,12 @@ export interface ThreadmarkProps {
   annotations?: readonly ThreadmarkAnnotationRecord[];
   /** Host-supplied deployment history. Fetch this on the server; never expose a Vercel token here. */
   pageVersions?: readonly ThreadmarkPageVersion[];
+  /**
+   * The host's next steps checklist (for example distilled from open feedback by its review service). When
+   * supplied, the Feedback panel gets a **Next steps** tab; `null` or leaving it out hides the tab. Steps are
+   * shown as plain text, never as HTML.
+   */
+  nextSteps?: ThreadmarkNextSteps | readonly ThreadmarkNextStep[] | null;
   /**
    * Loom-style video feedback with voice, an optional camera bubble, and a pointer track.
    * Enabled by default; `false` hides the recorder. The browser asks before any camera, microphone,
@@ -396,6 +452,16 @@ export interface ThreadmarkProps {
    * Providing it adds Comment / Question / Poll to the new-comment composer; without it, posts are comments.
    */
   onPollVote?: (feedback: ThreadmarkFeedback, optionIds: string[]) => ThreadmarkPollResults | Promise<ThreadmarkPollResults>;
+  /**
+   * Stores a next step as done or not done. The tick shows at once; a rejection puts it back. Supply the
+   * updated `nextSteps` afterwards. Without it, the checklist is read-only.
+   */
+  onNextStepDone?: (step: ThreadmarkNextStep, done: boolean) => void | Promise<void>;
+  /**
+   * Adds **Copy for agent** to the Next steps tab. Called from the click, with every step, so the host can
+   * write its own prompt to the clipboard.
+   */
+  onNextStepsCopy?: (steps: readonly ThreadmarkNextStep[]) => void | Promise<void>;
   onError?: (error: ThreadmarkError) => void;
 }
 
@@ -415,6 +481,7 @@ export declare function createFeedbackPayload(options: {
   updatedAt?: string;
   projectKey: string;
   environment: string;
+  captureEnvironment?: ThreadmarkCaptureEnvironment;
   buildId?: string | null;
   route: string;
   target: ThreadmarkTargetDescriptor;

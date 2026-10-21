@@ -101,6 +101,7 @@ test("a new comment carries a removable, privacy-safe playback with console, net
   await expect(page.locator(".tm-popover")).toHaveCount(0);
 
   const saved = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
+  expect(saved.captureEnvironment).toMatchObject({ browser: expect.stringMatching(/^Chrome /), device: "desktop", viewport: { width: 600, height: 400 } });
   expect(saved.replay.console.errors).toBeGreaterThanOrEqual(1);
   expect(saved.replay.network.failed).toBe(1);
   expect(saved.replay.network.entries[0]).toMatchObject({ method: "POST", status: 500, outcome: "server_error" });

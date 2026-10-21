@@ -120,7 +120,8 @@ async function tracePointer(page, points) {
 }
 
 async function openVideoSetup(page) {
-  await page.getByRole("button", { name: "Record video feedback" }).click();
+  await page.getByRole("button", { name: "Feedback tools: Comment" }).click();
+  await page.getByRole("menuitemradio", { name: /^Record a video/ }).click();
   await expect(page.locator(".tm-video-setup")).toBeVisible();
   await expect(page.locator(".tm-video-start")).toBeEnabled();
 }
@@ -293,8 +294,12 @@ test("dismissing an unposted video asks first, and the duration limit stops the 
 
 test("hosts can turn video feedback off", async ({ page }) => {
   await mountFixture(page, "novideo=1");
-  await expect(page.getByRole("button", { name: "Record an interaction" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Record video feedback" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Feedback tools: Comment" }).click();
+  await expect(page.getByRole("menuitemradio", { name: /^Record an interaction/ })).toBeVisible();
+  await expect(page.getByRole("menuitemradio", { name: /^Record a video/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("v");
+  await expect(page.locator(".tm-video-setup")).toHaveCount(0);
 });
 
 test("recordings the host stored elsewhere play from their URL and are handed back unchanged", async ({ page }) => {
