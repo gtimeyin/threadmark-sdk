@@ -1,38 +1,36 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Accessibility,
-  ArrowRight,
-  Bell,
-  Check,
-  CheckCircle2,
-  Clipboard,
-  Code2,
-  Database,
-  ExternalLink,
-  FileImage,
-  Globe2,
-  Group,
-  Keyboard,
-  Link2,
-  LockKeyhole,
-  MessageCircleReply,
-  MousePointer2,
-  MousePointerClick,
-  Package,
-  Pencil,
-  Play,
-  RefreshCw,
-  ScanLine,
-  ScanText,
-  Server,
-  ShieldCheck,
-  Sparkles,
-  SquareDashed,
-  Trash2,
-  UserRoundCheck,
-  Workflow,
-  Zap,
-} from "lucide-react";
+import { AccessibilityIcon as Accessibility } from "@solar-icons/react/linear/accessibility";
+import { ArrowRightIcon as ArrowRight } from "@solar-icons/react/linear/arrow-right";
+import { BellIcon as Bell } from "@solar-icons/react/linear/bell";
+import { CheckIcon as Check } from "@solar-icons/react/linear/check";
+import { CheckCircleIcon as CheckCircle2 } from "@solar-icons/react/linear/check-circle";
+import { ClipboardIcon as Clipboard } from "@solar-icons/react/linear/clipboard";
+import { Code2Icon as Code2 } from "@solar-icons/react/linear/code-2";
+import { DatabaseIcon as Database } from "@solar-icons/react/linear/database";
+import { ArrowToTopRightIcon as ExternalLink } from "@solar-icons/react/linear/arrow-to-top-right";
+import { GalleryIcon as FileImage } from "@solar-icons/react/linear/gallery";
+import { GlobeIcon as Globe2 } from "@solar-icons/react/linear/globe";
+import { LayersIcon as Group } from "@solar-icons/react/linear/layers";
+import { KeyboardIcon as Keyboard } from "@solar-icons/react/linear/keyboard";
+import { LinkIcon as Link2 } from "@solar-icons/react/linear/link";
+import { LockKeyholeIcon as LockKeyhole } from "@solar-icons/react/linear/lock-keyhole";
+import { ChatRoundReplayIcon as MessageCircleReply } from "@solar-icons/react/linear/chat-round-replay";
+import { CursorIcon as MousePointer2 } from "@solar-icons/react/linear/cursor";
+import { CursorSquareIcon as MousePointerClick } from "@solar-icons/react/linear/cursor-square";
+import { BoxIcon as Package } from "@solar-icons/react/linear/box";
+import { Pen2Icon as Pencil } from "@solar-icons/react/linear/pen-2";
+import { PlayIcon as Play } from "@solar-icons/react/linear/play";
+import { RefreshIcon as RefreshCw } from "@solar-icons/react/linear/refresh";
+import { ScannerIcon as ScanLine } from "@solar-icons/react/linear/scanner";
+import { TextSelectionIcon as ScanText } from "@solar-icons/react/linear/text-selection";
+import { ServerIcon as Server } from "@solar-icons/react/linear/server";
+import { ShieldCheckIcon as ShieldCheck } from "@solar-icons/react/linear/shield-check";
+import { StarsIcon as Sparkles } from "@solar-icons/react/linear/stars";
+import { SquareDashedIcon as SquareDashed } from "@solar-icons/react/linear/square-dashed";
+import { TrashBinTrashIcon as Trash2 } from "@solar-icons/react/linear/trash-bin-trash";
+import { UserCheckRoundedIcon as UserRoundCheck } from "@solar-icons/react/linear/user-check-rounded";
+import { StructureIcon as Workflow } from "@solar-icons/react/linear/structure";
+import { BoltIcon as Zap } from "@solar-icons/react/linear/bolt";
 import "./project-page.css";
 import { Wordmark } from "./BrandMark.jsx";
 
@@ -425,7 +423,7 @@ export function ProjectPage() {
       <footer className="project-footer">
         <a className="project-wordmark" href="/about" aria-label="Threadmark"><Wordmark size={28} /></a>
         <span>Contextual product feedback for React applications.</span>
-        <div><a href="https://github.com/gtimeyin/threadmark-sdk" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/gtimeyin/threadmark-sdk/tree/main/packages/react" target="_blank" rel="noreferrer">Documentation</a><a href="/">Demo</a></div>
+        <div><a href="https://github.com/gtimeyin/threadmark-sdk" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/gtimeyin/threadmark-sdk/tree/main/packages/react" target="_blank" rel="noreferrer">Documentation</a><a href="/">Demo</a><a href="https://www.figma.com/community/file/1166831539721848736" target="_blank" rel="noreferrer">Solar icons by 480 Design</a></div>
       </footer>
     </div>
   );

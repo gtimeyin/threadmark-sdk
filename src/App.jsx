@@ -1,36 +1,34 @@
 import { useEffect, useState } from "react";
-import {
-  Aperture as SiLoom,
-  ArrowRight,
-  AtSign as At,
-  Check,
-  ChevronDown as CaretDown,
-  ChevronUp as CaretUp,
-  CircleCheck as CheckCircle,
-  Copy,
-  Ellipsis as DotsThree,
-  History as ClockCounterClockwise,
-  ListChecks as SiLinear,
-  ListFilter,
-  LockKeyhole,
-  MessageSquareText as ChatCircleText,
-  Moon,
-  MousePointer2 as Cursor,
-  NotebookText as SiNotion,
-  Paperclip,
-  PanelsTopLeft as SiWebflow,
-  Rocket as RocketLaunch,
-  Send as PaperPlaneTilt,
-  Shapes as SiFigma,
-  Share2 as ShareNetwork,
-  Smartphone as DeviceMobile,
-  Sparkles as Sparkle,
-  Sun,
-  Triangle as SiVercel,
-  Type as TextT,
-  Users as UsersThree,
-  X,
-} from "lucide-react";
+import { CameraIcon as SiLoom } from "@solar-icons/react/linear/camera";
+import { ArrowRightIcon as ArrowRight } from "@solar-icons/react/linear/arrow-right";
+import { MentionCircleIcon as At } from "@solar-icons/react/linear/mention-circle";
+import { CheckIcon as Check } from "@solar-icons/react/linear/check";
+import { AltArrowDownIcon as CaretDown } from "@solar-icons/react/linear/alt-arrow-down";
+import { AltArrowUpIcon as CaretUp } from "@solar-icons/react/linear/alt-arrow-up";
+import { CheckCircleIcon as CheckCircle } from "@solar-icons/react/linear/check-circle";
+import { CopyIcon as Copy } from "@solar-icons/react/linear/copy";
+import { MenuDotsIcon as DotsThree } from "@solar-icons/react/linear/menu-dots";
+import { HistoryIcon as ClockCounterClockwise } from "@solar-icons/react/linear/history";
+import { ChecklistIcon as SiLinear } from "@solar-icons/react/linear/checklist";
+import { FilterIcon as ListFilter } from "@solar-icons/react/linear/filter";
+import { LockKeyholeIcon as LockKeyhole } from "@solar-icons/react/linear/lock-keyhole";
+import { ChatSquareLineIcon as ChatCircleText } from "@solar-icons/react/linear/chat-square-line";
+import { MoonIcon as Moon } from "@solar-icons/react/linear/moon";
+import { CursorIcon as Cursor } from "@solar-icons/react/linear/cursor";
+import { NotebookIcon as SiNotion } from "@solar-icons/react/linear/notebook";
+import { PaperclipIcon as Paperclip } from "@solar-icons/react/linear/paperclip";
+import { PanelsTopLeftIcon as SiWebflow } from "@solar-icons/react/linear/panels-top-left";
+import { RocketIcon as RocketLaunch } from "@solar-icons/react/linear/rocket";
+import { PlaneIcon as PaperPlaneTilt } from "@solar-icons/react/linear/plane";
+import { Widget3Icon as SiFigma } from "@solar-icons/react/linear/widget-3";
+import { ShareIcon as ShareNetwork } from "@solar-icons/react/linear/share";
+import { SmartphoneIcon as DeviceMobile } from "@solar-icons/react/linear/smartphone";
+import { StarsIcon as Sparkle } from "@solar-icons/react/linear/stars";
+import { SunIcon as Sun } from "@solar-icons/react/linear/sun";
+import { PlayIcon as SiVercel } from "@solar-icons/react/linear/play";
+import { TextFormatIcon as TextT } from "@solar-icons/react/linear/text-format";
+import { UsersGroupRoundedIcon as UsersThree } from "@solar-icons/react/linear/users-group-rounded";
+import { CloseIcon as X } from "@solar-icons/react/linear/close";
 import { ProjectPage } from "./ProjectPage.jsx";
 import { Wordmark } from "./BrandMark.jsx";
 

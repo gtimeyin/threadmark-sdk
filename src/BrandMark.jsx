@@ -1,5 +1,5 @@
 // Threadmark brand mark: an open comment pin (forest outline) holding the coral "mark".
-// This is a brand asset, not a functional icon, so it is authored here rather than taken from Lucide.
+// This is a brand asset, not a functional icon, so it is authored here rather than taken from Solar.
 export function BrandMark({ size = 24, line = "var(--green)", dot = "var(--coral)" }) {
   return (
     <svg className="brand-mark" width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" focusable="false">

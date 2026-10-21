@@ -14,7 +14,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Brand system (chosen 2026-09-27)
 
-- Logo: the **open pin**, a forest outline holding a coral dot, next to a lowercase `threadmark` wordmark in Bricolage Grotesque 600 with −0.05em tracking. Use `src/BrandMark.jsx` (`BrandMark`, `Wordmark`) and `public/favicon.svg`; never retype the logo as plain text. The mark is a brand asset, so it is exempt from the Lucide-only icon rule.
+- Logo: the **open pin**, a forest outline holding a coral dot, next to a lowercase `threadmark` wordmark in Bricolage Grotesque 600 with −0.05em tracking. Use `src/BrandMark.jsx` (`BrandMark`, `Wordmark`) and `public/favicon.svg`; never retype the logo as plain text. The mark is a brand asset, so it is exempt from the Solar Linear-only icon rule.
 - Type: Bricolage Grotesque for display and branding, Geist for all UI and body text, Geist Mono for code and metadata (`--font-display`, `--font-mono`). Body text follows a 1.4 line-height scale: 16/22.4 body, 14/19.6 small, 12/16.8 caption.
 - Colour: Paper `#FBFAF6`, Ink `#1A1E1B`, Forest `#0B4F3A` (primary, buttons and links), Proof coral `#E5483C` (pins and marks only; never behind small white text), coral on dark `#FF8A78`, Sage `#DCEBE5`, coral tint `#FDE4DF`, Stone `#5F625B` for muted text.
 - The SDK overlay (`packages/react/src/overlayStyles.js`) uses the same system through `--tm-*` tokens on `.tm-root`: paper/ink/forest/coral for the light Feedback panel and on-page marks, and the dark-mode set (ground `#111513`, surface `#1A1F1C`, mint `#5CC49A` primary with ground-coloured text, coral `#FF8A78`) for the toolbar, composer and threads. Page marks: coral for selections and pins, forest for hover and grouped targets. Fonts are bundled from Fontsource (`src/fonts.js`) and registered on the document as `Threadmark Geist`, `Threadmark Geist Mono` and `Threadmark Bricolage`; never load fonts from a CDN in the SDK.
@@ -41,7 +41,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Visual implementation preferences
 
-- Use Lucide for every functional icon in the Threadmark review experience. Do not introduce hand-authored SVG glyphs or mix icon families.
+- Use Solar Linear for every functional icon in the Threadmark review experience. Do not introduce hand-authored SVG glyphs or mix icon families.
 - Keep screenshot markup in context on the page: the selected crop becomes the drawing surface and compact tools float nearby. Do not move markup into a centered modal editor.
 - Do not add a separate **Capture area** confirmation after a Pencil drag. Releasing a valid crop opens the in-page markup tools immediately.
 - Defer reviewer-facing crop adjustment and Privacy controls. Keep automatic snapshot masking in the capture pipeline, but do not expose either feature in the current Pencil UI.
@@ -56,7 +56,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Lead with a recognizable in-context review preview, then progressively disclose capabilities, use cases, integration, privacy, Vercel workflow, current capabilities, roadmap, and open-source information.
 - Present interaction recording as a first-class shipped capture capability. Keep lifecycle status, mentions, notifications, official storage adapters, real-time collaboration, and advanced anchor repair clearly labeled as planned.
 - Present Jira and Linear integrations as a near-term hosted-service roadmap item. Keep vendor adapters outside `threadmark-react`; require an explicit reviewed handoff, preserve the Threadmark deep link and evidence references, and store the external issue key/URL without making the issue tracker the annotation source of truth.
-- Use Lucide for all functional icons on the explainer page. Do not use hand-authored SVG icons.
+- Use Solar Linear for all functional icons on the explainer page. Do not use hand-authored SVG icons.
 
 ## Collaboration identity and visibility
 
@@ -85,3 +85,7 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - This repository owns the MIT React SDK, examples, integrations, and reference prototype. The marketing website and hosted Cloud service have separate repositories and release lifecycles.
 - Keep internal strategy, Cloud delivery planning, local QA screenshots, and creative explorations outside this public source tree. Existing historical documents require review before making the repository public.
 - Preserve explicit optional Cloud connectivity through public SDK callbacks; do not import Cloud server code or website code into the SDK.
+
+## Icon system (updated 2026-10-18)
+
+- Use Solar Linear from `@solar-icons/react` for every functional icon. Import individual icons through public `@solar-icons/react/linear/<name>` exports. Keep the custom open-pin logo as a brand asset. Do not mix icon families or add authored SVG glyphs.
