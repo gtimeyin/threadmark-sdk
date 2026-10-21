@@ -8,6 +8,7 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 - Experimental `threadmark-react/tours` entry with `<ThreadmarkTours>`, a product-tour player for production. Tours are validated data files (`tour.schema.json`, `defineTour`, `validateTour`) whose steps point at stable target ids. The player handles who sees a tour and when, saved progress (in the browser or through `onProgressChange`), tours across pages, waiting for elements without guessing, bottom sheets on phones, keyboard and screen-reader support, theming, events, and notes. It never loads the review overlay, captures nothing, and makes no network requests. Package tests enforce that and a 12 KB minified-and-gzipped budget.
 - The basic React example has a "Take the tour" button that plays a three-step tour.
+- `npx threadmark tours check` validates every tour file and confirms each step's target still exists in the code. It exits with 1 for CI when a tour is invalid or a target is missing, and has `--root` and `--json` options.
 
 ## [0.1.0-beta.11] — 2026-10-21
 

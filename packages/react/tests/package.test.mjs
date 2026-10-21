@@ -136,6 +136,27 @@ test("the tours entry never reaches review, capture, or icon code", async () => 
   }
 });
 
+test("the package ships a threadmark bin that runs tours check against the built CLI", async (t) => {
+  assert.equal(packageJson.bin?.threadmark, "./bin/threadmark.mjs");
+  assert.ok(packageJson.files.includes("bin"));
+  const binSource = await readFile(resolvePackagePath("./bin/threadmark.mjs"), "utf8");
+  assert.match(binSource, /^#!\/usr\/bin\/env node\n/);
+  assert.match(binSource, /from "\.\.\/dist\/cli\.js"/);
+
+  const root = await mkdtemp(join(tmpdir(), "threadmark-bin-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { writeFile: write, mkdir } = await import("node:fs/promises");
+  await mkdir(join(root, "src"));
+  await write(join(root, "welcome.tour.json"), JSON.stringify({ id: "welcome", title: "Welcome", steps: [{ id: "a", target: "app.start", title: "Start" }] }));
+  await write(join(root, "src/App.jsx"), '<button {...threadmarkTarget("app.start")} />');
+  const binPath = fileURLToPath(resolvePackagePath("./bin/threadmark.mjs"));
+  const passing = await execFileAsync(process.execPath, [binPath, "tours", "check", "--root", root]);
+  assert.match(passing.stdout, /✓ app\.start\s+src\/App\.jsx:1/);
+
+  await write(join(root, "src/App.jsx"), "<button>Start</button>");
+  await assert.rejects(execFileAsync(process.execPath, [binPath, "tours", "check", "--root", root]), (error) => error.code === 1 && /✕ app\.start/.test(error.stdout));
+});
+
 test("an app using the tour player ships under 12 KB minified and gzipped", async () => {
   const { buildSync } = await import("esbuild");
   const result = buildSync({

@@ -23,6 +23,7 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "bin",
     "tour.schema.json",
     "LICENSE",
     "README.md",
@@ -41,6 +42,9 @@
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.ts",
+  "bin": {
+    "threadmark": "./bin/threadmark.mjs"
+  },
   "peerDependencies": {
     "react": "^18.2.0 || ^19.0.0",
     "react-dom": "^18.2.0 || ^19.0.0"
