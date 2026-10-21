@@ -105,6 +105,40 @@ test("Tour mode edits a tour by clicking the page, then saves it to code", async
   expect(pageErrors).toEqual([]);
 });
 
+test("comments on a step are linked to it, counted in the step list, and return to Tour mode", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "?tours=1");
+  await page.locator(".tm-launcher").click();
+  await page.getByRole("button", { name: "Build a tour" }).click();
+  await panel(page).locator(".tm-tour-step-summary").first().click();
+  await panel(page).getByRole("button", { name: "Comment on this step" }).click();
+
+  // The ordinary composer opens on the step's element.
+  await expect(panel(page)).toHaveCount(0);
+  await expect(page.locator("#tm-comment")).toBeVisible();
+  await page.evaluate(() => {
+    const textarea = document.querySelector("[data-threadmark-root]").shadowRoot.querySelector("#tm-comment");
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(textarea, "Is “custom control” clear to new people?");
+    textarea.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  });
+  await page.locator(".tm-submit").click();
+
+  // Posting returns to Tour mode, and the comment is linked to the tour step.
+  await expect(panel(page)).toBeVisible();
+  const posted = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
+  expect(posted.comment).toBe("Is “custom control” clear to new people?");
+  expect(posted.tourStep).toEqual({ tourId: "fixture-tour", stepId: "custom" });
+  expect(posted.target.locatorCandidates.stableId).toBe("custom-text-control");
+  await expect(panel(page).getByRole("button", { name: "1 comment on step 1" })).toBeVisible();
+
+  // Opening the comment from the step shows its thread; Esc comes back to the step list.
+  await panel(page).getByRole("button", { name: "1 comment on step 1" }).click();
+  await panel(page).getByRole("button", { name: /Emily R\..*clear to new people/ }).click();
+  await expect(page.locator(".tm-popover")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
 test("Try it plays the draft in a temporary player and saves nothing", async ({ page }) => {
   await mountFixture(page, "?tours=1");
   await page.locator(".tm-launcher").click();

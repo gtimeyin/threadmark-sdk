@@ -262,6 +262,8 @@ In Tour mode, clicking an element on the page adds a step that points at it; the
 - **Copy file** copies the tour as `.tour.json` contents.
 - **Save to code** appears when you pass `onTourSave`. Browsers can't write to your repository, so the callback does the writing, for example through a dev-server endpoint. Await it; if it rejects, the draft stays and the panel says it didn't save.
 
+To talk a step over, open it and choose **Comment on this step**. That opens the ordinary composer on the step's element, and the saved feedback carries `tourStep: { tourId, stepId }`, so it's stored, replied to, and resolved like any other comment through `onFeedbackCreate`. Each step shows how many open comments it has, and opening one shows its thread; Tour mode comes back when it closes.
+
 Drafts live in the overlay until you save or copy them. Tour mode is part of the review overlay, so it follows the same environment rules and never runs in production.
 
 ### Check tours in CI

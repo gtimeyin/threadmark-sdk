@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AltArrowDownIcon as ChevronDown } from "@solar-icons/react/linear/alt-arrow-down";
 import { AltArrowUpIcon as ChevronUp } from "@solar-icons/react/linear/alt-arrow-up";
+import { ChatSquareIcon as Chat } from "@solar-icons/react/linear/chat-square";
 import { ClipboardCopyIcon as ClipboardCopy } from "@solar-icons/react/linear/clipboard-copy";
 import { CloseIcon as X } from "@solar-icons/react/linear/close";
 import { DisketteIcon as Diskette } from "@solar-icons/react/linear/diskette";
@@ -88,7 +89,7 @@ function useStepMarks(tour, route) {
  * Tour mode's panel: pick a tour, add steps by clicking the page, edit them, set who sees the tour,
  * try it, and save it back to code. Drafts live in the overlay until saved; nothing is sent anywhere.
  */
-export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, onSave, onCopy, onClose }) {
+export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, onSave, onCopy, onClose, stepComments = {}, onCommentOnStep, onOpenComment }) {
   const [tab, setTab] = useState("steps");
   const [openStepId, setOpenStepId] = useState(null);
   const [untagged, setUntagged] = useState(null);
@@ -216,6 +217,8 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
                   const open = openStepId === step.id;
                   const page = stepPagesOf(tour)[index];
                   const elsewhere = page && !pathMatches(page, route);
+                  const comments = stepComments[`${tour.id}:${step.id}`] || [];
+                  const openComments = comments.filter((item) => !item.resolved).length;
                   return (
                     <li key={step.id} className={`tm-tour-step${open ? " is-open" : ""}`} data-step-id={step.id}>
                       <div className="tm-tour-step-head">
@@ -225,6 +228,12 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
                           <code>{step.target}{elsewhere ? ` · ${page}` : ""}</code>
                         </button>
                         <div className="tm-tour-step-actions">
+                          {comments.length > 0 && (
+                            <button type="button" className="tm-tour-comment-count" aria-label={`${comments.length} comment${comments.length === 1 ? "" : "s"} on step ${index + 1}`}
+                              onClick={() => setOpenStepId(step.id)}>
+                              <Chat {...iconProps} /><span>{openComments || comments.length}</span>
+                            </button>
+                          )}
                           <button type="button" aria-label={`Move step ${index + 1} up`} disabled={index === 0} onClick={() => commit(moveStep(tour, step.id, -1))}><ChevronUp {...iconProps} /></button>
                           <button type="button" aria-label={`Move step ${index + 1} down`} disabled={index === tour.steps.length - 1} onClick={() => commit(moveStep(tour, step.id, 1))}><ChevronDown {...iconProps} /></button>
                           <button type="button" aria-label={`Delete step ${index + 1}`} onClick={() => { commit(removeStep(tour, step.id)); if (open) setOpenStepId(null); }}><Trash {...iconProps} /></button>
@@ -251,6 +260,27 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
                               <option value="modal">Modal</option>
                             </select>
                           </label>
+                          <div className="tm-tour-comments">
+                            <span className="tm-tour-comments-label">Talk it over</span>
+                            {comments.length > 0 && (
+                              <ul>
+                                {comments.map((item) => (
+                                  <li key={item.id}>
+                                    <button type="button" onClick={() => onOpenComment?.(item.id)}>
+                                      <strong>{item.author}</strong>
+                                      <span>{item.comment}</span>
+                                      <small>{[item.replies ? `${item.replies} repl${item.replies === 1 ? "y" : "ies"}` : null, item.resolved ? "Resolved" : null].filter(Boolean).join(" · ")}</small>
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            <button type="button" className="tm-tour-secondary" disabled={elsewhere || !onCommentOnStep}
+                              onClick={() => onCommentOnStep({ tourId: tour.id, stepId: step.id, target: step.target })}>
+                              <Chat {...iconProps} />Comment on this step
+                            </button>
+                            {elsewhere && <span className="tm-tour-note">Go to {page} to comment on this step.</span>}
+                          </div>
                         </div>
                       )}
                     </li>
