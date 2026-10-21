@@ -23,6 +23,7 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "tour.schema.json",
     "LICENSE",
     "README.md",
     "THIRD_PARTY_NOTICES.md"
@@ -36,6 +37,7 @@
       "types": "./dist/tours.d.ts",
       "import": "./dist/tours.js"
     },
+    "./tour.schema.json": "./tour.schema.json",
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.ts",

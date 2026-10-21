@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Threadmark, threadmarkTarget } from "threadmark-react";
+import { ThreadmarkTours, useThreadmarkTours } from "threadmark-react/tours";
 import { createFeedbackStore } from "./feedbackStore.js";
+import welcomeTour from "./tours/welcome.tour.json";
+
+const TOURS = [welcomeTour];
+
+function TourButton() {
+  const tours = useThreadmarkTours();
+  return <button type="button" className="tour-button" onClick={() => tours.start("parcel-welcome")}>Take the tour</button>;
+}
 
 const IGNORED_SELECTORS = [".analytics-internal"];
 const MAX_LOG_ENTRIES = 6;
@@ -246,6 +255,7 @@ export function App() {
         sessionReplay
         onError={(error) => setStatus(`error:${error.code}`)}
       />
+      <ThreadmarkTours tours={TOURS} theme={{ accent: "#0b4f3a" }} />
 
       <header className="site-header">
         <a className="brand" href="#top" aria-label="Parcel home">
@@ -256,6 +266,7 @@ export function App() {
           <a href="#review-targets">Targets</a>
           <a href="#privacy-boundaries">Privacy</a>
           <a href="#callback-log">Callback</a>
+          <TourButton />
         </nav>
         <div className="sdk-status" role="status">
           <span className={status === "ready" ? "is-ready" : ""} />

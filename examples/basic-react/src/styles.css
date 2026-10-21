@@ -108,6 +108,19 @@ pre {
   font-weight: 650;
 }
 
+.tour-button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #0b4f3a;
+  border-radius: 8px;
+  background: transparent;
+  color: #0b4f3a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
 .sdk-status {
   justify-self: end;
   display: flex;
