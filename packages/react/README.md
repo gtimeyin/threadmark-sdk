@@ -243,6 +243,26 @@ tours.start("welcome");
 
 Validate hand-written tours with `defineTour()`, which throws a `TourValidationError` listing every problem by path. Invalid tours never play; `<ThreadmarkTours>` reports them through `onError`. The JSON Schema gives editors autocomplete for `.tour.json` files.
 
+### Check tours in CI
+
+```sh
+npx threadmark tours check
+```
+
+The check finds every `*.tour.json` (or `*.tour.js` / `*.tour.ts` that exports a tour) under the current folder, validates it, and looks for each step's target in your code as `threadmarkTarget("id")` or `data-threadmark-id="id"`. It skips `node_modules`, build output, and hidden folders, and exits with 1 when a tour is invalid or a step's target is gone, so a redesign that breaks a tour fails the build instead of the tour:
+
+```text
+welcome · 4 steps  tours/welcome.tour.json
+  ✓ projects.new       src/ProjectsHeader.tsx:18
+  ✓ nav.templates      src/Sidebar.tsx:42
+  ✕ team.invite        not found in the code
+  ? project.publish.7  built at runtime from "project.publish.…" (src/ProjectCard.tsx:61); can't check statically
+
+1 step has lost its target. Repin moved steps in Threadmark's Tour mode, or update the target ids.
+```
+
+Ids built at runtime can't be checked by reading the code. Template ids such as `` threadmarkTarget(`project.publish.${id}`) `` match by their fixed start and are reported, not failed; at runtime a missing target sends a `targetMissing` event instead. Use `--root <dir>` to check another folder and `--json` for machine-readable output. Loading `.tour.ts` files needs a Node version that runs TypeScript directly (22.18 or newer); otherwise use `.tour.json`.
+
 ## Universal comments
 
 Threadmark asks one question for every annotation: **What should change?** The answer is submitted as the top-level `comment` value, whether the reviewer clicked an element, highlighted text, selected a group, dragged a region, marked up a selected screenshot area, or recorded an interaction trace. This keeps the capture step lightweight while still allowing a reviewer to describe the requested change directly.
