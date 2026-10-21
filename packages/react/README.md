@@ -243,6 +243,27 @@ tours.start("welcome");
 
 Validate hand-written tours with `defineTour()`, which throws a `TourValidationError` listing every problem by path. Invalid tours never play; `<ThreadmarkTours>` reports them through `onError`. The JSON Schema gives editors autocomplete for `.tour.json` files.
 
+### Build tours in Tour mode
+
+Pass your tour files to the review overlay as well, and the toolbar gains **Build a tour**:
+
+```jsx
+<Threadmark
+  tours={[welcome]}
+  onTourSave={async (tour, { fileName, contents }) => {
+    await fetch("/__dev/save-tour", { method: "POST", body: JSON.stringify({ fileName, contents }) });
+  }}
+/>
+```
+
+In Tour mode, clicking an element on the page adds a step that points at it; the host's own click handlers don't run. Elements without a stable id aren't added; the panel suggests an id and a `threadmarkTarget()` snippet to paste into your code first. The panel edits each step's title, text, style, and how it moves on, reorders and deletes steps, and sets who sees the tour and when. Numbered outlines show where the steps are on the current page.
+
+- **Try it** plays the draft with your app's `<ThreadmarkTours>` (or a temporary player if there isn't one). Nothing is saved or reported while it plays.
+- **Copy file** copies the tour as `.tour.json` contents.
+- **Save to code** appears when you pass `onTourSave`. Browsers can't write to your repository, so the callback does the writing, for example through a dev-server endpoint. Await it; if it rejects, the draft stays and the panel says it didn't save.
+
+Drafts live in the overlay until you save or copy them. Tour mode is part of the review overlay, so it follows the same environment rules and never runs in production.
+
 ### Check tours in CI
 
 ```sh

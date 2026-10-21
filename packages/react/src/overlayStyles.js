@@ -246,6 +246,62 @@ export const overlayStyles = `
   .tm-next-steps__done-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
   .tm-comments-header button:disabled { opacity: .45; cursor: default; }
   .tm-icon-credit { flex-shrink: 0; margin: 6px 18px 12px; color: var(--tm-stone); font-size: 12px; line-height: 1.4; }
+
+  /* Tour mode: the panel reuses the Feedback panel's glass surface; steps are numbered like page marks. */
+  .tm-tour-panel { overflow: auto; overscroll-behavior: contain; }
+  .tm-tour-panel .tm-tool-icon { width: 16px; height: 16px; flex: none; }
+  .tm-tour-picker { display: flex; align-items: flex-end; gap: 8px; padding: 0 18px 12px; }
+  .tm-tour-picker label { flex: 1; min-width: 0; display: grid; gap: 4px; font-size: 11px; color: var(--tm-stone); }
+  .tm-tour-panel select, .tm-tour-panel input, .tm-tour-panel textarea {
+    font: inherit; font-size: 13px; width: 100%; min-width: 0; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--tm-hairline); background: #fff; color: var(--tm-ink);
+  }
+  .tm-tour-panel textarea { resize: vertical; line-height: 1.45; }
+  .tm-tour-secondary, .tm-tour-primary {
+    min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px;
+    border-radius: 9px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .tm-tour-secondary { border: 1px solid var(--tm-hairline); background: #fff; color: var(--tm-ink); }
+  .tm-tour-secondary:hover:not(:disabled) { border-color: #8fb3a4; }
+  .tm-tour-primary { border: 1px solid var(--tm-forest); background: var(--tm-forest); color: #fff; }
+  .tm-tour-primary:hover:not(:disabled) { background: var(--tm-forest-hover); }
+  .tm-tour-secondary:disabled, .tm-tour-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .tm-tour-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .tm-tour-untagged { margin: 0 18px 12px; padding: 12px; display: grid; gap: 8px; border-radius: 12px; background: var(--tm-coral-tint); font-size: 12px; line-height: 1.45; }
+  .tm-tour-untagged p { margin: 0; color: var(--tm-ink); }
+  .tm-tour-untagged code { padding: 6px 8px; border-radius: 6px; background: #fff; font-family: var(--tm-font-mono); font-size: 12px; overflow-wrap: anywhere; }
+  .tm-tour-steps { list-style: none; margin: 8px 0 0; padding: 0 12px 8px; }
+  .tm-tour-steps > li + li { border-top: 1px solid var(--tm-hairline); }
+  .tm-tour-empty { padding: 16px 6px; font-size: 13px; color: var(--tm-stone); }
+  .tm-tour-step { padding: 6px 0; }
+  .tm-tour-step.is-open { background: rgba(255, 255, 255, .7); border-radius: 12px; }
+  .tm-tour-step-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px; }
+  .tm-tour-number { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--tm-forest); color: #fff; font-size: 11px; font-weight: 700; }
+  .tm-tour-step-summary { flex: 1; min-width: 0; display: grid; gap: 2px; padding: 4px; border: 0; border-radius: 8px; background: transparent; color: var(--tm-ink); text-align: left; font: inherit; cursor: pointer; }
+  .tm-tour-step-summary strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tm-tour-step-summary code { font-family: var(--tm-font-mono); font-size: 11px; color: var(--tm-stone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tm-tour-step-actions { display: flex; gap: 2px; }
+  .tm-tour-step-actions button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--tm-stone); cursor: pointer; }
+  .tm-tour-step-actions button:hover:not(:disabled) { background: #fff; color: var(--tm-ink); }
+  .tm-tour-step-actions button:disabled { opacity: .35; cursor: default; }
+  .tm-tour-fields { display: grid; gap: 10px; padding: 6px 10px 10px 36px; }
+  .tm-tour-settings { padding: 12px 18px; }
+  .tm-tour-fields label { display: grid; gap: 4px; font-size: 11px; color: var(--tm-stone); }
+  .tm-tour-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--tm-stone); }
+  .tm-tour-note code, .tm-tour-file code { font-family: var(--tm-font-mono); font-size: 11px; }
+  .tm-tour-footer { position: sticky; bottom: 0; margin-top: auto; display: grid; gap: 8px; padding: 12px 18px 14px; border-top: 1px solid var(--tm-hairline); background: rgba(251, 250, 246, .92); }
+  .tm-tour-problems { margin: 0; padding: 8px 10px 8px 26px; border-radius: 8px; background: var(--tm-coral-tint); font-size: 12px; line-height: 1.45; }
+  .tm-tour-status { margin: 0; font-size: 12px; line-height: 1.45; color: var(--tm-forest); }
+  .tm-tour-file { margin: 0; color: var(--tm-stone); text-align: right; }
+  .tm-tour-mark { position: fixed; z-index: 30; border: 2px dashed var(--tm-forest); border-radius: 10px; pointer-events: none; }
+  .tm-tour-mark span { position: absolute; top: -12px; left: -12px; width: 22px; height: 22px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; background: var(--tm-forest); color: #fff; font-size: 11px; font-weight: 700; box-shadow: 0 2px 6px #10281e40; }
+  .tm-tour-preview-bar {
+    position: fixed; z-index: 45; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+    padding: 6px 6px 6px 14px; border-radius: 12px; background: var(--tm-surface); color: var(--tm-text-primary); font-size: 13px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .25); pointer-events: auto;
+  }
+  .tm-tour-preview-bar button { min-height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--tm-mint); color: var(--tm-ground); font: inherit; font-weight: 600; cursor: pointer; }
+  @media (prefers-reduced-transparency: reduce), (forced-colors: active) { .tm-tour-footer { background: var(--tm-paper); } }
   .tm-icon-credit a { color: inherit; text-underline-offset: 2px; }
   .tm-panel-tabs { display: flex; gap: 4px; margin: 0 18px 4px; padding: 3px; border-radius: 10px; background: rgba(222, 221, 215, .55); }
   .tm-panel-tabs button { flex: 1; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 8px; background: transparent; color: var(--tm-stone); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background-color var(--tm-motion-fast) ease, color var(--tm-motion-fast) ease; }

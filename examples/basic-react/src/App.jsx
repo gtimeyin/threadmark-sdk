@@ -4,7 +4,6 @@ import { ThreadmarkTours, useThreadmarkTours } from "threadmark-react/tours";
 import { createFeedbackStore } from "./feedbackStore.js";
 import welcomeTour from "./tours/welcome.tour.json";
 
-const TOURS = [welcomeTour];
 
 function TourButton() {
   const tours = useThreadmarkTours();
@@ -91,6 +90,12 @@ export function App() {
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [annotations, setAnnotations] = useState([]);
   const [status, setStatus] = useState("booting");
+  // Tours saved from Tour mode replace the bundled file for this session, so they play right away.
+  const [tours, setTours] = useState([welcomeTour]);
+  const saveTour = useCallback(async (tour, file) => {
+    setTours((current) => [...current.filter((item) => item.id !== tour.id), tour]);
+    console.info(`[example] Tour mode saved ${file.fileName}:\n${file.contents}`);
+  }, []);
   const [selectedTarget, setSelectedTarget] = useState("None yet");
   const [selectionSummary, setSelectionSummary] = useState("No active selection");
   const [ctaActivations, setCtaActivations] = useState(0);
@@ -252,10 +257,12 @@ export function App() {
         onPageVersionSelect={(version) => setActiveBuildId(version.buildId || CURRENT_BUILD_ID)}
         onFeedbackCarryForward={handleCarryForward}
         onPollVote={handlePollVote}
+        tours={tours}
+        onTourSave={saveTour}
         sessionReplay
         onError={(error) => setStatus(`error:${error.code}`)}
       />
-      <ThreadmarkTours tours={TOURS} theme={{ accent: "#0b4f3a" }} />
+      <ThreadmarkTours tours={tours} theme={{ accent: "#0b4f3a" }} />
 
       <header className="site-header">
         <a className="brand" href="#top" aria-label="Parcel home">
