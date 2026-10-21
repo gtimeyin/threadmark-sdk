@@ -591,3 +591,11 @@ test("poll results from the host are limited to the poll's own options", () => {
   });
   assert.equal(normalizePollResults({ total: 1 }, { kind: "question" }), null);
 });
+
+test("feedback can link to a tour step, and malformed links are dropped", () => {
+  const base = { projectKey: "pk_test", environment: "local", route: "/projects", target: { kind: "element", tagName: "button" }, comment: "Clear?" };
+  assert.deepEqual(createFeedbackPayload({ ...base, tourStep: { tourId: "welcome", stepId: "new-project", extra: true } }).tourStep, { tourId: "welcome", stepId: "new-project" });
+  for (const tourStep of [undefined, null, "welcome", { tourId: "welcome" }, { tourId: "bad id", stepId: "x" }, { tourId: "welcome", stepId: "" }]) {
+    assert.equal("tourStep" in createFeedbackPayload({ ...base, tourStep }), false, JSON.stringify(tourStep));
+  }
+});

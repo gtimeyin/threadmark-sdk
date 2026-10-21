@@ -285,6 +285,16 @@ export const overlayStyles = `
   .tm-tour-step-actions button:hover:not(:disabled) { background: #fff; color: var(--tm-ink); }
   .tm-tour-step-actions button:disabled { opacity: .35; cursor: default; }
   .tm-tour-fields { display: grid; gap: 10px; padding: 6px 10px 10px 36px; }
+  .tm-tour-step-actions .tm-tour-comment-count { width: auto; gap: 3px; padding: 0 6px; display: inline-flex; align-items: center; color: var(--tm-forest); font-size: 11px; font-weight: 700; }
+  .tm-tour-comments { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--tm-hairline); justify-items: start; }
+  .tm-tour-comments-label { font-size: 11px; color: var(--tm-stone); }
+  .tm-tour-comments ul { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: 4px; }
+  .tm-tour-comments li button { width: 100%; display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--tm-hairline); border-radius: 10px; background: #fff; color: var(--tm-ink); font: inherit; text-align: left; cursor: pointer; }
+  .tm-tour-comments li button:hover { border-color: #8fb3a4; }
+  .tm-tour-comments li strong { font-size: 12px; }
+  .tm-tour-comments li span { font-size: 13px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .tm-tour-comments li small { font-size: 11px; color: var(--tm-stone); }
+  .tm-tour-comments li small:empty { display: none; }
   .tm-tour-settings { padding: 12px 18px; }
   .tm-tour-fields label { display: grid; gap: 4px; font-size: 11px; color: var(--tm-stone); }
   .tm-tour-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--tm-stone); }

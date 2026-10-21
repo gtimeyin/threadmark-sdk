@@ -189,6 +189,7 @@ function recordToAnnotation(record) {
       pinHistory: source.pinHistory,
       workflow: source.workflow,
       ask: source.ask,
+      tourStep: source.tourStep,
       comment: source.comment,
       replies: source.replies,
       interaction: source.interaction,
@@ -449,6 +450,8 @@ export function Threadmark({
   const [tourActiveId, setTourActiveId] = useState(null);
   const [tourPick, setTourPick] = useState(null);
   const [tourPreview, setTourPreview] = useState(null);
+  // Set while commenting on a tour step from Tour mode: the step to link and where to return.
+  const tourCommentRef = useRef(null);
   const [hoverElement, setHoverElement] = useState(null);
   const [hoverRect, setHoverRect] = useState(null);
   const [selections, setSelections] = useState([]);
@@ -1070,6 +1073,34 @@ export function Threadmark({
     clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = setTimeout(() => setNotice(""), 2200);
   }, []);
+
+  const commentOnTourStep = useCallback(({ tourId, stepId, target }) => {
+    const found = resolveStableTarget(target, { accept: (element) => element.isConnected && element.getClientRects().length > 0 });
+    if (found.status !== "resolved") {
+      showNotice(found.status === "ambiguous"
+        ? "More than one element has this step’s id, so the comment can’t be pinned."
+        : "This step’s element isn’t on this page.");
+      return;
+    }
+    const element = found.element;
+    element.scrollIntoView({ block: "center", inline: "nearest" });
+    clearCapture();
+    tourCommentRef.current = { tourStep: { tourId, stepId }, returnToTour: true };
+    const selection = {
+      id: makeId("target"),
+      element,
+      target: createTargetDescriptor(element, { route: sanitizeRoute(route || window.location.pathname || "/"), ignoredSelectors }),
+    };
+    setSelections([selection]);
+    setSelectionRects({ [selection.id]: rectFromElement(element) });
+    setEditingAnnotationId(null);
+    setComposerMode("new");
+    setComment("");
+    modeRef.current = "selected";
+    setMode("selected");
+    emitStatus("selected");
+  }, [clearCapture, emitStatus, ignoredSelectorsKey, route, showNotice]);
+
 
   const togglePause = useCallback(() => {
     setPaused((current) => {
@@ -2922,6 +2953,18 @@ export function Threadmark({
     };
   }, [mode, shadowHost, route, ignoredSelectorsKey]);
 
+  // A comment started from Tour mode returns there once it's posted or dismissed.
+  useEffect(() => {
+    if (!tourCommentRef.current?.returnToTour) return;
+    if (mode === "picking") {
+      tourCommentRef.current = null;
+      modeRef.current = "tour";
+      setMode("tour");
+    } else if (mode === "idle") {
+      tourCommentRef.current = null;
+    }
+  }, [mode]);
+
   useEffect(() => {
     if (mode === "tour" && tourDrafts && !tourDrafts.some((tour) => tour.id === tourActiveId) && tourDrafts.length) {
       setTourActiveId(tourDrafts[0].id);
@@ -3386,6 +3429,7 @@ export function Threadmark({
               options: pollOptions.map((label) => label.trim()).filter(Boolean).map((label, index) => ({ id: `option-${index + 1}`, label })),
             }
             : askKind === "question" ? { kind: "question" } : undefined,
+        tourStep: editing ? editing.payload.tourStep : tourCommentRef.current?.tourStep,
         target: targets[0],
         targets,
         captureKind,
@@ -3491,6 +3535,32 @@ export function Threadmark({
 
   if (!portalRoot) return null;
 
+  const openListedAnnotation = (id) => {
+    const record = projectAnnotations.find((item) => item.id === id);
+    if (record && record.payload.route !== activeRoute) {
+      const destination = new URL(window.location.href);
+      destination.pathname = record.payload.route; destination.search = ""; destination.hash = "";
+      destination.searchParams.set("threadmark", id);
+      window.location.assign(destination.href); return;
+    }
+    const element = annotationRestorations[id]?.results?.find((result) => result.element)?.element;
+    element?.scrollIntoView({ block: "center", behavior: "instant" });
+    editAnnotation(id);
+  };
+
+  const tourStepComments = {};
+  for (const annotation of projectAnnotations) {
+    const link = annotation.payload.tourStep;
+    if (!link) continue;
+    (tourStepComments[`${link.tourId}:${link.stepId}`] ||= []).push({
+      id: annotation.id,
+      comment: annotation.payload.comment,
+      author: annotation.payload.author?.displayName || "Someone",
+      replies: annotation.payload.replies?.length || 0,
+      resolved: annotation.payload.workflow?.status === "resolved",
+    });
+  }
+
   const overlay = createPortal(
     <Overlay
       mode={mode}
@@ -3504,6 +3574,12 @@ export function Threadmark({
       onStopTourPreview={stopTourPreview}
       onTourSave={callbacks.onTourSave.current ? (tour, file) => callbacks.onTourSave.current(tour, file) : undefined}
       onCopyText={copyText}
+      tourStepComments={tourStepComments}
+      onCommentOnTourStep={commentOnTourStep}
+      onOpenTourComment={(id) => {
+        tourCommentRef.current = { returnToTour: true };
+        openListedAnnotation(id);
+      }}
       projectAnnotations={projectAnnotations}
       reviewers={reviewers}
       onWorkflowChange={updateWorkflow}
@@ -3526,18 +3602,7 @@ export function Threadmark({
       allCommentsOpen={allCommentsOpen}
       onToggleAllComments={() => { setAllCommentsOpen((open) => !open); setVersionHistoryOpen(false); }}
       onCloseAllComments={() => { setAllCommentsOpen(false); setVersionHistoryOpen(false); portalRoot.querySelector(".tm-all-comments-trigger")?.focus(); }}
-      onOpenListedAnnotation={(id) => {
-        const record = projectAnnotations.find((item) => item.id === id);
-        if (record && record.payload.route !== activeRoute) {
-          const destination = new URL(window.location.href);
-          destination.pathname = record.payload.route; destination.search = ""; destination.hash = "";
-          destination.searchParams.set("threadmark", id);
-          window.location.assign(destination.href); return;
-        }
-        const element = annotationRestorations[id]?.results?.find((result) => result.element)?.element;
-        element?.scrollIntoView({ block: "center", behavior: "instant" });
-        editAnnotation(id);
-      }}
+      onOpenListedAnnotation={openListedAnnotation}
       repinning={Boolean(repinningId)}
       repinTargetCount={(() => {
         const payload = annotations.find((item) => item.id === repinningId)?.payload;

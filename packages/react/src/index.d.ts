@@ -350,6 +350,8 @@ export interface ThreadmarkFeedback {
   video?: ThreadmarkVideoCapture;
   replay?: ThreadmarkReplaySummary;
   ask?: ThreadmarkAsk;
+  /** Set when the comment was left on a product-tour step in Tour mode. */
+  tourStep?: { tourId: string; stepId: string };
   comment: string;
   replies?: ThreadmarkReply[];
   createdAt: string;

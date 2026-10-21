@@ -11,6 +11,8 @@ import {
   RECORDING_MIME_TYPES,
 } from "./videoRecording.js";
 
+import { isValidThreadmarkTargetId } from "./targetId.js";
+
 export { THREADMARK_TARGET_ATTRIBUTE, isValidThreadmarkTargetId, threadmarkTarget } from "./targetId.js";
 
 export const DEFAULT_ALLOWED_HOSTS = Object.freeze([
@@ -454,6 +456,13 @@ export const MAX_POLL_OPTIONS = 8;
  * A question (answered in replies) or a poll (answered by votes) that someone asked about an element or
  * page. Poll options keep stable ids, so votes stay attached if a label is corrected.
  */
+/** Links a comment to one step of a product tour: `{ tourId, stepId }`, both stable ids. */
+export function normalizeTourStep(value) {
+  if (!value || typeof value !== "object") return undefined;
+  if (!isValidThreadmarkTargetId(value.tourId) || !isValidThreadmarkTargetId(value.stepId)) return undefined;
+  return { tourId: value.tourId, stepId: value.stepId };
+}
+
 export function normalizeAsk(value) {
   if (!value || typeof value !== "object" || !ASK_KINDS.has(value.kind)) return null;
   if (value.kind === "question") return { kind: "question" };
@@ -511,6 +520,7 @@ export function createFeedbackPayload({
   pinHistory,
   workflow,
   ask,
+  tourStep,
 }) {
   const payloadId = cleanString(id, 160)
     || globalThis.crypto?.randomUUID?.()
@@ -555,6 +565,9 @@ export function createFeedbackPayload({
 
   const normalizedAsk = normalizeAsk(ask);
   if (normalizedAsk) payload.ask = normalizedAsk;
+
+  const normalizedTourStep = normalizeTourStep(tourStep);
+  if (normalizedTourStep) payload.tourStep = normalizedTourStep;
 
   if (workflow && typeof workflow === "object") {
     payload.workflow = {
