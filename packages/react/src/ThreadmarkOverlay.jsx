@@ -39,7 +39,9 @@ import { DangerTriangleIcon as TriangleAlert } from "@solar-icons/react/linear/d
 import { UndoLeftIcon as Undo2 } from "@solar-icons/react/linear/undo-left";
 import { VideocameraIcon as Video } from "@solar-icons/react/linear/videocamera";
 import { CloseIcon as X } from "@solar-icons/react/linear/close";
+import { MapArrowRightIcon as TourIcon } from "@solar-icons/react/linear/map-arrow-right";
 import { computePopoverPosition } from "./popover.js";
+import { TourPanel } from "./TourPanel.jsx";
 import {
   addMarkupStroke,
   clearMarkupStrokes,
@@ -1565,6 +1567,16 @@ function PollCard({ ask, results, closed, onVote }) {
 
 function Overlay({
   mode,
+  onStartTour,
+  onExitTour,
+  tourDrafts,
+  tourActiveId,
+  onTourDraftsChange,
+  tourPick,
+  onTourPreview,
+  onStopTourPreview,
+  onTourSave,
+  onCopyText,
   projectAnnotations,
   reviewers,
   onWorkflowChange,
@@ -1872,7 +1884,7 @@ function Overlay({
         </button>
       )}
 
-      {!["idle", "video-recording"].includes(mode) && !markersHidden && !replayingVideo && annotations.map((annotation, index) => (
+      {!["idle", "video-recording", "tour", "tour-preview"].includes(mode) && !markersHidden && !replayingVideo && annotations.map((annotation, index) => (
         <Marker
           key={annotation.id}
           annotation={annotation}
@@ -2061,6 +2073,10 @@ function Overlay({
                     icon={<VideoIcon />} label="Record a video" description="Your tab, voice, and camera"
                     shortcut="V" keyshortcuts="V" onClick={runToolbarItem(onStartVideo)} />
                 )}
+                <div className="tm-toolbar-menu__separator" role="separator" />
+                <ToolbarMenuItem role="menuitemradio" aria-checked="false"
+                  icon={<TourIcon {...iconProps} />} label="Build a tour" description="Click elements to add tour steps"
+                  onClick={runToolbarItem(onStartTour)} />
               </ToolbarMenu>
             )}
             {toolbarMenu === "more" && (
@@ -2104,6 +2120,31 @@ function Overlay({
             <ToolButton icon={<CloseIcon />} label="Close annotations (Esc)" onClick={onExit} />
           </div>
         </>
+      )}
+
+      {mode === "tour" && (
+        <>
+          <Outline rect={hoverRect} hover />
+          <div className="tm-gesture-hint" aria-hidden="true">Click an element to add a tour step · Esc to go back</div>
+          <TourPanel
+            drafts={tourDrafts}
+            activeId={tourActiveId}
+            onChange={onTourDraftsChange}
+            pick={tourPick}
+            route={window.location.pathname}
+            onPreview={onTourPreview}
+            onSave={onTourSave}
+            onCopy={onCopyText}
+            onClose={onExitTour}
+          />
+        </>
+      )}
+
+      {mode === "tour-preview" && (
+        <div className="tm-tour-preview-bar" role="status">
+          <span>Trying your tour. Nothing is saved.</span>
+          <button type="button" onClick={onStopTourPreview}>Stop</button>
+        </div>
       )}
 
       {allCommentsOpen && ["picking", "selected"].includes(mode) && (

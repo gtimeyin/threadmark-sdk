@@ -1,4 +1,4 @@
-import type { ReactPortal } from "react";
+import type { ReactElement, ReactPortal } from "react";
 
 export type ThreadmarkCaptureKind = "text" | "element" | "multi" | "region" | "screenshot" | "interaction" | "video";
 export type ThreadmarkStatus = "disabled" | "ready" | "selecting" | "selected" | "submitting" | "submitted" | "error";
@@ -462,10 +462,30 @@ export interface ThreadmarkProps {
    * write its own prompt to the clipboard.
    */
   onNextStepsCopy?: (steps: readonly ThreadmarkNextStep[]) => void | Promise<void>;
+  /**
+   * Tours to edit in Tour mode (the same files you pass to <ThreadmarkTours>). Tour mode keeps
+   * edits as drafts in the overlay; nothing is written anywhere until onTourSave or Copy file.
+   */
+  tours?: ThreadmarkTourFile[];
+  /**
+   * Adds "Save to code" to Tour mode. Receives the tour plus a suggested file name and its JSON
+   * contents; write it to your repository (for example through a dev-server endpoint). Await the write;
+   * a rejection keeps the draft and tells the reviewer it didn't save.
+   */
+  onTourSave?: (tour: ThreadmarkTourFile, file: { fileName: string; contents: string }) => void | Promise<void>;
   onError?: (error: ThreadmarkError) => void;
 }
 
-export declare function Threadmark(props: ThreadmarkProps): ReactPortal | null;
+/** A tour as written in a .tour.json file. See threadmark-react/tours for the full type. */
+export type ThreadmarkTourFile = {
+  $schema?: string;
+  id: string;
+  title: string;
+  steps: Array<{ id: string; target?: string; title: string; [field: string]: unknown }>;
+  [field: string]: unknown;
+};
+
+export declare function Threadmark(props: ThreadmarkProps): ReactPortal | ReactElement | null;
 export declare function threadmarkTarget(id: string): { "data-threadmark-id": string };
 export declare function isLocalHostname(hostname: string): boolean;
 export declare function matchesAllowedHost(hostname: string, allowedHosts?: readonly string[]): boolean;

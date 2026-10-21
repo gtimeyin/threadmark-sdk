@@ -20,8 +20,13 @@ const VISIT_KEY = "threadmark:tours:visit";
 const SLOW_NOTICE_MS = 400;
 const SPOT_PADDING = 6;
 
-// One player per page. useThreadmarkTours() talks to whichever instance is mounted.
-let activeInstance = null;
+// One player per page. useThreadmarkTours() talks to whichever instance is mounted. The registry is
+// page-wide, so two copies of this module (separate bundles, dev-server reloads) still find each other.
+const REGISTRY = Symbol.for("threadmark.tours.activePlayer");
+const getActive = () => (typeof globalThis === "undefined" ? null : globalThis[REGISTRY] || null);
+const setActive = (instance) => {
+  globalThis[REGISTRY] = instance;
+};
 
 function readVisit() {
   try {
@@ -137,7 +142,10 @@ export function ThreadmarkTours({
   }, [validated]);
   const byId = useMemo(() => new Map(playable.map((tour) => [tour.id, tour])), [playable]);
 
-  const tour = run ? byId.get(run.tourId) : null;
+  // A preview (Tour mode's "Try it yourself") plays a draft that isn't in `tours`.
+  const previewRef = useRef(null);
+  const tourFor = (current) => (current?.preview ? previewRef.current?.tour : current ? byId.get(current.tourId) : null) || null;
+  const tour = tourFor(run);
   const pages = useMemo(() => (tour ? stepPages(tour) : []), [tour]);
   const step = tour ? effectiveStep(tour.steps[run.index], phone) : null;
   const stepPage = tour ? pages[run.index] : undefined;
@@ -157,7 +165,7 @@ export function ThreadmarkTours({
 
   function emit(type, extra = {}) {
     const handler = latest.current?.onTourEvent;
-    if (typeof handler !== "function") return;
+    if (typeof handler !== "function" || latest.current.run?.preview) return;
     try {
       handler({ type, tourId: latest.current.run?.tourId, at: Date.now(), ...extra });
     } catch {
@@ -166,6 +174,11 @@ export function ThreadmarkTours({
   }
 
   function saveRecord(record) {
+    // Previews keep progress in memory only and never reach the host's storage.
+    if (latest.current.run?.preview) {
+      previewRef.current.record = record;
+      return;
+    }
     setRecords((current) => ({ ...current, [record.tourId]: record }));
     if (latest.current.controlled) {
       Promise.resolve()
@@ -177,19 +190,24 @@ export function ThreadmarkTours({
   }
 
   function updateRecord(tourId, patch) {
-    const current = latest.current.records[tourId] || createProgressRecord(tourId, latest.current.userId, Date.now());
+    const current = (latest.current.run?.preview ? previewRef.current?.record : latest.current.records[tourId])
+      || createProgressRecord(tourId, latest.current.userId, Date.now());
     const record = { ...current, ...patch, updatedAt: Date.now() };
     saveRecord(record);
     return record;
   }
 
-  function begin(nextTour, { mode = "step", index = 0, fresh = false } = {}) {
+  function begin(nextTour, { mode = "step", index = 0, fresh = false, preview = false } = {}) {
     const focused = document.activeElement;
     returnFocusRef.current = focused && focused !== mount?.host && !mount?.host.contains(focused) ? focused : null;
-    rememberVisit(nextTour.id);
+    if (!preview) rememberVisit(nextTour.id);
     keyRef.current += 1;
-    setRun({ tourId: nextTour.id, index, mode, key: keyRef.current });
-    latest.current.run = { tourId: nextTour.id };
+    setRun({ tourId: nextTour.id, index, mode, key: keyRef.current, preview });
+    latest.current.run = { tourId: nextTour.id, preview };
+    if (preview) {
+      previewRef.current.record = createProgressRecord(nextTour.id, undefined, Date.now());
+      return;
+    }
     if (mode !== "step") return;
     const existing = latest.current.records[nextTour.id];
     if (fresh || !existing || TERMINAL_STATUSES.has(existing.status)) {
@@ -212,6 +230,11 @@ export function ThreadmarkTours({
     if (!current) return;
     updateRecord(current.tourId, { status });
     emit(status, { stepId: latest.current.step?.id, stepIndex: current.index });
+    if (current.preview) {
+      const { onEnd } = previewRef.current || {};
+      previewRef.current = null;
+      if (typeof onEnd === "function") window.setTimeout(() => onEnd(status), 0);
+    }
     setRun(null);
     latest.current.run = null;
     const returnTo = returnFocusRef.current;
@@ -221,7 +244,7 @@ export function ThreadmarkTours({
 
   function goTo(index) {
     const current = latest.current.run;
-    const currentTour = current && byId.get(current.tourId);
+    const currentTour = tourFor(current);
     if (!currentTour) return;
     if (index >= currentTour.steps.length) return finish("finished");
     if (index < 0) return;
@@ -254,7 +277,7 @@ export function ThreadmarkTours({
 
   // Mount the player in its own shadow root so host CSS can't reach it.
   useEffect(() => {
-    if (activeInstance) {
+    if (getActive()) {
       report({ code: "duplicate_instance", message: "Only one <ThreadmarkTours> can be mounted on a page." });
       return undefined;
     }
@@ -286,11 +309,13 @@ export function ThreadmarkTours({
       start: (tourId) => latest.current.api.start(tourId),
       emit: (event) => latest.current.api.emit(event),
       reset: (tourId) => latest.current.api.reset(tourId),
+      preview: (tourData, options) => latest.current.api.preview(tourData, options),
+      stopPreview: () => latest.current.api.stopPreview(),
     };
-    activeInstance = instance;
+    setActive(instance);
     setMount({ host, root });
     return () => {
-      if (activeInstance === instance) activeInstance = null;
+      if (getActive() === instance) setActive(null);
       host.remove();
     };
   }, []);
@@ -316,6 +341,18 @@ export function ThreadmarkTours({
       if (!picked) return false;
       beginPicked(picked);
       return true;
+    },
+    // Plays a draft tour right away, from its first step, with nothing saved or reported.
+    preview(tourData, { onEnd } = {}) {
+      const result = validateTour(tourData);
+      if (!result.ok) return { ok: false, errors: result.errors };
+      if (latest.current.run) finish("paused");
+      previewRef.current = { tour: result.tour, onEnd };
+      begin(result.tour, { preview: true });
+      return { ok: true, errors: [] };
+    },
+    stopPreview() {
+      if (latest.current.run?.preview) finish("paused");
     },
     reset(tourId) {
       store.remove(tourId, latest.current.userId);
@@ -696,7 +733,7 @@ export function ThreadmarkTours({
               {content.secondary}
               <div className="tmt-actions">{content.actions}</div>
             </div>
-            {showingStep && typeof onTourNote === "function" ? (
+            {showingStep && !run.preview && typeof onTourNote === "function" ? (
               <div className="tmt-note">
                 {note.open ? (
                   <>
@@ -758,11 +795,16 @@ export function ThreadmarkTours({
   );
 }
 
+/** The mounted player, if any. Internal: Tour mode uses it to preview drafts. */
+export function getMountedTourPlayer() {
+  return getActive();
+}
+
 /** Start, trigger, or reset tours from anywhere in the app. Safe to call before the player mounts. */
 export function useThreadmarkTours() {
   return useMemo(() => ({
-    start: (tourId) => activeInstance?.start(tourId) ?? false,
-    emit: (event) => activeInstance?.emit(event) ?? false,
-    reset: (tourId) => activeInstance?.reset(tourId),
+    start: (tourId) => getActive()?.start(tourId) ?? false,
+    emit: (event) => getActive()?.emit(event) ?? false,
+    reset: (tourId) => getActive()?.reset(tourId),
   }), []);
 }

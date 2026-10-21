@@ -18,6 +18,15 @@ window.__threadmarkCarryForwards = [];
 const fixtureParams = new URLSearchParams(window.location.search);
 // ?polls=1 stores poll votes in memory, the way a host's onPollVote would.
 const pollsEnabled = fixtureParams.get("polls") === "1";
+// ?tours=1 passes one tour to Tour mode and records what "Save to code" receives.
+const toursEnabled = fixtureParams.get("tours") === "1";
+window.__threadmarkTourSaves = [];
+const fixtureTours = [{
+  id: "fixture-tour",
+  title: "Fixture tour",
+  showTo: { path: "/picking-events" },
+  steps: [{ id: "custom", target: "custom-text-control", title: "The custom control" }],
+}];
 window.__threadmarkVotes = {};
 function fixturePollVote(feedback, optionIds) {
   const votes = (window.__threadmarkVotes[feedback.id] ||= {});
@@ -193,6 +202,8 @@ function Fixture() {
           },
         ]}
         annotations={annotations}
+        tours={toursEnabled ? fixtureTours : undefined}
+        onTourSave={toursEnabled ? async (tour, file) => { window.__threadmarkTourSaves.push({ tour, file }); } : undefined}
         onStatusChange={(status) => window.__threadmarkStatuses.push(status)}
         onError={(error) => window.__threadmarkErrors.push(error)}
         onFeedbackCreate={async (feedback, context) => {

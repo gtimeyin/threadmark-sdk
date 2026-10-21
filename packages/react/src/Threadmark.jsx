@@ -45,6 +45,9 @@ import {
 } from "./target.js";
 import { normalizePageVersions } from "./versionHistory.js";
 import { normalizeNextSteps } from "./nextSteps.js";
+import { resolveStableTarget } from "./resolveStableTarget.js";
+import { THREADMARK_TARGET_ATTRIBUTE, isValidThreadmarkTargetId } from "./targetId.js";
+import { ThreadmarkTours, getMountedTourPlayer } from "./tours/ThreadmarkTours.jsx";
 import { resolveSessionReplayOptions, startSessionReplay } from "./sessionReplay.js";
 import {
   CAMERA_VIDEO_BITS_PER_SECOND,
@@ -434,11 +437,18 @@ export function Threadmark({
   onPollVote,
   onNextStepDone,
   onNextStepsCopy,
+  tours,
+  onTourSave,
   onError,
 }) {
   const [portalRoot, setPortalRoot] = useState(null);
   const [shadowHost, setShadowHost] = useState(null);
   const [mode, setMode] = useState("idle");
+  // Tour mode: drafts start as copies of the `tours` prop and stay here until saved.
+  const [tourDrafts, setTourDrafts] = useState(null);
+  const [tourActiveId, setTourActiveId] = useState(null);
+  const [tourPick, setTourPick] = useState(null);
+  const [tourPreview, setTourPreview] = useState(null);
   const [hoverElement, setHoverElement] = useState(null);
   const [hoverRect, setHoverRect] = useState(null);
   const [selections, setSelections] = useState([]);
@@ -522,8 +532,10 @@ export function Threadmark({
     onPollVote: useLatest(onPollVote),
     onNextStepDone: useLatest(onNextStepDone),
     onNextStepsCopy: useLatest(onNextStepsCopy),
+    onTourSave: useLatest(onTourSave),
     onError: useLatest(onError),
   };
+  const toursRef = useLatest(tours);
   const modeRef = useLatest(mode);
   const selectionsRef = useLatest(selections);
   const textRef = useLatest(textSelection);
@@ -958,6 +970,52 @@ export function Threadmark({
     emitStatus("selecting");
     safeCall(callbacks.onOpenChange, true);
   }, [callbacks.onOpenChange, clearCapture, emitStatus, safeCall]);
+
+  const startTourMode = useCallback(() => {
+    clearCapture();
+    setAllCommentsOpen(false);
+    setVersionHistoryOpen(false);
+    setTourDrafts((current) => current ?? (Array.isArray(toursRef.current)
+      ? toursRef.current.filter((tour) => tour && typeof tour === "object").map((tour) => JSON.parse(JSON.stringify(tour)))
+      : []));
+    modeRef.current = "tour";
+    setMode("tour");
+    setHoverElement(null);
+    setHoverRect(null);
+  }, [clearCapture]);
+
+  const exitTourMode = useCallback(() => {
+    modeRef.current = "picking";
+    setMode("picking");
+    setHoverElement(null);
+    setHoverRect(null);
+  }, []);
+
+  const changeTourDrafts = useCallback((drafts, activeId) => {
+    setTourDrafts(drafts);
+    setTourActiveId(activeId);
+  }, []);
+
+  const previewTour = useCallback((tour) => {
+    modeRef.current = "tour-preview";
+    setMode("tour-preview");
+    setHoverElement(null);
+    setHoverRect(null);
+    setTourPreview({ tour, needsPlayer: false });
+  }, []);
+
+  const stopTourPreview = useCallback(() => {
+    getMountedTourPlayer()?.stopPreview?.();
+  }, []);
+
+  const copyText = useCallback(async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const backToSelection = useCallback(() => {
     if (submitting) return;
@@ -2102,10 +2160,13 @@ export function Threadmark({
       }
       // An open @mention list or menu handles its own Escape.
       if (action === "escape" && event.composedPath?.().some((node) => node?.dataset?.mentionOpen === "true" || node?.dataset?.menuOpen === "true")) return;
+      // During a preview the tour card owns Escape.
+      if (mode === "tour-preview") return;
       if (action === "escape" && mode !== "idle") {
         event.preventDefault();
         if (!submitting) {
-          if (allCommentsOpen && mode === "picking") {
+          if (mode === "tour") exitTourMode();
+          else if (allCommentsOpen && mode === "picking") {
             setAllCommentsOpen(false);
             setVersionHistoryOpen(false);
             portalRoot.querySelector(".tm-all-comments-trigger")?.focus();
@@ -2120,7 +2181,7 @@ export function Threadmark({
         return;
       }
       if (mode === "idle") return;
-      if (mode === "recording" || mode === "video-setup") return;
+      if (mode === "recording" || mode === "video-setup" || mode === "tour") return;
       // Tool keys switch away from Comment only from the toolbar's own state; anywhere else they
       // belong to the open composer or capture and pass through.
       if (["comment", "sketch", "interaction", "video"].includes(action)) {
@@ -2161,6 +2222,7 @@ export function Threadmark({
     videoOptions.enabled,
     versionHistoryOpen,
     allCommentsOpen,
+    exitTourMode,
   ]);
 
   useEffect(() => {
@@ -2802,6 +2864,105 @@ export function Threadmark({
     selectionsRef,
   ]);
 
+  // Tour mode: clicking an element adds a step. Prefer the nearest element with a stable id, so
+  // tagged inputs and wrappers can be tour targets too; the host never sees the click.
+  useEffect(() => {
+    if (mode !== "tour" || !shadowHost) return undefined;
+    let animationFrame = null;
+    let nonce = 0;
+    const isOverlayEvent = (event) => event.composedPath?.().some((node) => node === shadowHost || node?.hasAttribute?.("data-threadmark-tours"));
+    const candidateFor = (rawTarget) => {
+      const tagged = rawTarget?.closest?.(`[${THREADMARK_TARGET_ATTRIBUTE}]`);
+      if (tagged && !shadowHost.contains(tagged)) return tagged;
+      return findSelectableTarget(rawTarget, shadowHost, ignoredSelectors);
+    };
+    const onPointerMove = (event) => {
+      if (isOverlayEvent(event)) return;
+      const candidate = candidateFor(event.target);
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        setHoverElement(candidate);
+        setHoverRect(rectFromElement(candidate));
+      });
+    };
+    const block = (event) => {
+      if (!isOverlayEvent(event) && candidateFor(event.target)) suppressHostEvent(event);
+    };
+    const pick = (event) => {
+      if (isOverlayEvent(event)) return;
+      const candidate = candidateFor(event.target);
+      if (!candidate) return;
+      suppressHostEvent(event);
+      const stableId = candidate.getAttribute(THREADMARK_TARGET_ATTRIBUTE);
+      const descriptor = createTargetDescriptor(candidate, { route: sanitizeRoute(route || window.location.pathname || "/"), ignoredSelectors });
+      const usable = isValidThreadmarkTargetId(stableId) ? stableId : null;
+      nonce += 1;
+      setTourPick({
+        nonce: `${Date.now()}-${nonce}`,
+        stableId: usable,
+        ambiguous: usable ? resolveStableTarget(usable).status === "ambiguous" : false,
+        name: String(descriptor?.accessibleName || descriptor?.visibleText || "").replace(/\s+/g, " ").trim().slice(0, 80),
+        tag: candidate.tagName.toLowerCase(),
+      });
+    };
+    const onKeyDown = (event) => {
+      if ((event.key !== "Enter" && event.key !== " ") || event.repeat || isOverlayEvent(event)) return;
+      pick(event);
+    };
+    document.addEventListener("pointermove", onPointerMove, true);
+    for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup"]) document.addEventListener(type, block, true);
+    document.addEventListener("click", pick, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      document.removeEventListener("pointermove", onPointerMove, true);
+      for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup"]) document.removeEventListener(type, block, true);
+      document.removeEventListener("click", pick, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [mode, shadowHost, route, ignoredSelectorsKey]);
+
+  useEffect(() => {
+    if (mode === "tour" && tourDrafts && !tourDrafts.some((tour) => tour.id === tourActiveId) && tourDrafts.length) {
+      setTourActiveId(tourDrafts[0].id);
+    }
+  }, [mode, tourDrafts, tourActiveId]);
+
+  // "Try it": play the draft with the app's own <ThreadmarkTours> when it has one, or a temporary player.
+  useEffect(() => {
+    if (mode !== "tour-preview" || !tourPreview) return undefined;
+    let cancelled = false;
+    let attempts = 0;
+    const backToTour = () => {
+      if (cancelled) return;
+      setTourPreview(null);
+      modeRef.current = "tour";
+      setMode("tour");
+    };
+    const attempt = () => {
+      if (cancelled) return;
+      const player = getMountedTourPlayer();
+      if (!player?.preview) {
+        if (!tourPreview.needsPlayer) setTourPreview((current) => current && { ...current, needsPlayer: true });
+        if ((attempts += 1) < 40) window.setTimeout(attempt, 50);
+        else {
+          showNotice("The tour preview couldn’t start.");
+          backToTour();
+        }
+        return;
+      }
+      const result = player.preview(tourPreview.tour, { onEnd: backToTour });
+      if (!result.ok) {
+        showNotice("Fix the tour’s problems before trying it.");
+        backToTour();
+      }
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, tourPreview?.tour]);
+
   useEffect(() => {
     if (mode !== "picking" || !portalRoot) return undefined;
     const frame = requestAnimationFrame(() => {
@@ -3330,9 +3491,19 @@ export function Threadmark({
 
   if (!portalRoot) return null;
 
-  return createPortal(
+  const overlay = createPortal(
     <Overlay
       mode={mode}
+      onStartTour={startTourMode}
+      onExitTour={exitTourMode}
+      tourDrafts={tourDrafts || []}
+      tourActiveId={tourActiveId}
+      onTourDraftsChange={changeTourDrafts}
+      tourPick={tourPick}
+      onTourPreview={previewTour}
+      onStopTourPreview={stopTourPreview}
+      onTourSave={callbacks.onTourSave.current ? (tour, file) => callbacks.onTourSave.current(tour, file) : undefined}
+      onCopyText={copyText}
       projectAnnotations={projectAnnotations}
       reviewers={reviewers}
       onWorkflowChange={updateWorkflow}
@@ -3478,4 +3649,6 @@ export function Threadmark({
     />,
     portalRoot,
   );
+  // A temporary player for "Try it" when the app doesn't mount <ThreadmarkTours> itself.
+  return tourPreview?.needsPlayer ? <>{overlay}<ThreadmarkTours tours={[]} /></> : overlay;
 }
