@@ -1,4 +1,5 @@
-import { THREADMARK_TARGET_ATTRIBUTE, isValidThreadmarkTargetId } from "./core.js";
+import { resolveStableTarget } from "./resolveStableTarget.js";
+import { THREADMARK_TARGET_ATTRIBUTE, isValidThreadmarkTargetId } from "./targetId.js";
 
 const SENSITIVE_SELECTOR = [
   "input",
@@ -193,13 +194,6 @@ function targetFingerprintScore(element, target, ignoredSelectors) {
   return score;
 }
 
-function matchingStableElements(stableId, documentRef, ignoredSelectors) {
-  if (!stableId) return [];
-  return [...documentRef.querySelectorAll(`[${THREADMARK_TARGET_ATTRIBUTE}]`)]
-    .filter((element) => element.getAttribute(THREADMARK_TARGET_ATTRIBUTE) === stableId)
-    .filter((element) => restorationCandidateAllowed(element, ignoredSelectors));
-}
-
 export function restoreTargetDescriptor(
   target,
   { documentRef = document, ignoredSelectors = [] } = {},
@@ -218,14 +212,11 @@ export function restoreTargetDescriptor(
     return { status: "resolved", element, candidates: [element] };
   }
 
-  const stableId = target.locatorCandidates?.stableId;
-  const stableMatches = matchingStableElements(stableId, documentRef, ignoredSelectors);
-  if (stableMatches.length === 1) {
-    return { status: "resolved", element: stableMatches[0], candidates: stableMatches };
-  }
-  if (stableMatches.length > 1) {
-    return { status: "ambiguous", element: null, candidates: stableMatches };
-  }
+  const stable = resolveStableTarget(target.locatorCandidates?.stableId, {
+    documentRef,
+    accept: (element) => restorationCandidateAllowed(element, ignoredSelectors),
+  });
+  if (stable.status !== "missing") return stable;
 
   const domPath = target.locatorCandidates?.domPath;
   if (domPath) {

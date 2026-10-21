@@ -32,6 +32,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./tours": {
+      "types": "./dist/tours.d.ts",
+      "import": "./dist/tours.js"
+    },
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.ts",

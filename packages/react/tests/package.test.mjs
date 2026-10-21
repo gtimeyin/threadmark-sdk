@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { gzipSync } from "node:zlib";
 import test from "node:test";
 
 import React from "react";
@@ -53,18 +54,89 @@ test("declares a side-effect-free React package with external peer dependencies"
   assert.equal(packageJson.dependencies?.["lucide-react"], undefined);
 });
 
-test("all declared root export targets exist after the package build", async () => {
-  const rootExport = packageJson.exports?.["."];
-  assert.ok(rootExport, "package must declare its root export");
+test("all declared export targets exist after the package build", async () => {
+  assert.ok(packageJson.exports?.["."], "package must declare its root export");
+  assert.equal(packageJson.exports?.["./tours"]?.import, "./dist/tours.js");
+  assert.equal(packageJson.exports?.["./tours"]?.types, "./dist/tours.d.ts");
 
-  for (const [condition, relativePath] of Object.entries(rootExport)) {
-    await assert.doesNotReject(
-      access(resolvePackagePath(relativePath)),
-      `${condition} export does not exist: ${relativePath}`,
-    );
+  for (const [subpath, conditions] of Object.entries(packageJson.exports)) {
+    if (typeof conditions === "string") continue;
+    for (const [condition, relativePath] of Object.entries(conditions)) {
+      await assert.doesNotReject(
+        access(resolvePackagePath(relativePath)),
+        `${subpath} ${condition} export does not exist: ${relativePath}`,
+      );
+    }
   }
 
   await assert.doesNotReject(access(resolvePackagePath(packageJson.types)));
+});
+
+// Follows relative imports from a built file and returns every module reached plus its bare imports.
+async function collectBuiltModuleGraph(entryUrl) {
+  const files = new Map();
+  const bareImports = new Set();
+  const pending = [entryUrl];
+  const specifierPatterns = [/\bfrom\s*["']([^"']+)["']/g, /\bimport\s*["']([^"']+)["']/g, /\bimport\(\s*["']([^"']+)["']\s*\)/g];
+  while (pending.length) {
+    const url = pending.shift();
+    if (files.has(url.href)) continue;
+    const code = await readFile(url, "utf8");
+    files.set(url.href, code);
+    for (const pattern of specifierPatterns) {
+      for (const [, specifier] of code.matchAll(pattern)) {
+        if (specifier.startsWith(".")) pending.push(new URL(specifier, url));
+        else bareImports.add(specifier);
+      }
+    }
+  }
+  return { files, bareImports };
+}
+
+test("the tours entry exposes only the stable target helpers for now", async () => {
+  const tours = await import("threadmark-react/tours");
+  const sdk = await import("threadmark-react");
+
+  assert.deepEqual(Object.keys(tours).sort(), ["THREADMARK_TARGET_ATTRIBUTE", "threadmarkTarget"]);
+  assert.equal(tours.THREADMARK_TARGET_ATTRIBUTE, sdk.THREADMARK_TARGET_ATTRIBUTE);
+  assert.deepEqual(tours.threadmarkTarget(" checkout.submit "), sdk.threadmarkTarget("checkout.submit"));
+  assert.throws(() => tours.threadmarkTarget("not a valid id"), TypeError);
+
+  const declarations = await readFile(resolvePackagePath("./dist/tours.d.ts"), "utf8");
+  assert.match(declarations, /export declare function threadmarkTarget/);
+  assert.match(declarations, /export declare const THREADMARK_TARGET_ATTRIBUTE/);
+});
+
+test("the tours entry never reaches review, capture, or icon code and stays small", async () => {
+  const { files, bareImports } = await collectBuiltModuleGraph(resolvePackagePath("./dist/tours.js"));
+  const forbiddenPackages = ["rrweb", "modern-screenshot", "@solar-icons/react", "react-dom"];
+
+  for (const specifier of bareImports) {
+    assert.ok(
+      !forbiddenPackages.some((name) => specifier === name || specifier.startsWith(`${name}/`)),
+      `tours entry must not import ${specifier}`,
+    );
+  }
+  for (const [href, code] of files) {
+    assert.ok(!href.endsWith("/dist/index.js"), "tours entry must not import the review entry");
+    assert.doesNotMatch(code, /data-threadmark-root|getDisplayMedia|getUserMedia|domToBlob/, `${href} contains review or capture code`);
+  }
+
+  // Budget for the whole player once it lands; today this is only the stable-ID helpers.
+  const gzippedBytes = gzipSync(Buffer.from([...files.values()].join("\n"))).length;
+  assert.ok(gzippedBytes < 12 * 1024, `tours entry is ${gzippedBytes} bytes gzipped; budget is 12 KB`);
+});
+
+test("stable target helpers live in leaf modules the tours entry can share", async () => {
+  const [targetIdSource, resolverSource] = await Promise.all([
+    readFile(resolvePackagePath("./src/targetId.js"), "utf8"),
+    readFile(resolvePackagePath("./src/resolveStableTarget.js"), "utf8"),
+  ]);
+  assert.doesNotMatch(targetIdSource, /^\s*import\b/m);
+  assert.deepEqual(
+    [...resolverSource.matchAll(/^\s*import\b.*?from\s*["']([^"']+)["']/gm)].map(([, specifier]) => specifier),
+    ["./targetId.js"],
+  );
 });
 
 test("the built package exposes exactly the documented runtime API", async () => {

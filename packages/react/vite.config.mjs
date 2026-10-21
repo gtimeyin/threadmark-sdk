@@ -8,9 +8,13 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     lib: {
-      entry: fileURLToPath(new URL("./src/index.jsx", import.meta.url)),
+      // `tours` is the production-safe player entry; it must not import the review overlay.
+      entry: {
+        index: fileURLToPath(new URL("./src/index.jsx", import.meta.url)),
+        tours: fileURLToPath(new URL("./src/tours.js", import.meta.url)),
+      },
       formats: ["es"],
-      fileName: "index",
+      fileName: (_format, entryName) => `${entryName}.js`,
     },
     minify: false,
     sourcemap: true,
@@ -19,6 +23,8 @@ export default defineConfig({
       external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", /^@solar-icons\/react(?:\/|$)/, /^rrweb$/],
       output: {
         banner: '"use client";',
+        // Name the code both entries share, so the review bundle doesn't appear to import "tours".
+        manualChunks: (id) => (id.endsWith("/src/targetId.js") ? "targetId" : undefined),
       },
     },
   },
