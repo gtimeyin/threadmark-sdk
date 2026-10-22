@@ -474,7 +474,7 @@ export interface ThreadmarkProps {
    * contents; write it to your repository (for example through a dev-server endpoint). Await the write;
    * a rejection keeps the draft and tells the reviewer it didn't save.
    */
-  onTourSave?: (tour: ThreadmarkTourFile, file: { fileName: string; contents: string }) => void | Promise<void>;
+  onTourSave?: (tour: ThreadmarkTourFile, file: { fileName: string; contents: string }) => void | { path?: string } | Promise<void | { path?: string }>;
   onError?: (error: ThreadmarkError) => void;
 }
 
@@ -488,6 +488,17 @@ export type ThreadmarkTourFile = {
 };
 
 export declare function Threadmark(props: ThreadmarkProps): ReactPortal | ReactElement | null;
+
+/**
+ * Tour mode's "Save to code" through the threadmark-react/vite plugin: pass it as `onTourSave`.
+ * It sends a request only when Save to code is pressed, and only to this dev server.
+ * Resolves with the project-relative path it wrote; rejects with the plugin's reason when it refuses.
+ */
+export declare function saveTourToDevServer(
+  tour: ThreadmarkTourFile,
+  file: { fileName: string; contents: string },
+  options?: { endpoint?: string },
+): Promise<{ ok: true; path: string }>;
 export declare function threadmarkTarget(id: string): { "data-threadmark-id": string };
 export declare function isLocalHostname(hostname: string): boolean;
 export declare function matchesAllowedHost(hostname: string, allowedHosts?: readonly string[]): boolean;

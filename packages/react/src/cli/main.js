@@ -1,15 +1,10 @@
-import { readdir, readFile, stat } from "node:fs/promises";
-import { extname, join, relative, resolve, sep } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { checkTours, formatReport } from "./checkTours.js";
+import { displayPath as display, findProjectFiles } from "./files.js";
 
-const SKIPPED_DIRECTORIES = new Set([
-  "node_modules", ".git", "dist", "build", "out", ".next", ".nuxt", ".svelte-kit", ".turbo", ".vercel",
-  ".output", "coverage", ".cache", "storybook-static", "test-results", "playwright-report",
-]);
-const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte", ".astro", ".html", ".htm", ".mdx"]);
-const TOUR_FILE = /\.tour\.(json|js|mjs|ts|mts)$/;
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 
 const USAGE = `Usage: threadmark tours check [--root <dir>] [--json]
@@ -22,31 +17,11 @@ threadmarkTarget("id") or data-threadmark-id="id". Exits 1 when something needs 
   --json        Print the report as JSON.
 `;
 
-async function walk(root, directory, found) {
-  let entries;
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (!SKIPPED_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) await walk(root, path, found);
-    } else if (entry.isFile()) {
-      if (TOUR_FILE.test(entry.name)) found.tours.push(path);
-      else if (SOURCE_EXTENSIONS.has(extname(entry.name)) && !entry.name.endsWith(".d.ts")) found.sources.push(path);
-    }
-  }
-}
-
 async function loadTour(path) {
   if (path.endsWith(".json")) return JSON.parse(await readFile(path, "utf8"));
   const module = await import(pathToFileURL(path).href);
   return module.default ?? Object.values(module).find((value) => value && typeof value === "object" && Array.isArray(value.steps));
 }
-
-const display = (root, path) => relative(root, path).split(sep).join("/");
 
 /** Runs the CLI. Returns the exit code: 0 all good, 1 something needs fixing, 2 usage error. */
 export async function main(argv, { cwd = process.cwd(), stdout = process.stdout, stderr = process.stderr } = {}) {
@@ -74,10 +49,7 @@ export async function main(argv, { cwd = process.cwd(), stdout = process.stdout,
     return 2;
   }
 
-  const found = { tours: [], sources: [] };
-  await walk(root, root, found);
-  found.tours.sort();
-  found.sources.sort();
+  const found = await findProjectFiles(root);
 
   const tourFiles = await Promise.all(found.tours.map(async (path) => {
     const file = display(root, path);

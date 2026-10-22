@@ -136,6 +136,17 @@ test("the tours entry never reaches review, capture, or icon code", async () => 
   }
 });
 
+test("Node-only code (the CLI and the Vite plugin) never reaches the browser bundles", async () => {
+  for (const entry of ["./dist/index.js", "./dist/tours.js"]) {
+    const { files, bareImports } = await collectBuiltModuleGraph(resolvePackagePath(entry));
+    assert.deepEqual([...bareImports].filter((specifier) => specifier.startsWith("node:")), [], `${entry} imports Node built-ins`);
+    assert.ok(![...files.keys()].some((href) => /\/dist\/(cli|vite)\.js$/.test(href)), `${entry} reaches the CLI or Vite plugin`);
+  }
+  const vite = await import("threadmark-react/vite");
+  assert.deepEqual(Object.keys(vite).sort(), ["TOUR_SAVE_HEADER", "TOUR_SAVE_PATH", "saveTourRequest", "threadmarkTours"]);
+  assert.equal(vite.threadmarkTours().apply, "serve");
+});
+
 test("the package ships a threadmark bin that runs tours check against the built CLI", async (t) => {
   assert.equal(packageJson.bin?.threadmark, "./bin/threadmark.mjs");
   assert.ok(packageJson.files.includes("bin"));
@@ -194,6 +205,7 @@ test("the built package exposes exactly the documented runtime API", async () =>
     "isLocalHostname",
     "isThreadmarkEnabled",
     "matchesAllowedHost",
+    "saveTourToDevServer",
     "threadmarkTarget",
   ];
 
