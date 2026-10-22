@@ -14,6 +14,8 @@ export default defineConfig({
         tours: fileURLToPath(new URL("./src/tours.js", import.meta.url)),
         // Node-only `threadmark tours check`, run through bin/threadmark.mjs.
         cli: fileURLToPath(new URL("./src/cli/main.js", import.meta.url)),
+        // Node-only dev-server plugin for Tour mode's "Save to code".
+        vite: fileURLToPath(new URL("./src/vite/plugin.js", import.meta.url)),
       },
       formats: ["es"],
       fileName: (_format, entryName) => `${entryName}.js`,

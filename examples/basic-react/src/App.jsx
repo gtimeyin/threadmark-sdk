@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Threadmark, threadmarkTarget } from "threadmark-react";
+import { Threadmark, saveTourToDevServer, threadmarkTarget } from "threadmark-react";
 import { ThreadmarkTours, useThreadmarkTours } from "threadmark-react/tours";
 import { createFeedbackStore } from "./feedbackStore.js";
 import welcomeTour from "./tours/welcome.tour.json";
@@ -90,11 +90,13 @@ export function App() {
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [annotations, setAnnotations] = useState([]);
   const [status, setStatus] = useState("booting");
-  // Tours saved from Tour mode replace the bundled file for this session, so they play right away.
+  // Tour mode's "Save to code" writes the tour file through threadmark-react/vite; the new version also
+  // replaces the bundled one for this session, so it plays right away.
   const [tours, setTours] = useState([welcomeTour]);
   const saveTour = useCallback(async (tour, file) => {
+    const result = await saveTourToDevServer(tour, file);
     setTours((current) => [...current.filter((item) => item.id !== tour.id), tour]);
-    console.info(`[example] Tour mode saved ${file.fileName}:\n${file.contents}`);
+    return result;
   }, []);
   const [selectedTarget, setSelectedTarget] = useState("None yet");
   const [selectionSummary, setSelectionSummary] = useState("No active selection");

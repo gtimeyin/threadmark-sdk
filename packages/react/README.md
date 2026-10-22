@@ -245,22 +245,29 @@ Validate hand-written tours with `defineTour()`, which throws a `TourValidationE
 
 ### Build tours in Tour mode
 
-Pass your tour files to the review overlay as well, and the toolbar gains **Build a tour**:
+Pass your tour files to the review overlay as well, and the toolbar gains **Build a tour**. With Vite, add the dev-server plugin so **Save to code** writes files straight into your project:
+
+```js
+// vite.config.js
+import react from "@vitejs/plugin-react";
+import { threadmarkTours } from "threadmark-react/vite";
+
+export default defineConfig({ plugins: [react(), threadmarkTours()] });
+```
 
 ```jsx
-<Threadmark
-  tours={[welcome]}
-  onTourSave={async (tour, { fileName, contents }) => {
-    await fetch("/__dev/save-tour", { method: "POST", body: JSON.stringify({ fileName, contents }) });
-  }}
-/>
+import { Threadmark, saveTourToDevServer } from "threadmark-react";
+
+<Threadmark tours={[welcome]} onTourSave={saveTourToDevServer} />;
 ```
+
+The plugin only runs on the dev server (`apply: "serve"`), so production builds never include it. Saving updates the existing file with the same tour id wherever it lives, or creates `tours/<id>.tour.json` (change the folder with `threadmarkTours({ dir: "src/tours" })`). It accepts only same-origin requests carrying its own header, only valid tours whose id matches the file name, and only `<id>.tour.json` files inside the project, written atomically. Vite then reloads the app's tour import as usual. With another dev server, write your own `onTourSave`, or reuse `saveTourRequest` from `threadmark-react/vite` in its middleware.
 
 In Tour mode, clicking an element on the page adds a step that points at it; the host's own click handlers don't run. Elements without a stable id aren't added; the panel suggests an id and a `threadmarkTarget()` snippet to paste into your code first. The panel edits each step's title, text, style, and how it moves on, reorders and deletes steps, and sets who sees the tour and when. Numbered outlines show where the steps are on the current page.
 
 - **Try it** plays the draft with your app's `<ThreadmarkTours>` (or a temporary player if there isn't one). Nothing is saved or reported while it plays.
 - **Copy file** copies the tour as `.tour.json` contents.
-- **Save to code** appears when you pass `onTourSave`. Browsers can't write to your repository, so the callback does the writing, for example through a dev-server endpoint. Await it; if it rejects, the draft stays and the panel says it didn't save.
+- **Save to code** appears when you pass `onTourSave`. Browsers can't write to your repository, so the callback does the writing: `saveTourToDevServer` with the Vite plugin, or your own. It's awaited; if it resolves with `{ path }` the panel names the file it wrote, and if it rejects, the draft stays and the panel shows why it didn't save.
 
 To talk a step over, open it and choose **Comment on this step**. That opens the ordinary composer on the step's element, and the saved feedback carries `tourStep: { tourId, stepId }`, so it's stored, replied to, and resolved like any other comment through `onFeedbackCreate`. Each step shows how many open comments it has, and opening one shows its thread; Tour mode comes back when it closes.
 

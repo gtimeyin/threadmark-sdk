@@ -146,10 +146,11 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
   async function save() {
     setStatus("Saving…");
     try {
-      await onSave(tour, { fileName: tourFileName(tour), contents: serializeTour(tour) });
-      setStatus(`Saved ${tourFileName(tour)}.`);
-    } catch {
-      setStatus("Saving didn’t work. Your draft is still here; try again or copy the file.");
+      const result = await onSave(tour, { fileName: tourFileName(tour), contents: serializeTour(tour) });
+      setStatus(`Saved ${typeof result?.path === "string" ? result.path : tourFileName(tour)}.`);
+    } catch (error) {
+      const reason = typeof error?.message === "string" && error.message ? ` ${error.message}` : "";
+      setStatus(`Saving didn’t work.${reason} Your draft is still here; try again or copy the file.`);
     }
   }
 
