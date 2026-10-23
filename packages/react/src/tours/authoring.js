@@ -3,6 +3,7 @@
 // back exactly what a person would have written by hand.
 
 import { isValidThreadmarkTargetId } from "../targetId.js";
+import { stepPagesOf } from "./eligibility.js";
 import { validateTour } from "./schema.js";
 
 export const TOUR_SCHEMA_URL = "https://unpkg.com/threadmark-react/tour.schema.json";
@@ -35,12 +36,7 @@ function stepIds(tour) {
   return (tour.steps || []).map((step) => step.id);
 }
 
-/** The page each step is on, the same way the player works it out. */
-export function stepPagesOf(tour) {
-  const showToPath = tour.showTo?.path;
-  let page = showToPath && !showToPath.endsWith("*") ? showToPath : undefined;
-  return (tour.steps || []).map((step) => (page = step.page ?? page));
-}
+export { stepPagesOf };
 
 /**
  * Adds a step pointing at a stable target. The step only records `page` when it differs

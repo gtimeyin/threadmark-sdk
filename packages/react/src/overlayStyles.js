@@ -301,6 +301,8 @@ export const overlayStyles = `
   .tm-tour-note code, .tm-tour-file code { font-family: var(--tm-font-mono); font-size: 11px; }
   .tm-tour-footer { position: sticky; bottom: 0; margin-top: auto; display: grid; gap: 8px; padding: 12px 18px 14px; border-top: 1px solid var(--tm-hairline); background: rgba(251, 250, 246, .92); }
   .tm-tour-problems { margin: 0; padding: 8px 10px 8px 26px; border-radius: 8px; background: var(--tm-coral-tint); font-size: 12px; line-height: 1.45; }
+  .tm-tour-code-rule { padding-left: 10px; }
+  .tm-tour-code-rule code { font-family: var(--tm-font-mono); font-size: 11px; }
   .tm-tour-status { margin: 0; font-size: 12px; line-height: 1.45; color: var(--tm-forest); }
   .tm-tour-file { margin: 0; color: var(--tm-stone); text-align: right; }
   .tm-tour-mark { position: fixed; z-index: 30; border: 2px dashed var(--tm-forest); border-radius: 10px; pointer-events: none; }

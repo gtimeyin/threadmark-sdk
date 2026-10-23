@@ -162,6 +162,19 @@ test("Try it plays the draft in a temporary player and saves nothing", async ({ 
   expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("threadmark:tour")))).toEqual([]);
 });
 
+test("closing review during Try it ends the preview and its temporary player", async ({ page }) => {
+  await mountFixture(page, "?tours=1");
+  await page.locator(".tm-launcher").click();
+  await openTourMode(page);
+  await panel(page).getByRole("button", { name: "Try it" }).click();
+  await expect(page.locator("[data-threadmark-tours]").getByRole("dialog")).toBeVisible();
+
+  await page.keyboard.press("Control+Shift+F");
+  await expect(page.locator(".tm-launcher")).toBeVisible();
+  await expect(page.locator("[data-threadmark-tours]")).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Trying your tour" })).toHaveCount(0);
+});
+
 test("without onTourSave, Tour mode offers Copy file but not Save to code", async ({ page }) => {
   await mountFixture(page, "");
   await page.locator(".tm-launcher").click();

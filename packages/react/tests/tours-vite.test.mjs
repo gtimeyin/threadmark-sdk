@@ -107,3 +107,36 @@ test("the Vite plugin serves the endpoint in dev, and saveTourToDevServer talks 
   const crossSite = await fetch(`${base}${TOUR_SAVE_PATH}`, { method: "POST", headers: { origin: "https://evil.example", "x-threadmark-tours": "1" }, body: body() });
   assert.equal(crossSite.status, 403);
 });
+
+test("a tour written in code is never shadowed by a new JSON copy", async (t) => {
+  const root = await project({ "tours/welcome.tour.ts": 'export default defineTour({ id: "welcome", title: "Welcome", steps: [] });' });
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const result = await saveTourRequest({ method: "POST", headers, body: body(), root });
+  assert.equal(result.status, 409);
+  assert.match(result.body.error, /tours\/welcome\.tour\.ts/);
+  await assert.rejects(readFile(join(root, "tours/welcome.tour.json")));
+});
+
+test("the endpoint runs after Vite's host check, so DNS-rebinding requests never reach it", async (t) => {
+  const { request } = await import("node:http");
+  const root = await project({ "index.html": "<!doctype html><title>t</title>" });
+  const server = await createServer({ root, configFile: false, logLevel: "silent", plugins: [threadmarkTours()], server: { port: 0, strictPort: false } });
+  await server.listen();
+  t.after(async () => {
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const port = server.httpServer.address().port;
+  const status = await new Promise((resolveStatus, reject) => {
+    const outgoing = request({ host: "127.0.0.1", port, path: TOUR_SAVE_PATH, method: "POST", headers: {
+      host: "evil.example", origin: "http://evil.example", "x-threadmark-tours": "1", "content-type": "application/json",
+    } }, (incoming) => {
+      incoming.resume();
+      resolveStatus(incoming.statusCode);
+    });
+    outgoing.on("error", reject);
+    outgoing.end(body());
+  });
+  assert.equal(status, 403);
+  await assert.rejects(readFile(join(root, "tours/welcome.tour.json")));
+});

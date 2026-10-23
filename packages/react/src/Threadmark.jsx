@@ -450,6 +450,7 @@ export function Threadmark({
   const [tourActiveId, setTourActiveId] = useState(null);
   const [tourPick, setTourPick] = useState(null);
   const [tourPreview, setTourPreview] = useState(null);
+  const [tourCodeRules, setTourCodeRules] = useState([]);
   // Set while commenting on a tour step from Tour mode: the step to link and where to return.
   const tourCommentRef = useRef(null);
   const [hoverElement, setHoverElement] = useState(null);
@@ -936,6 +937,10 @@ export function Threadmark({
   }, [portalRoot]);
 
   const closeReview = useCallback(() => {
+    // A tour preview belongs to Tour mode; closing review ends it and its temporary player.
+    if (modeRef.current === "tour-preview") getMountedTourPlayer()?.stopPreview?.();
+    setTourPreview(null);
+    tourCommentRef.current = null;
     replayRecorderRef.current?.release?.();
     invalidateSubmission();
     modeRef.current = "idle";
@@ -981,6 +986,11 @@ export function Threadmark({
     setTourDrafts((current) => current ?? (Array.isArray(toursRef.current)
       ? toursRef.current.filter((tour) => tour && typeof tour === "object").map((tour) => JSON.parse(JSON.stringify(tour)))
       : []));
+    // Rules written as functions (`showTo.when` in defineTour files) can't be saved as JSON; Tour mode
+    // keeps those tours out of Save to code and Copy file so the rule is never silently dropped.
+    setTourCodeRules(Array.isArray(toursRef.current)
+      ? toursRef.current.filter((tour) => typeof tour?.showTo?.when === "function").map((tour) => tour.id)
+      : []);
     modeRef.current = "tour";
     setMode("tour");
     setHoverElement(null);
@@ -3575,6 +3585,7 @@ export function Threadmark({
       onTourSave={callbacks.onTourSave.current ? (tour, file) => callbacks.onTourSave.current(tour, file) : undefined}
       onCopyText={copyText}
       tourStepComments={tourStepComments}
+      tourCodeRules={tourCodeRules}
       onCommentOnTourStep={commentOnTourStep}
       onOpenTourComment={(id) => {
         tourCommentRef.current = { returnToTour: true };

@@ -49,22 +49,25 @@ function startFor(kind, previous) {
 /** Numbered marks on the page for the steps of the tour being edited. */
 function useStepMarks(tour, route) {
   const [marks, setMarks] = useState([]);
+  // Only what the marks show: editing a title or text doesn't re-subscribe the page observers.
+  const pages = tour ? stepPagesOf(tour) : [];
+  const marksKey = tour ? JSON.stringify(tour.steps.map((step, index) => [step.id, step.target, pages[index]])) : "";
   useEffect(() => {
-    if (!tour) {
+    if (!marksKey) {
       setMarks([]);
       return undefined;
     }
     let frame = 0;
-    const pages = stepPagesOf(tour);
+    const steps = JSON.parse(marksKey);
     const update = () => {
       frame = 0;
-      setMarks(tour.steps.flatMap((step, index) => {
-        if (pages[index] && !pathMatches(pages[index], route)) return [];
-        const found = resolveStableTarget(step.target);
+      setMarks(steps.flatMap(([id, target, page], index) => {
+        if (page && !pathMatches(page, route)) return [];
+        const found = resolveStableTarget(target);
         if (found.status !== "resolved") return [];
         const rect = found.element.getBoundingClientRect();
         if (!rect.width && !rect.height) return [];
-        return [{ id: step.id, number: index + 1, left: rect.left, top: rect.top, width: rect.width, height: rect.height }];
+        return [{ id, number: index + 1, left: rect.left, top: rect.top, width: rect.width, height: rect.height }];
       }));
     };
     const schedule = () => {
@@ -81,7 +84,7 @@ function useStepMarks(tour, route) {
       observer.disconnect();
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, [tour, route]);
+  }, [marksKey, route]);
   return marks;
 }
 
@@ -89,7 +92,7 @@ function useStepMarks(tour, route) {
  * Tour mode's panel: pick a tour, add steps by clicking the page, edit them, set who sees the tour,
  * try it, and save it back to code. Drafts live in the overlay until saved; nothing is sent anywhere.
  */
-export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, onSave, onCopy, onClose, stepComments = {}, onCommentOnStep, onOpenComment }) {
+export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, onSave, onCopy, onClose, stepComments = {}, onCommentOnStep, onOpenComment, codeRuleTourIds = [] }) {
   const [tab, setTab] = useState("steps");
   const [openStepId, setOpenStepId] = useState(null);
   const [untagged, setUntagged] = useState(null);
@@ -99,6 +102,7 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
 
   const tour = drafts.find((item) => item.id === activeId) || null;
   const problems = tour ? tourProblems(tour) : [];
+  const hasCodeRule = Boolean(tour && codeRuleTourIds.includes(tour.id));
   const marks = useStepMarks(tour, route);
 
   const commit = (nextTour, nextActive = nextTour.id) => {
@@ -343,11 +347,14 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
                   {problems.slice(0, 3).map((problem) => <li key={problem.path}>{problem.message}{problem.path !== "steps" ? ` (${problem.path})` : ""}</li>)}
                 </ul>
               )}
+              {hasCodeRule && (
+                <p className="tm-tour-problems tm-tour-code-rule">This tour has a <code>showTo.when</code> rule written in code, which a tour file can’t hold. Edit it in its file; saving from here would drop the rule.</p>
+              )}
               {status && <p className="tm-tour-status" role="status">{status}</p>}
               <div className="tm-tour-row">
                 <button type="button" className="tm-tour-secondary" disabled={problems.length > 0} onClick={() => onPreview(tour)}><Play {...iconProps} />Try it</button>
-                <button type="button" className="tm-tour-secondary" onClick={copy}><ClipboardCopy {...iconProps} />Copy file</button>
-                {onSave && <button type="button" className="tm-tour-primary" disabled={problems.length > 0} onClick={save}><Diskette {...iconProps} />Save to code</button>}
+                <button type="button" className="tm-tour-secondary" disabled={hasCodeRule} onClick={copy}><ClipboardCopy {...iconProps} />Copy file</button>
+                {onSave && <button type="button" className="tm-tour-primary" disabled={problems.length > 0 || hasCodeRule} onClick={save}><Diskette {...iconProps} />Save to code</button>}
               </div>
               <p className="tm-tour-file"><code>{tourFileName(tour)}</code></p>
             </div>
