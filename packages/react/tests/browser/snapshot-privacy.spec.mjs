@@ -601,14 +601,14 @@ test("the toolbar groups feedback tools and other actions into keyboard-friendly
   await tools.click();
   const toolMenu = page.getByRole("menu", { name: "Feedback tools" });
   await expect(toolMenu.getByRole("menuitemradio")).toHaveText([
-    /Comment/, /Sketch on a screenshot/, /Record an interaction/, /Record a video/,
+    /Comment/, /Sketch on a screenshot/, /Record an interaction/, /Record a video/, /Build a tour/,
   ]);
   await expect(toolMenu.getByRole("menuitemradio", { name: /^Comment/ })).toBeFocused();
   await expect(toolMenu.getByRole("menuitemradio", { name: /^Comment/ })).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("ArrowDown");
   await expect(toolMenu.getByRole("menuitemradio", { name: /^Sketch/ })).toBeFocused();
   await page.keyboard.press("End");
-  await expect(toolMenu.getByRole("menuitemradio", { name: /^Record a video/ })).toBeFocused();
+  await expect(toolMenu.getByRole("menuitemradio", { name: /^Build a tour/ })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(toolMenu).toHaveCount(0);
   await expect(tools).toBeFocused();

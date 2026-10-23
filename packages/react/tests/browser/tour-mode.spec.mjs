@@ -45,6 +45,12 @@ async function mountFixture(page, query) {
 
 const panel = (page) => page.getByRole("complementary", { name: "Tour" });
 
+// Tour mode lives in the toolbar's Feedback tools menu.
+async function openTourMode(page) {
+  await page.getByRole("button", { name: "Feedback tools: Comment" }).click();
+  await page.getByRole("menuitemradio", { name: /Build a tour/ }).click();
+}
+
 async function fill(page, locator, value) {
   await locator.evaluate((element, text) => {
     const proto = element.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -56,7 +62,7 @@ async function fill(page, locator, value) {
 test("Tour mode edits a tour by clicking the page, then saves it to code", async ({ page }) => {
   const pageErrors = await mountFixture(page, "?tours=1");
   await page.locator(".tm-launcher").click();
-  await page.getByRole("button", { name: "Build a tour" }).click();
+  await openTourMode(page);
 
   await expect(panel(page)).toBeVisible();
   await expect(panel(page).getByRole("combobox", { name: "Editing" })).toHaveValue("fixture-tour");
@@ -100,7 +106,7 @@ test("Tour mode edits a tour by clicking the page, then saves it to code", async
   await page.keyboard.press("Escape");
   await expect(panel(page)).toHaveCount(0);
   await expect(page.getByRole("toolbar", { name: "Threadmark annotation tools" })).toBeVisible();
-  await page.getByRole("button", { name: "Build a tour" }).click();
+  await openTourMode(page);
   await expect(panel(page).locator(".tm-tour-step")).toHaveCount(2);
   expect(pageErrors).toEqual([]);
 });
@@ -108,7 +114,7 @@ test("Tour mode edits a tour by clicking the page, then saves it to code", async
 test("comments on a step are linked to it, counted in the step list, and return to Tour mode", async ({ page }) => {
   const pageErrors = await mountFixture(page, "?tours=1");
   await page.locator(".tm-launcher").click();
-  await page.getByRole("button", { name: "Build a tour" }).click();
+  await openTourMode(page);
   await panel(page).locator(".tm-tour-step-summary").first().click();
   await panel(page).getByRole("button", { name: "Comment on this step" }).click();
 
@@ -142,7 +148,7 @@ test("comments on a step are linked to it, counted in the step list, and return 
 test("Try it plays the draft in a temporary player and saves nothing", async ({ page }) => {
   await mountFixture(page, "?tours=1");
   await page.locator(".tm-launcher").click();
-  await page.getByRole("button", { name: "Build a tour" }).click();
+  await openTourMode(page);
   await panel(page).getByRole("button", { name: "Try it" }).click();
 
   await expect(page.getByRole("status").filter({ hasText: "Trying your tour. Nothing is saved." })).toBeVisible();
@@ -159,7 +165,7 @@ test("Try it plays the draft in a temporary player and saves nothing", async ({ 
 test("without onTourSave, Tour mode offers Copy file but not Save to code", async ({ page }) => {
   await mountFixture(page, "");
   await page.locator(".tm-launcher").click();
-  await page.getByRole("button", { name: "Build a tour" }).click();
+  await openTourMode(page);
   await expect(panel(page).getByText("Click anything on the page to start a tour")).toBeVisible();
   await page.locator("#custom-target").click();
   await expect(panel(page).locator(".tm-tour-step")).toHaveCount(1);
