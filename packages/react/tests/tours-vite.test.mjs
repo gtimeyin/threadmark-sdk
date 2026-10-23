@@ -84,13 +84,13 @@ test("the Vite plugin serves the endpoint in dev, and saveTourToDevServer talks 
   const root = await project({ "index.html": "<!doctype html><title>t</title>" });
   const plugin = threadmarkTours();
   assert.equal(plugin.apply, "serve");
-  const server = await createServer({ root, configFile: false, logLevel: "silent", plugins: [plugin], server: { port: 0, strictPort: false } });
+  const server = await createServer({ root, configFile: false, logLevel: "silent", plugins: [plugin], server: { host: "127.0.0.1", port: 0, strictPort: false } });
   await server.listen();
   t.after(async () => {
     await server.close();
     await rm(root, { recursive: true, force: true });
   });
-  const base = `http://localhost:${server.httpServer.address().port}`;
+  const base = `http://127.0.0.1:${server.httpServer.address().port}`;
 
   const result = await saveTourToDevServer(tour, { fileName: "tours/welcome.tour.json", contents: serializeTour(tour) }, { endpoint: `${base}${TOUR_SAVE_PATH}` });
   assert.deepEqual(result, { ok: true, path: "tours/welcome.tour.json" });
@@ -120,7 +120,7 @@ test("a tour written in code is never shadowed by a new JSON copy", async (t) =>
 test("the endpoint runs after Vite's host check, so DNS-rebinding requests never reach it", async (t) => {
   const { request } = await import("node:http");
   const root = await project({ "index.html": "<!doctype html><title>t</title>" });
-  const server = await createServer({ root, configFile: false, logLevel: "silent", plugins: [threadmarkTours()], server: { port: 0, strictPort: false } });
+  const server = await createServer({ root, configFile: false, logLevel: "silent", plugins: [threadmarkTours()], server: { host: "127.0.0.1", port: 0, strictPort: false } });
   await server.listen();
   t.after(async () => {
     await server.close();

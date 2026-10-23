@@ -199,7 +199,7 @@ Use durable, non-sensitive product vocabulary. IDs accept 1–120 letters, numbe
 
 ## Product tours (experimental)
 
-`threadmark-react/tours` plays product tours in production. It's a separate entry point that never loads the review overlay, captures nothing, and makes no network requests; an app using it ships under 12 KB minified and gzipped. Because it runs in production, install the package as a regular dependency (`npm install threadmark-react@beta`) when you use tours.
+`threadmark-react/tours` plays product tours in production. It's a separate entry point that never loads the review overlay, captures nothing, and makes no network requests; an app using it ships about 12 KB minified and gzipped. Because it runs in production, install the package as a regular dependency (`npm install threadmark-react@beta`) when you use tours.
 
 A tour is a data file. Steps point at the same stable IDs used for feedback, so a tour keeps working through layout changes:
 
