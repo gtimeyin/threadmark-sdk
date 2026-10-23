@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "re
 import { createPortal } from "react-dom";
 
 import { resolveStableTarget } from "../resolveStableTarget.js";
-import { DEFAULT_TOUR_RULES, pathMatches, pickTour } from "./eligibility.js";
+import { DEFAULT_TOUR_RULES, pathMatches, pickTour, stepPagesOf as stepPages } from "./eligibility.js";
 import { PHONE_MAX_WIDTH, placeCard, scrollForSheet } from "./placement.js";
 import {
   TERMINAL_STATUSES,
@@ -68,11 +68,6 @@ const isPhoneViewport = () => window.innerWidth <= PHONE_MAX_WIDTH;
 const motion = () => (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 const isLocalDevelopment = () => typeof window !== "undefined" && /^(localhost|127\.0\.0\.1|\[::1\]|.+\.localhost)$/.test(window.location.hostname);
 
-/** Steps without their own page continue on the previous step's page; the first uses showTo.path when it's exact. */
-function stepPages(tour) {
-  let page = tour.showTo.path && !tour.showTo.path.endsWith("*") ? tour.showTo.path : undefined;
-  return tour.steps.map((step) => (page = step.page ?? page));
-}
 
 function effectiveStep(step, phone) {
   if (!phone || !step.phone) return step;
@@ -133,9 +128,21 @@ export function ThreadmarkTours({
   const store = useMemo(() => createLocalProgressStore(typeof window === "undefined" ? undefined : window.localStorage), []);
   const tourRules = useMemo(() => normalizeRules(rules), [rules?.perVisit, rules?.gap]);
 
-  // Tours are usually written inline, so key them by content rather than array identity.
+  // Tours are usually written inline, so key them by content rather than array identity. Functions
+  // (`showTo.when`) aren't part of the key; the latest one is looked up each time eligibility runs.
   const toursKey = JSON.stringify(tours);
-  const validated = useMemo(() => (Array.isArray(tours) ? tours : []).map((input) => ({ input, result: validateTour(input) })), [toursKey]);
+  const latestWhen = useRef({});
+  latestWhen.current = Object.fromEntries((Array.isArray(tours) ? tours : [])
+    .filter((input) => typeof input?.showTo?.when === "function")
+    .map((input) => [input.id, input.showTo.when]));
+  const validated = useMemo(() => (Array.isArray(tours) ? tours : []).map((input) => {
+    const result = validateTour(input);
+    if (result.ok && result.tour.showTo.when) {
+      const fallback = result.tour.showTo.when;
+      result.tour.showTo.when = (person) => (latestWhen.current[result.tour.id] || fallback)(person);
+    }
+    return { input, result };
+  }), [toursKey]);
   const playable = useMemo(() => {
     const seen = new Set();
     return validated.filter(({ result }) => result.ok && !seen.has(result.tour.id) && seen.add(result.tour.id)).map(({ result }) => result.tour);
@@ -144,6 +151,9 @@ export function ThreadmarkTours({
 
   // A preview (Tour mode's "Try it yourself") plays a draft that isn't in `tours`.
   const previewRef = useRef(null);
+  // After a preview, page-load tours wait until the page changes, so stopping a preview never
+  // drops the reviewer straight into a real tour.
+  const previewHoldRef = useRef(null);
   const tourFor = (current) => (current?.preview ? previewRef.current?.tour : current ? byId.get(current.tourId) : null) || null;
   const tour = tourFor(run);
   const pages = useMemo(() => (tour ? stepPages(tour) : []), [tour]);
@@ -202,8 +212,9 @@ export function ThreadmarkTours({
     returnFocusRef.current = focused && focused !== mount?.host && !mount?.host.contains(focused) ? focused : null;
     if (!preview) rememberVisit(nextTour.id);
     keyRef.current += 1;
-    setRun({ tourId: nextTour.id, index, mode, key: keyRef.current, preview });
-    latest.current.run = { tourId: nextTour.id, preview };
+    const nextRun = { tourId: nextTour.id, index, mode, key: keyRef.current, preview };
+    setRun(nextRun);
+    latest.current.run = nextRun;
     if (preview) {
       previewRef.current.record = createProgressRecord(nextTour.id, undefined, Date.now());
       return;
@@ -256,7 +267,9 @@ export function ThreadmarkTours({
       go(nextPage);
     }
     keyRef.current += 1;
-    setRun({ ...current, index, mode: "step", key: keyRef.current });
+    const nextRun = { ...current, index, mode: "step", key: keyRef.current };
+    setRun(nextRun);
+    latest.current.run = nextRun;
   }
 
   latest.current = {
@@ -348,6 +361,7 @@ export function ThreadmarkTours({
       if (!result.ok) return { ok: false, errors: result.errors };
       if (latest.current.run) finish("paused");
       previewRef.current = { tour: result.tour, onEnd };
+      previewHoldRef.current = latest.current.path;
       begin(result.tour, { preview: true });
       return { ok: true, errors: [] };
     },
@@ -433,6 +447,10 @@ export function ThreadmarkTours({
   // Start a tour on page load (after its optional wait), one at a time.
   useEffect(() => {
     if (run || !recordsReady || !path || !mount) return undefined;
+    if (previewHoldRef.current) {
+      if (previewHoldRef.current === path) return undefined;
+      previewHoldRef.current = null;
+    }
     const context = { path, device: phone ? "phone" : "desktop", user: latest.current.user, now: Date.now() };
     const picked = pickTour(playable, context, { records, shownThisVisit: readVisit(), rules: tourRules, trigger: { kind: "pageLoad" } });
     if (!picked) return undefined;

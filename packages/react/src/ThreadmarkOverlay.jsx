@@ -1578,6 +1578,7 @@ function Overlay({
   onTourSave,
   onCopyText,
   tourStepComments,
+  tourCodeRules,
   onCommentOnTourStep,
   onOpenTourComment,
   projectAnnotations,
@@ -2140,6 +2141,7 @@ function Overlay({
             onCopy={onCopyText}
             onClose={onExitTour}
             stepComments={tourStepComments}
+            codeRuleTourIds={tourCodeRules}
             onCommentOnStep={onCommentOnTourStep}
             onOpenComment={onOpenTourComment}
           />

@@ -23,12 +23,21 @@ function sameOrigin(headers) {
   }
 }
 
-/** The existing file for a tour id, if any, so saving updates it in place instead of adding a copy. */
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The existing file for a tour id, if any, so saving updates it in place instead of adding a copy.
+ * Tours written in code (`.tour.js` / `.tour.ts`) are found too, so they're never shadowed by a new JSON copy.
+ */
 async function existingTourFile(root, id) {
   const { tours } = await findProjectFiles(root, { sources: false });
-  for (const path of tours.filter((candidate) => candidate.endsWith(".tour.json"))) {
+  const idInCode = new RegExp(`\\bid\\s*:\\s*(["'\`])${escapeRegExp(id)}\\1`);
+  for (const path of tours) {
     try {
-      if (JSON.parse(await readFile(path, "utf8"))?.id === id) return path;
+      const text = await readFile(path, "utf8");
+      if (path.endsWith(".tour.json") ? JSON.parse(text)?.id === id : idInCode.test(text)) {
+        return { path, inCode: !path.endsWith(".tour.json") };
+      }
     } catch {
       // A broken file can't be the one being saved; `threadmark tours check` reports it.
     }
@@ -70,7 +79,11 @@ export async function saveTourRequest({ method, headers = {}, body, root, dir = 
   if (tour.id !== id) return reply(400, { ok: false, error: `The file name says "${id}" but the tour's id is "${tour.id}".` });
 
   const projectRoot = resolve(root);
-  const target = (await existingTourFile(projectRoot, id)) || join(projectRoot, dir, `${id}.tour.json`);
+  const existing = await existingTourFile(projectRoot, id);
+  if (existing?.inCode) {
+    return reply(409, { ok: false, error: `This tour is written in code in ${displayPath(projectRoot, existing.path)}. Edit it there, or copy the file instead.` });
+  }
+  const target = existing?.path || join(projectRoot, dir, `${id}.tour.json`);
   const inside = relative(projectRoot, target);
   if (!inside || inside.startsWith("..") || inside.split(sep).includes("..") || resolve(projectRoot, inside) !== target) {
     return reply(400, { ok: false, error: "Tour files must be saved inside the project." });
@@ -113,8 +126,10 @@ export function threadmarkTours({ dir = "tours" } = {}) {
     configResolved(config) {
       root = config.root;
     },
+    // Returning a function registers the endpoint after Vite's own middlewares, so Vite's host check
+    // (`server.allowedHosts`, which stops DNS-rebinding pages) runs before any file is written.
     configureServer(server) {
-      server.middlewares.use(TOUR_SAVE_PATH, async (request, response) => {
+      return () => server.middlewares.use(TOUR_SAVE_PATH, async (request, response) => {
         let result;
         try {
           const body = await readBody(request);

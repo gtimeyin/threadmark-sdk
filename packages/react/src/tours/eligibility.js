@@ -2,6 +2,13 @@ import { TERMINAL_STATUSES } from "./progress.js";
 
 export const DEFAULT_TOUR_RULES = Object.freeze({ perVisit: 1, gapMs: 86_400_000 });
 
+/** The page each step is on: its own `page`, else the previous step's, starting from an exact `showTo.path`. */
+export function stepPagesOf(tour) {
+  const showToPath = tour?.showTo?.path;
+  let page = showToPath && !showToPath.endsWith("*") ? showToPath : undefined;
+  return (tour?.steps || []).map((step) => (page = step?.page ?? page));
+}
+
 export function pathMatches(pattern, path) {
   if (!pattern) return true;
   return pattern.endsWith("*") ? path.startsWith(pattern.slice(0, -1)) : path === pattern;
