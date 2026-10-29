@@ -743,3 +743,26 @@ Solar Linear icons by [480 Design](https://www.figma.com/community/file/11668315
 ### Capture environment
 
 New comments include optional `feedback.captureEnvironment`: coarse browser/version, operating system, device category, viewport/pixel ratio, online status and available browser connection estimates. No raw user agent, IP address, device model, connection name or high-entropy browser hints are collected. Connection estimates are approximate and may be absent. Metadata is browser-reported context, never an authorization signal. Edits and hydration retain the original context; older comments remain without it. Consumer-managed stores should preserve this field with the original capture data.
+
+### Saved-comment restoration performance
+
+Hydrated records are normalized without resolving the DOM. A persistent scheduler matches new or
+updated comment IDs in roughly 8 ms slices and shares text, visibility, name and candidate indexes
+within a pass. Missing targets receive conservative location suggestions in idle slices; opening a
+thread or requesting a location check computes its suggestion immediately. Suggestions still require
+reviewer confirmation before a comment is repinned.
+
+Body mutations use a trailing 200 ms debounce. Resolved targets are matched again only when their
+subtree changes, an ancestor's relevant attributes change, their element disconnects, or a changed node
+adds/removes the same stable ID (to preserve uniqueness checks). Unresolved
+comments are reconsidered after other page mutations. Scroll, resize and target resize only update
+pin positions. Threadmark's overlay and ignored subtrees do not trigger matching.
+
+Run `npm run benchmark:restoration` from the repository root. The Chromium benchmark builds a
+1,600-element page with 60 comments, compares results with the beta.11 implementation at commit
+`4ce77ac`, checks incremental invalidation and hydration, and prints exact-matching time, deferred
+suggestion time and the longest slice. It requires the repository's Git history and Playwright's
+Chromium installation (`npx playwright install chromium`). Performance numbers depend on the machine;
+the fixture checks a 150 ms total restoration budget, 50 ms maximum slice and 10 ms unrelated-mutation
+matching budget. This changes scheduling only: fingerprint thresholds, suggestion candidate limits,
+privacy exclusions and confirmation requirements are unchanged.

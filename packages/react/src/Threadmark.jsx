@@ -33,6 +33,8 @@ import {
   interactionTargetKey,
 } from "./ThreadmarkOverlay.jsx";
 import {
+  createRestorationContext,
+  suggestChangedTarget,
   createRegionTargetDescriptor,
   createTargetDescriptor,
   createTextTargetDescriptor,
@@ -43,6 +45,7 @@ import {
   restoreTargetDescriptor,
   restoreTextTargetDescriptor,
 } from "./target.js";
+import { createRestorationScheduler } from "./restorationScheduler.js";
 import { normalizePageVersions } from "./versionHistory.js";
 import { normalizeNextSteps } from "./nextSteps.js";
 import { resolveStableTarget } from "./resolveStableTarget.js";
@@ -228,7 +231,7 @@ function recordToAnnotation(record) {
           ? { kind: "text", range: null }
           : {
             kind: captureKind,
-            elements: targets.map(resolveTargetElement).filter(Boolean),
+            elements: [],
             interaction: captureKind === "interaction" ? payload.interaction : null,
             video: captureKind === "video" ? payload.video : null,
           };
@@ -275,7 +278,7 @@ function annotationTargets(payload) {
  * - missing (ghost): nothing matches; shown faded at its last known page position when one was recorded.
  * - ambiguous: several elements match equally, so Threadmark does not guess.
  */
-function assessAnnotation(annotation, ignoredSelectors = [], buildId) {
+function assessAnnotation(annotation, ignoredSelectors = [], buildId, context = createRestorationContext(), deferSuggestions = false) {
   const payload = annotation?.payload;
   const targets = annotationTargets(payload);
   const captureKind = payload?.pin ? "element" : payload?.captureKind || "element";
@@ -294,8 +297,8 @@ function assessAnnotation(annotation, ignoredSelectors = [], buildId) {
 
   const results = targets.map((target) => (
     captureKind === "text"
-      ? restoreTextTargetDescriptor(target, { documentRef: document, ignoredSelectors })
-      : restoreTargetDescriptor(target, { documentRef: document, ignoredSelectors })
+      ? restoreTextTargetDescriptor(target, { documentRef: document, ignoredSelectors, context, deferSuggestions })
+      : restoreTargetDescriptor(target, { documentRef: document, ignoredSelectors, context, deferSuggestions })
   ));
   const resolvedCount = results.filter((result) => result.status === "resolved").length;
   const missingIndexes = results
@@ -318,13 +321,26 @@ function assessAnnotation(annotation, ignoredSelectors = [], buildId) {
     status,
     ghost: status === "missing",
     suggestion,
-    suggestionLabel: suggestion ? describeTargetElement(suggestion, ignoredSelectors) : "",
+    suggestionLabel: suggestion ? describeTargetElement(suggestion, ignoredSelectors, context) : "",
     resolvedCount,
     total: results.length,
     missingIndexes,
     ambiguousIndexes,
     results,
   });
+}
+
+// Deferred suggestions reuse the exact results; they never rerun exact matching.
+function suggestAnnotation(annotation, restoration, ignoredSelectors, context) {
+  if (restoration.status !== "missing") return restoration;
+  const targets = annotationTargets(annotation.payload);
+  const results = restoration.results.map((result, index) => result.status === "missing"
+    ? { ...result, suggestion: suggestChangedTarget(targets[index], document, ignoredSelectors, context) }
+    : result);
+  const suggestion = [...results].reverse().find(result => result.suggestion?.isConnected)?.suggestion || null;
+  return positionRestoration(annotation, { ...restoration, results, suggestion,
+    status: suggestion ? "changed" : "missing", ghost: !suggestion,
+    suggestionLabel: suggestion ? describeTargetElement(suggestion, ignoredSelectors, context) : "" });
 }
 
 /** Recomputes only the on-screen rectangle, so scrolling does not rerun target matching. */
@@ -472,7 +488,7 @@ export function Threadmark({
   const [annotations, setAnnotations] = useState([]);
   const [annotationRects, setAnnotationRects] = useState({});
   const [annotationRestorations, setAnnotationRestorations] = useState({});
-  const [restorationVersion, setRestorationVersion] = useState(0);
+  const restorationSchedulerRef = useRef(null);
   const [observedLocation, setObservedLocation] = useState("");
   const [markersHidden, setMarkersHidden] = useState(false);
   const [clearArmed, setClearArmed] = useState(false);
@@ -1195,6 +1211,7 @@ export function Threadmark({
   const editAnnotation = useCallback((id) => {
     const annotation = annotationsRef.current.find((item) => item.id === id);
     if (!annotation) return;
+    restorationSchedulerRef.current?.recheck(id);
     clearCapture();
     replyDraftRef.current = null;
     editDraftRef.current = null;
@@ -1254,7 +1271,7 @@ export function Threadmark({
 
   const recheckAnnotation = useCallback((id) => {
     if (!annotationsRef.current.some((annotation) => annotation.id === id)) return;
-    setRestorationVersion((current) => current + 1);
+    restorationSchedulerRef.current?.recheck(id);
     showNotice("Target checked again");
   }, [annotationsRef, showNotice]);
 
@@ -2429,66 +2446,29 @@ export function Threadmark({
     };
   }, [interactionSelection?.id]);
 
+  // Keep the scheduler alive across host polling and comment additions. Only changed revisions match again.
+  const restorationKey = JSON.stringify(annotations.map(item => [item.id, item.payload.updatedAt]));
   useEffect(() => {
-    if (!annotations.length) {
-      setAnnotationRects({});
-      setAnnotationRestorations({});
-      return undefined;
-    }
-    let frame = null;
-    let assessed = null;
-    let dirty = true;
-    // Anything but a scroll reruns matching; a scroll only moves markers.
-    const refresh = (event) => {
-      if (event?.type !== "scroll") dirty = true;
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const reposition = !dirty && Boolean(assessed);
-        dirty = false;
-        assessed = reposition
-          ? assessed.map(([id, restoration]) => [id, positionRestoration(annotations.find((item) => item.id === id), restoration)])
-          : annotations.map((annotation) => [
-            annotation.id,
-            assessAnnotation(annotation, ignoredSelectors, buildId),
-          ]);
-        setAnnotationRestorations(Object.fromEntries(assessed));
-        setAnnotationRects(Object.fromEntries(
-          assessed.filter(([, restoration]) => restoration.rect)
-            .map(([id, restoration]) => [id, restoration.rect]),
-        ));
-        setObservedLocation((current) => current === window.location.href ? current : window.location.href);
-      });
-    };
-    refresh();
-    window.addEventListener("resize", refresh);
-    window.addEventListener("scroll", refresh, { capture: true, passive: true });
-    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(() => refresh()) : null;
-    const mutationObserver = typeof MutationObserver === "function" ? new MutationObserver(() => refresh()) : null;
-    for (const annotation of annotations) {
-      const restoration = assessAnnotation(annotation, ignoredSelectors, buildId);
-      for (const element of restoration.results.map((result) => result.element).filter(Boolean)) {
-        if (element?.isConnected) {
-          observer?.observe(element);
-          mutationObserver?.observe(element, {
-            attributes: true,
-            attributeFilter: ["data-threadmark-id", "role", "aria-label", "hidden", "class", "style"],
-          });
-        }
-      }
-    }
-    mutationObserver?.observe(document.body, {
-      subtree: true,
-      childList: true,
-      characterData: true,
+    const scheduler = createRestorationScheduler({
+      ignoredSelectors,
+      assess: (annotation, context, deferSuggestions) => assessAnnotation(annotation, ignoredSelectors, buildId, context, deferSuggestions),
+      suggest: (annotation, result, context) => suggestAnnotation(annotation, result, ignoredSelectors, context),
+      position: positionRestoration,
+      onChange: (results) => {
+        setAnnotationRestorations(results);
+        setAnnotationRects(Object.fromEntries(Object.entries(results).filter(([, result]) => result.rect)
+          .map(([id, result]) => [id, result.rect])));
+        setObservedLocation(current => current === window.location.href ? current : window.location.href);
+      },
     });
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", refresh);
-      window.removeEventListener("scroll", refresh, true);
-      observer?.disconnect();
-      mutationObserver?.disconnect();
-    };
-  }, [annotations, ignoredSelectorsKey, restorationVersion, buildId]);
+    restorationSchedulerRef.current = scheduler;
+    scheduler.update(annotationsRef.current);
+    return () => { scheduler.dispose(); restorationSchedulerRef.current = null; };
+  }, [ignoredSelectorsKey, buildId]);
+
+  useEffect(() => {
+    restorationSchedulerRef.current?.update(annotationsRef.current);
+  }, [restorationKey]);
 
   const captureSnapshot = useCallback(async (selection) => {
     captureControllerRef.current?.abort();
@@ -3173,7 +3153,7 @@ export function Threadmark({
 
   const confirmSuggestedPin = async (id) => {
     const annotation = annotationsRef.current.find((item) => item.id === id);
-    const element = annotationRestorations[id]?.suggestion;
+    const element = restorationSchedulerRef.current?.recheck(id)?.suggestion;
     if (!annotation || submitting) return;
     if (!element?.isConnected) { showNotice("That element is no longer on the page. Choose another."); return; }
     const generation = ++submitGenerationRef.current;
@@ -3193,6 +3173,7 @@ export function Threadmark({
   };
 
   const beginRepin = (id) => {
+    restorationSchedulerRef.current?.recheck(id);
     clearCapture();
     setEditingAnnotationId(null);
     setRepinningId(id);

@@ -60,52 +60,70 @@ function elementRole(element) {
   return "";
 }
 
-function accessibleName(element, ignoredSelectors) {
+// A context belongs to one pass only; the scheduler drops it on mutation or completion.
+export function createRestorationContext() {
+  return { text: new WeakMap(), names: new WeakMap(), hidden: new WeakMap(),
+    allowed: new WeakMap(), rawLength: new WeakMap(), excludedText: new WeakMap(), queries: new Map(), identities: new Map() };
+}
+
+function cached(map, element, read) {
+  if (!map) return read();
+  if (!map.has(element)) map.set(element, read());
+  return map.get(element);
+}
+
+function candidates(documentRef, selector, context) {
+  if (!context) return [...documentRef.querySelectorAll(selector)];
+  if (!context.queries.has(selector)) context.queries.set(selector, [...documentRef.querySelectorAll(selector)]);
+  return context.queries.get(selector);
+}
+
+function accessibleName(element, ignoredSelectors, context) {
+  return cached(context?.names, element, () => readAccessibleName(element, ignoredSelectors, context));
+}
+
+function readAccessibleName(element, ignoredSelectors, context) {
   return normalizeText(
     element.getAttribute("aria-label")
       || element.getAttribute("alt")
       || element.getAttribute("title")
-      || safeVisibleText(element, ignoredSelectors),
+      || safeVisibleText(element, ignoredSelectors, context),
     160,
   );
 }
 
-function isVisuallyHidden(element) {
+function isVisuallyHidden(element, context) {
+  return cached(context?.hidden, element, () => readVisuallyHidden(element));
+}
+
+function readVisuallyHidden(element) {
   const view = element.ownerDocument?.defaultView;
   if (!view?.getComputedStyle) return false;
   const style = view.getComputedStyle(element);
   return style.display === "none" || style.visibility === "hidden";
 }
 
-function safeVisibleText(root, ignoredSelectors) {
-  const text = [];
+function safeVisibleText(root, ignoredSelectors, context) {
+  return visibleSubtreeText(root, ignoredSelectors, context).slice(0, 240);
+}
 
-  const visit = (node) => {
-    if (node.nodeType === 3) {
-      text.push(node.nodeValue || "");
-      return;
+function visibleSubtreeText(root, ignoredSelectors, context) {
+  return cached(context?.text, root, () => {
+    const text = [];
+    for (const child of root.childNodes) {
+      if (child.nodeType === 3) text.push(child.nodeValue || "");
+      else if (child.nodeType === 1) {
+        const excluded = cached(context?.excludedText, child, () => (
+          isSensitiveElement(child) || matchesIgnoredSelector(child, ignoredSelectors)
+          || child.hidden || child.getAttribute("aria-hidden") === "true"
+          || NON_CONTENT_TAGS.has(child.tagName.toLowerCase()) || isVisuallyHidden(child, context)
+        ));
+        if (!excluded) text.push(visibleSubtreeText(child, ignoredSelectors, context));
+      }
     }
-    if (node.nodeType !== 1) return;
-    const element = node;
-    const tag = element.tagName.toLowerCase();
-    if (
-      element !== root
-      && (
-        isSensitiveElement(element)
-        || matchesIgnoredSelector(element, ignoredSelectors)
-        || element.hidden
-        || element.getAttribute("aria-hidden") === "true"
-        || NON_CONTENT_TAGS.has(tag)
-        || isVisuallyHidden(element)
-      )
-    ) {
-      return;
-    }
-    for (const child of element.childNodes) visit(child);
-  };
-
-  visit(root);
-  return normalizeText(text.join(" "));
+    // Preserve the complete normalized subtree so ancestor truncation has exactly the old semantics.
+    return normalizeText(text.join(" "), Infinity);
+  });
 }
 
 function nthOfType(element) {
@@ -154,22 +172,22 @@ function matchesIgnoredSelector(element, ignoredSelectors) {
   });
 }
 
-function restorationCandidateAllowed(element, ignoredSelectors) {
-  return Boolean(
+function restorationCandidateAllowed(element, ignoredSelectors, context) {
+  if (!element) return false;
+  return cached(context?.allowed, element, () => Boolean(
     element
     && !isSensitiveElement(element)
     && !matchesIgnoredSelector(element, ignoredSelectors)
     && !element.hidden
     && element.getAttribute("aria-hidden") !== "true"
-    && !isVisuallyHidden(element),
-  );
+    && !isVisuallyHidden(element, context),
+  ));
 }
 
 // Tag (2) plus a name (4) or text (4-5) match; tag and role alone never re-anchor a target.
 const FINGERPRINT_MIN_SCORE = 6;
 
-function targetFingerprintScore(element, target, ignoredSelectors) {
-  if (!restorationCandidateAllowed(element, ignoredSelectors)) return -1;
+function targetFingerprintScore(element, target, ignoredSelectors, context) {
   const expectedTag = String(target?.tagName || "").toLowerCase();
   if (expectedTag && element.tagName.toLowerCase() !== expectedTag) return -1;
   let score = expectedTag ? 2 : 0;
@@ -180,12 +198,24 @@ function targetFingerprintScore(element, target, ignoredSelectors) {
     score += 2;
   }
   const expectedName = normalizeText(target?.accessibleName, 160);
-  const actualName = accessibleName(element, ignoredSelectors);
   const hasExpectedName = Boolean(expectedName && expectedName !== "Selected text");
+  const expectedText = normalizeText(target?.visibleText, 240);
+  // When only an explicit name can identify the target, rule it out before any subtree/style read.
+  const explicitName = element.getAttribute("aria-label") || element.getAttribute("alt") || element.getAttribute("title");
+  if (hasExpectedName && !expectedText && explicitName && normalizeText(explicitName, 160) !== expectedName) return -1;
+  if (hasExpectedName || expectedText) {
+    // Joining visible text nodes can insert at most one separator per nonempty character.
+    // Raw text is only an upper bound: hidden/sensitive descendants must never be treated as visible.
+    const maxTextLength = 2 * cached(context?.rawLength, element, () => (element.textContent || "").length);
+    const namePossible = hasExpectedName && (explicitName
+      ? normalizeText(explicitName, 160) === expectedName : maxTextLength >= expectedName.length);
+    if (!namePossible && (!expectedText || maxTextLength < expectedText.length)) return -1;
+  }
+  if (!restorationCandidateAllowed(element, ignoredSelectors, context)) return -1;
+  const actualName = hasExpectedName ? accessibleName(element, ignoredSelectors, context) : "";
   const nameMatches = hasExpectedName && actualName === expectedName;
   if (nameMatches) score += 4;
-  const expectedText = normalizeText(target?.visibleText, 240);
-  const actualText = safeVisibleText(element, ignoredSelectors);
+  const actualText = expectedText ? safeVisibleText(element, ignoredSelectors, context) : "";
   let textMatches = false;
   if (expectedText && actualText === expectedText) { score += 5; textMatches = true; }
   else if (target?.kind === "text" && expectedText && actualText.includes(expectedText)) { score += 4; textMatches = true; }
@@ -194,9 +224,40 @@ function targetFingerprintScore(element, target, ignoredSelectors) {
   return score;
 }
 
+// Index exact identities once per tag/role within a pass, rather than rescanning a tag for every comment.
+function fingerprintCandidates(target, documentRef, ignoredSelectors, context) {
+  const tag = String(target.tagName || "").toLowerCase();
+  const role = normalizeText(target.role, 80);
+  const name = normalizeText(target.accessibleName, 160);
+  const text = normalizeText(target.visibleText, 240);
+  const matches = new Set();
+  for (const [kind, expected] of [["name", name === "Selected text" ? "" : name], ["text", text]]) {
+    if (!expected) continue;
+    const key = JSON.stringify([tag, role, kind]);
+    if (!context.identities.has(key)) {
+      const index = new Map();
+      for (const element of candidates(documentRef, tag, context)) {
+        if (role && elementRole(element) !== role) continue;
+        if (!restorationCandidateAllowed(element, ignoredSelectors, context)) continue;
+        const value = kind === "name" ? accessibleName(element, ignoredSelectors, context)
+          : safeVisibleText(element, ignoredSelectors, context);
+        if (!index.has(value)) index.set(value, []);
+        index.get(value).push(element);
+      }
+      context.identities.set(key, index);
+    }
+    const index = context.identities.get(key);
+    if (kind === "text" && target.kind === "text") {
+      for (const [value, elements] of index) if (value.includes(expected)) for (const element of elements) matches.add(element);
+    } else for (const element of index.get(expected) || []) matches.add(element);
+  }
+  // Keep ambiguous candidate ordering identical to the document-order fallback scan.
+  return candidates(documentRef, tag, context).filter(element => matches.has(element));
+}
+
 export function restoreTargetDescriptor(
   target,
-  { documentRef = document, ignoredSelectors = [] } = {},
+  { documentRef = document, ignoredSelectors = [], context = createRestorationContext(), deferSuggestions = false } = {},
 ) {
   if (!target || !documentRef) return { status: "missing", element: null, candidates: [] };
   if (["region", "screenshot"].includes(target.kind)) {
@@ -214,15 +275,15 @@ export function restoreTargetDescriptor(
 
   const stable = resolveStableTarget(target.locatorCandidates?.stableId, {
     documentRef,
-    accept: (element) => restorationCandidateAllowed(element, ignoredSelectors),
+    accept: (element) => restorationCandidateAllowed(element, ignoredSelectors, context),
   });
   if (stable.status !== "missing") return stable;
 
   const domPath = target.locatorCandidates?.domPath;
   if (domPath) {
     try {
-      const pathMatches = [...documentRef.querySelectorAll(domPath)]
-        .filter((element) => targetFingerprintScore(element, target, ignoredSelectors) >= 2);
+      const pathMatches = candidates(documentRef, domPath, context)
+        .filter((element) => targetFingerprintScore(element, target, ignoredSelectors, context) >= 2);
       if (pathMatches.length === 1) {
         return { status: "resolved", element: pathMatches[0], candidates: pathMatches };
       }
@@ -238,12 +299,12 @@ export function restoreTargetDescriptor(
   if (!tag || !/^[a-z][a-z0-9-]*$/.test(tag)) {
     return { status: "missing", element: null, candidates: [] };
   }
-  const scored = [...documentRef.querySelectorAll(tag)]
-    .map((element) => ({ element, score: targetFingerprintScore(element, target, ignoredSelectors) }))
+  const scored = fingerprintCandidates(target, documentRef, ignoredSelectors, context)
+    .map((element) => ({ element, score: targetFingerprintScore(element, target, ignoredSelectors, context) }))
     .filter(({ score }) => score >= FINGERPRINT_MIN_SCORE)
     .sort((left, right) => right.score - left.score);
   if (!scored.length) {
-    return { status: "missing", element: null, candidates: [], suggestion: suggestChangedTarget(target, documentRef, ignoredSelectors) };
+    return { status: "missing", element: null, candidates: [], suggestion: deferSuggestions ? null : suggestChangedTarget(target, documentRef, ignoredSelectors, context) };
   }
   const best = scored[0].score;
   const bestMatches = scored.filter(({ score }) => score === best).map(({ element }) => element);
@@ -254,9 +315,9 @@ export function restoreTargetDescriptor(
 }
 
 /** Privacy-safe short label for a live element, used to show what a suggested location now says. */
-export function describeTargetElement(element, ignoredSelectors = []) {
+export function describeTargetElement(element, ignoredSelectors = [], context) {
   if (!element) return "";
-  return accessibleName(element, ignoredSelectors) || safeVisibleText(element, ignoredSelectors) || element.tagName.toLowerCase();
+  return accessibleName(element, ignoredSelectors, context) || safeVisibleText(element, ignoredSelectors, context) || element.tagName.toLowerCase();
 }
 
 const MAX_SUGGESTION_CANDIDATES = 1500;
@@ -278,7 +339,7 @@ function similarity(expected, actual) {
  * Only ever offered as a suggestion for a reviewer to confirm; it never resolves the target by itself.
  * Requires the same tag and role, and either similar text/name or the same DOM position; ties give no suggestion.
  */
-function suggestChangedTarget(target, documentRef, ignoredSelectors) {
+export function suggestChangedTarget(target, documentRef, ignoredSelectors = [], context = createRestorationContext()) {
   const tag = String(target.tagName || "").toLowerCase();
   if (!tag || !/^[a-z][a-z0-9-]*$/.test(tag)) return null;
   const expectedRole = normalizeText(target.role, 80);
@@ -294,12 +355,12 @@ function suggestChangedTarget(target, documentRef, ignoredSelectors) {
     // An obsolete path simply offers no positional hint.
   }
   const scored = [];
-  for (const element of [...documentRef.querySelectorAll(tag)].slice(0, MAX_SUGGESTION_CANDIDATES)) {
-    if (!restorationCandidateAllowed(element, ignoredSelectors)) continue;
+  for (const element of candidates(documentRef, tag, context).slice(0, MAX_SUGGESTION_CANDIDATES)) {
     if (expectedRole && elementRole(element) !== expectedRole) continue;
+    if (!restorationCandidateAllowed(element, ignoredSelectors, context)) continue;
     const textScore = Math.max(
-      similarity(expectedText, safeVisibleText(element, ignoredSelectors)),
-      expectedName === "Selected text" ? 0 : similarity(expectedName, accessibleName(element, ignoredSelectors)),
+      similarity(expectedText, expectedText ? safeVisibleText(element, ignoredSelectors, context) : ""),
+      expectedName === "Selected text" ? 0 : similarity(expectedName, expectedName ? accessibleName(element, ignoredSelectors, context) : ""),
     );
     const samePosition = element === pathElement;
     const qualifies = hasIdentity ? textScore >= 0.5 || (samePosition && textScore >= 0.2) : samePosition;
@@ -344,9 +405,9 @@ function normalizedTextMap(element) {
 
 export function restoreTextTargetDescriptor(
   target,
-  { documentRef = document, ignoredSelectors = [] } = {},
+  { documentRef = document, ignoredSelectors = [], context, deferSuggestions = false } = {},
 ) {
-  const container = restoreTargetDescriptor(target, { documentRef, ignoredSelectors });
+  const container = restoreTargetDescriptor(target, { documentRef, ignoredSelectors, context, deferSuggestions });
   if (container.status !== "resolved" || !container.element) {
     return { ...container, range: null };
   }
