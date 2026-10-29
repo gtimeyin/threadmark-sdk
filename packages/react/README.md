@@ -766,3 +766,69 @@ Chromium installation (`npx playwright install chromium`). Performance numbers d
 the fixture checks a 150 ms total restoration budget, 50 ms maximum slice and 10 ms unrelated-mutation
 matching budget. This changes scheduling only: fingerprint thresholds, suggestion candidate limits,
 privacy exclusions and confirmation requirements are unchanged.
+
+### Idle and scroll performance
+
+While review is closed, saved-comment restoration does not observe the page, read target geometry,
+match elements or compute suggestions. The launcher still shows the supplied comment count. Opening
+review refreshes targets in slices, including changes made while closed; opening a thread through a
+comment link still checks that thread immediately. Explicitly enabled session replay is independent
+of this pause.
+
+Scrolling and resizing coalesce positioning into animation frames. Unchanged rectangles keep their
+existing snapshot; moving pins update their own DOM geometry without rerendering the root overlay or
+the comment list. An open discussion subscribes to its own target rectangle so it stays anchored.
+
+Run `npm run benchmark:idle-scroll` to compare the published beta.12 implementation against the
+working source at **60, 200 and 1,000 resolved comments**. It checks closed-review matching and observer
+activity, scroll-triggered React renders, unchanged pin writes, positioning duration, and close/reopen
+repair behavior. Geometry timings include the scheduler's DOM reads and subscriber writes; they are
+not an end-to-end frame-rate measurement. Like the restoration benchmark, it requires Git history
+(including the `v0.1.0-beta.12` tag) and Playwright Chromium.
+
+### Optional feature delivery and screenshot allocation
+
+The initial review graph excludes bundled fonts, video UI and styles, tour authoring, the temporary
+tour preview player, and replay UI/styles. Fonts register when review opens; the other chunks load
+when their feature is used. The production `threadmark-react/tours` entry remains independent of the
+review overlay. Consumer builds must serve all emitted chunks, including dynamically imported files.
+Optional styles use constructed Shadow DOM stylesheets, with the base stylesheet's nonce preserved
+in the fallback path.
+
+Screenshot capture still clones the full layout, applies the same privacy exclusions and burned-in
+masks, embeds available host fonts, enforces document/pixel/encoding budgets, and rejects captures
+when the page scrolls during rendering. Rasterization now targets the crop directly, avoiding the
+viewport-sized intermediate canvas and a second crop-copy canvas. No screenshots or DOM snapshots
+are cached across captures. DOM cloning remains the dominant capture cost; smaller canvases mainly
+reduce allocation rather than guaranteeing faster capture.
+
+- `npm run benchmark:bundle` measures a minimal production consumer's initial gzip size against
+  beta.12 and checks real lazy chunks under strict CSP.
+- `npm run benchmark:snapshot` compares pixels, mask metadata, capture time and canvas pixel
+  allocations against beta.12 at DPR 1, 1.25 and 2. Canvas pixels are an allocation proxy, not a
+  measurement of total browser memory. The fixture includes fractional crop coordinates.
+
+Both comparisons need the `v0.1.0-beta.12` tag in local Git history and Playwright Chromium. Timings
+and bundle sizes vary with the consumer, page, browser and machine.
+
+### Large Feedback lists and repeated host updates
+
+Feedback lists above 50 matching comments render a measured window with overscan instead of mounting
+all cards and screenshots. Rows retain their original thread numbers and logical list positions.
+Search, reviewer/page/deployment/status filters and reply search still cover the entire supplied list.
+Arrow keys, Home/End and Tab can reach every row; a focused row stays mounted when scrolled away.
+Filtering starts at the first match, while ordinary host edits preserve the list's scroll position.
+Off-screen thumbnail Blob URLs are revoked when their rows unmount.
+
+Controlled annotations reuse normalized records by ID, revision and content, including records from
+other authorized pages in the project. Poll changes, refreshed evidence URLs and replaced Blobs still
+refresh context even without an updated timestamp. Content comparisons also detect edits from hosts
+that fail to advance `updatedAt`. Cached records are evicted on removal, scope changes and unmount.
+This avoids repeated payload normalization, but comparing supplied records still takes work
+proportional to their data size. Search text is cached by normalized payload; thread numbering and
+filter options are built once per changed annotation sequence.
+
+Run `npm run benchmark:list-hydration` for 60-, 200- and 1,000-comment fixtures. It checks bounded card
+counts, normalization counts on fresh host arrays and individual edits, scroll retention, keyboard
+navigation, full-list search/filtering, and thumbnail cleanup. Reported poll duration includes host
+JSON copying and browser frame settling; it is not an isolated normalization CPU measurement.

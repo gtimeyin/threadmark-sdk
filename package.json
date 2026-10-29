@@ -19,7 +19,11 @@
     "pack:sdk": "npm run build:sdk && npm run pack:check --workspace threadmark-react",
     "build:example": "npm run build:sdk && npm run build --workspace threadmark-basic-example",
     "verify": "npm run test:release && npm run test:sdk && npm run test:vercel && npm run build:example && npm run build && npm run test:sites",
-    "benchmark:restoration": "playwright test --config packages/react/tests/playwright.config.mjs restoration-performance.spec.mjs"
+    "benchmark:restoration": "playwright test --config packages/react/tests/playwright.config.mjs restoration-performance.spec.mjs",
+    "benchmark:idle-scroll": "playwright test --config packages/react/tests/playwright.config.mjs idle-scroll-performance.spec.mjs",
+    "benchmark:snapshot": "playwright test --config packages/react/tests/playwright.config.mjs snapshot-performance.spec.mjs",
+    "benchmark:bundle": "playwright test --config packages/react/tests/playwright.config.mjs bundle-performance.spec.mjs",
+    "benchmark:list-hydration": "playwright test --config packages/react/tests/playwright.config.mjs list-hydration-performance.spec.mjs"
   },
   "dependencies": {
     "@fontsource/bricolage-grotesque": "^5.3.0",

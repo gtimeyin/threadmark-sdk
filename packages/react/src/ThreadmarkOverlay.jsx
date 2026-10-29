@@ -1,4 +1,5 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { VirtualCommentList } from "./VirtualCommentList.jsx";
+import { Suspense, lazy, memo, useLayoutEffect, useSyncExternalStore, useMemo, useCallback, useEffect, useRef, useState } from "react";
 import { VideoFramePlayHorizontalIcon as MonitorPlay } from "@solar-icons/react/linear/video-frame-play-horizontal";
 import { BotIcon as Bot } from "@solar-icons/react/linear/bot";
 import { ChecklistIcon as ListChecks } from "@solar-icons/react/linear/checklist";
@@ -41,7 +42,6 @@ import { VideocameraIcon as Video } from "@solar-icons/react/linear/videocamera"
 import { CloseIcon as X } from "@solar-icons/react/linear/close";
 import { MapArrowRightIcon as TourIcon } from "@solar-icons/react/linear/map-arrow-right";
 import { computePopoverPosition } from "./popover.js";
-import { TourPanel } from "./TourPanel.jsx";
 import {
   addMarkupStroke,
   clearMarkupStrokes,
@@ -50,14 +50,6 @@ import {
   simplifyMarkupPoints,
   undoMarkupStroke,
 } from "./snapshot.js";
-import {
-  CameraBubble,
-  RecordingCursorLayer,
-  VideoPreview,
-  VideoRecorderBar,
-  VideoSetupPanel,
-  VoiceReplay,
-} from "./VideoFeedback.jsx";
 import { formatClock } from "./videoRecording.js";
 import {
   EVENT_TYPE,
@@ -67,6 +59,21 @@ import {
   REPLAY_NETWORK_EVENT,
   decodeReplayEvents,
 } from "./sessionReplay.js";
+
+function deferred(loader, name) {
+  const Component = lazy(() => loader().then(module => ({ default: module[name] })));
+  return function OptionalFeature(props) {
+    return <Suspense fallback={null}><Component {...props} /></Suspense>;
+  };
+}
+const loadVideo = () => import('./videoFeatures.jsx');
+const CameraBubble = deferred(loadVideo, 'CameraBubble');
+const RecordingCursorLayer = deferred(loadVideo, 'RecordingCursorLayer');
+const VideoPreview = deferred(loadVideo, 'VideoPreview');
+const VideoRecorderBar = deferred(loadVideo, 'VideoRecorderBar');
+const VideoSetupPanel = deferred(loadVideo, 'VideoSetupPanel');
+const VoiceReplay = deferred(loadVideo, 'VoiceReplay');
+const TourPanel = deferred(() => import('./TourPanel.jsx'), 'TourPanel');
 
 // rrweb's player is large, so it loads only when someone opens a playback.
 const ReplayPlayer = lazy(() => import("./ReplayPlayer.jsx"));
@@ -574,8 +581,22 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
       if (rootRef !== documentRef) rootRef?.removeEventListener("focusin", dismissOutside, true);
     };
   }, [filterOpen, hidden, tab]);
-  const authors = [...new Map(annotations.filter((item) => item.payload.author?.id)
-    .map((item) => [item.payload.author.id, item.payload.author])).values()];
+  const searchCache = useRef(new WeakMap());
+  const model = useMemo(() => {
+    const authors = new Map(), numbers = new Map(), searchText = new Map(), pages = new Set([route]), builds = new Set();
+    annotations.forEach((item, index) => {
+      const feedback = item.payload;
+      if (feedback.author?.id) authors.set(feedback.author.id, feedback.author);
+      if (!numbers.has(item.id)) numbers.set(item.id, index + 1);
+      if (!searchCache.current.has(feedback)) searchCache.current.set(feedback, [feedback.comment, feedback.author?.displayName,
+        targetName(feedback.pin?.target || feedback.target), ...(feedback.replies || []).map(reply => reply.comment)]
+        .filter(Boolean).join(" ").toLowerCase());
+      searchText.set(item.id, searchCache.current.get(feedback));
+      pages.add(feedback.route); if (feedback.buildId) builds.add(feedback.buildId);
+    });
+    return { authors: [...authors.values()], numbers, searchText, pages: [...pages], builds: [...builds] };
+  }, [annotations, route]);
+  const authors = model.authors;
   const needsRepair = (item) => restorations[item.id] && restorations[item.id].status !== "resolved";
   const search = query.trim().toLowerCase();
   const activeFilterCount = [
@@ -585,17 +606,16 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
     page,
     build,
   ].filter(Boolean).length;
-  const visible = annotations.filter((item) => {
+  const repairFilter = filter === "repair" ? restorations : null;
+  const visible = useMemo(() => annotations.filter((item) => {
     const feedback = item.payload;
     return (!reviewerId || feedback.author?.id === reviewerId)
       && (filter !== "repair" || needsRepair(item))
       && (status === "all" || (feedback.workflow?.status || "open") === status)
       && (!page || feedback.route === page)
       && (!build || feedback.buildId === build)
-      && (!search || [feedback.comment, feedback.author?.displayName,
-        targetName(feedback.pin?.target || feedback.target), ...(feedback.replies || []).map((reply) => reply.comment)]
-        .filter(Boolean).join(" ").toLowerCase().includes(search));
-  });
+      && (!search || model.searchText.get(item.id).includes(search));
+  }), [annotations, model, reviewerId, filter, status, page, build, search, repairFilter]);
   return (
     <aside id="tm-all-comments" className="tm-comments-panel" aria-label="Feedback" hidden={hidden}
       data-menu-open={filterOpen ? "true" : undefined}
@@ -657,10 +677,10 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
                   <option value="all">All statuses</option><option value="open">Open</option><option value="resolved">Resolved</option>
                 </select></label>
                 <label>Page<select aria-label="Filter comments by page" value={page} onChange={(event) => setPage(event.target.value)}>
-                  <option value="">All pages</option>{[...new Set([route, ...annotations.map((item) => item.payload.route)])].map((value) => <option key={value}>{value}</option>)}
+                  <option value="">All pages</option>{model.pages.map((value) => <option key={value}>{value}</option>)}
                 </select></label>
                 <label>Deployment<select aria-label="Filter comments by deployment" value={build} onChange={(event) => setBuild(event.target.value)}>
-                  <option value="">All deployments</option>{[...new Set(annotations.map((item) => item.payload.buildId).filter(Boolean))].map((value) => <option key={value}>{value}</option>)}
+                  <option value="">All deployments</option>{model.builds.map((value) => <option key={value}>{value}</option>)}
                 </select></label>
               </div>}
             </div>
@@ -693,11 +713,10 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
         <input ref={searchRef} aria-label="Search comments" placeholder="Search comments and replies…" value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>}
       <p className="tm-comments-count" role="status">{visible.length} of {annotations.length} threads</p>
-      <ol className="tm-comments-list">
-        {visible.map((annotation) => {
+      <VirtualCommentList items={visible} hidden={hidden} resetKey={JSON.stringify([search, reviewerId, filter, status, page, build])} renderRow={(annotation) => {
           const feedback = annotation.payload;
-          const number = annotations.indexOf(annotation) + 1;
-          return <li key={annotation.id}>
+          const number = model.numbers.get(annotation.id);
+          return <>
             <button className="tm-comment-card" type="button" aria-label={`Open comment ${number}: ${feedback.comment}`} onClick={() => onOpen(annotation.id)}>
               <span className="tm-comment-author"><span className="tm-comment-avatar">{reviewerInitials(feedback.author)}</span>
                 <strong>{feedback.author?.displayName || "Unknown reviewer"}{reviewer?.id && feedback.author?.id === reviewer.id ? " · You" : ""}</strong>
@@ -715,9 +734,8 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
                 {feedback.evidence?.some((item) => item.quality === "unavailable") && <span>Screenshot unavailable</span>}
               </span>
             </button>
-          </li>;
-        })}
-      </ol>
+          </>;
+        }} />
       {!visible.length && <div className="tm-comments-empty"><MessageSquare size={26} />
         <strong>{annotations.length ? "No matching comments" : "No comments yet"}</strong>
         <p>{annotations.length ? "Try another search or clear your filters." : "Close this panel and select an element to leave your first comment."}</p>
@@ -1274,7 +1292,25 @@ function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, compos
   );
 }
 
-function Marker({ annotation, number, rect, restoration, onEdit }) {
+const Marker = memo(function Marker({ annotation, number, rect, restoration, onEdit, markerPositions }) {
+  const buttonRef = useRef(null), outlineRef = useRef(null);
+  useLayoutEffect(() => {
+    const update = () => {
+      const next = markerPositions?.get(annotation.id);
+      const button = buttonRef.current, outline = outlineRef.current;
+      if (button) {
+        button.style.display = next ? "" : "none";
+        if (next) { button.style.left = `${next.left + next.width}px`; button.style.top = `${next.top + Math.min(18, next.height / 2)}px`; }
+      }
+      if (outline) {
+        outline.style.display = next && next.width > 1 && next.height > 1 ? "" : "none";
+        if (next) Object.assign(outline.style, { left: `${next.left}px`, top: `${next.top}px`, width: `${next.width}px`, height: `${next.height}px` });
+      }
+    };
+    update();
+    return markerPositions?.subscribe(annotation.id, update);
+  }, [markerPositions, annotation.id, Boolean(rect), restoration?.ghost, restoration?.status]);
+  rect = markerPositions?.get(annotation.id) || rect;
   if (!rect) return null;
   const grouped = ["multi", "region", "interaction"].includes(annotation.payload.captureKind);
   const needsRepair = restoration && restoration.status !== "resolved";
@@ -1286,6 +1322,7 @@ function Marker({ annotation, number, rect, restoration, onEdit }) {
     <>
       {(suggested || ghost) && rect.width > 1 && rect.height > 1 && (
         <div
+          ref={outlineRef}
           className={`tm-outline ${suggested ? "tm-outline--suggested" : "tm-outline--ghost"}`}
           style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
           aria-hidden="true"
@@ -1293,6 +1330,7 @@ function Marker({ annotation, number, rect, restoration, onEdit }) {
       )}
       <button
         type="button"
+        ref={buttonRef}
         className={`tm-marker ${grouped ? "tm-marker--grouped" : ""} ${needsRepair ? "tm-marker--warning" : ""} ${suggested ? "tm-marker--suggested" : ""} ${ghost ? "tm-marker--ghost" : ""}`}
         style={{ left: rect.left + rect.width, top: rect.top + Math.min(18, rect.height / 2) }}
         aria-label={`Edit annotation ${number}${needsRepair ? `, target needs repair${detail}` : ""}`}
@@ -1303,7 +1341,7 @@ function Marker({ annotation, number, rect, restoration, onEdit }) {
       </button>
     </>
   );
-}
+});
 
 function reviewerInitials(reviewer) {
   const name = reviewer?.displayName?.trim();
@@ -1622,6 +1660,7 @@ function Overlay({
   onToggleReplay,
   drawRect,
   annotations,
+  markerPositions,
   annotationRects,
   annotationRestorations,
   markersHidden,
@@ -1714,8 +1753,11 @@ function Overlay({
     || (videoSelection ? "video" : interactionSelection ? "interaction" : screenshotSelection ? "screenshot" : textSelection ? "text" : regionSelection ? "region" : targets.length > 1 ? "multi" : "element");
   const selectedCount = targets.length;
   const lastSelection = selections[selections.length - 1];
+  const subscribeEditingRect = useCallback(listener => markerPositions?.subscribe(editingAnnotation?.id, listener) || (() => {}), [markerPositions, editingAnnotation?.id]);
+  const readEditingRect = useCallback(() => markerPositions?.get(editingAnnotation?.id) || null, [markerPositions, editingAnnotation?.id]);
+  const editingRect = useSyncExternalStore(subscribeEditingRect, readEditingRect, () => null);
   const anchorRect = editingAnnotation
-    ? annotationRects[editingAnnotation.id] || {
+    ? editingRect || annotationRects[editingAnnotation.id] || {
       left: window.innerWidth / 2,
       top: window.innerHeight / 2,
       width: 1,
@@ -1896,6 +1938,7 @@ function Overlay({
           rect={annotationRects[annotation.id]}
           restoration={annotationRestorations[annotation.id]}
           onEdit={onEditAnnotation}
+          markerPositions={markerPositions}
         />
       ))}
 

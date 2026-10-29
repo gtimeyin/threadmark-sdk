@@ -1,5 +1,6 @@
+import { createAnnotationHydrator } from "./annotationHydration.js";
 import { captureEnvironment } from "./captureEnvironment.js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   formatAnnotationsMarkdown,
@@ -18,9 +19,6 @@ import {
   normalizePollResults,
 } from "./core.js";
 import { overlayStyles } from "./overlayStyles.js";
-import { videoStyles } from "./videoStyles.js";
-import replayerStyles from "rrweb/dist/style.css?inline";
-import { registerThreadmarkFonts } from "./fonts.js";
 import {
   captureRegionSnapshot,
   composeMarkupSnapshot,
@@ -45,12 +43,14 @@ import {
   restoreTargetDescriptor,
   restoreTextTargetDescriptor,
 } from "./target.js";
+import { createMarkerPositions } from "./markerPositions.js";
 import { createRestorationScheduler } from "./restorationScheduler.js";
 import { normalizePageVersions } from "./versionHistory.js";
 import { normalizeNextSteps } from "./nextSteps.js";
 import { resolveStableTarget } from "./resolveStableTarget.js";
 import { THREADMARK_TARGET_ATTRIBUTE, isValidThreadmarkTargetId } from "./targetId.js";
-import { ThreadmarkTours, getMountedTourPlayer } from "./tours/ThreadmarkTours.jsx";
+import { getMountedTourPlayer } from "./tours/playerRegistry.js";
+const ThreadmarkTours = lazy(() => import("./tours/ThreadmarkTours.jsx").then(module => ({ default: module.ThreadmarkTours })));
 import { resolveSessionReplayOptions, startSessionReplay } from "./sessionReplay.js";
 import {
   CAMERA_VIDEO_BITS_PER_SECOND,
@@ -69,6 +69,7 @@ import {
   resolveVideoRecordingOptions,
   stopStream,
 } from "./videoRecording.js";
+
 
 const MAX_MULTI_TARGETS = 20;
 const MIN_REGION_SIZE = 12;
@@ -171,11 +172,11 @@ function isRemoteEvidenceUrl(value) {
   }
 }
 
-function recordToAnnotation(record) {
+function recordToAnnotation(record, reusablePayload = null) {
   const source = record?.feedback;
   if (!source?.id || !source?.target) return null;
   try {
-    let payload = createFeedbackPayload({
+    let payload = reusablePayload || createFeedbackPayload({
       id: source.id,
       now: source.createdAt,
       updatedAt: source.updatedAt,
@@ -486,9 +487,14 @@ export function Threadmark({
   const [commentSnapshot, setCommentSnapshot] = useState(null);
   const [repinningId, setRepinningId] = useState(null);
   const [annotations, setAnnotations] = useState([]);
+  const annotationHydrator = useMemo(() => createAnnotationHydrator(recordToAnnotation), []);
+  const otherPageHydrator = useMemo(() => createAnnotationHydrator(recordToAnnotation), []);
+  const [otherPageAnnotations, setOtherPageAnnotations] = useState([]);
+  const otherPageScope = useRef(null);
   const [annotationRects, setAnnotationRects] = useState({});
   const [annotationRestorations, setAnnotationRestorations] = useState({});
   const restorationSchedulerRef = useRef(null);
+  const markerPositions = useMemo(() => createMarkerPositions(), []);
   const [observedLocation, setObservedLocation] = useState("");
   const [markersHidden, setMarkersHidden] = useState(false);
   const [clearArmed, setClearArmed] = useState(false);
@@ -788,13 +794,12 @@ export function Threadmark({
       return undefined;
     }
 
-    registerThreadmarkFonts();
     const host = document.createElement("div");
     host.setAttribute("data-threadmark-root", "");
     const shadow = host.attachShadow({ mode: "open" });
     // A constructed stylesheet is not an inline style, so strict style-src policies (and pages reviewed
     // through the browser extension) cannot block it. Older engines fall back to a nonce'd <style>.
-    const css = overlayStyles + videoStyles + replayerStyles;
+    const css = overlayStyles;
     let adopted = false;
     try {
       if ("adoptedStyleSheets" in shadow && typeof CSSStyleSheet.prototype.replaceSync === "function") {
@@ -923,17 +928,21 @@ export function Threadmark({
     };
   }, [portalRoot, replayOptions.enabled, replayOptions.bufferMs, hasReplayProvider, ignoredSelectorsKey]);
 
+  useEffect(() => () => { annotationHydrator.clear(); otherPageHydrator.clear(); }, [annotationHydrator, otherPageHydrator]);
+
   useEffect(() => {
-    if (!Array.isArray(persistedAnnotations)) return;
+    if (!Array.isArray(persistedAnnotations)) { annotationHydrator.clear(); otherPageHydrator.clear(); setOtherPageAnnotations([]); return; }
     const activeProject = String(projectKey || "").trim();
     const activeRoute = sanitizeRoute(route || new URL(observedLocation || window.location.href).pathname || "/");
-    setAnnotations(persistedAnnotations
-      .filter((record) => (
-        String(record?.feedback?.projectKey || "").trim() === activeProject
-        && sanitizeRoute(record?.feedback?.route || "/") === activeRoute
-      ))
-      .map(recordToAnnotation)
-      .filter(Boolean));
+    const records = [], otherPages = [];
+    for (const record of persistedAnnotations) {
+      if (String(record?.feedback?.projectKey || "").trim() !== activeProject) continue;
+      (sanitizeRoute(record.feedback.route || "/") === activeRoute ? records : otherPages).push(record);
+    }
+    const scope = JSON.stringify([activeProject, activeRoute]);
+    otherPageScope.current = scope;
+    setAnnotations(annotationHydrator.hydrate(records, scope));
+    setOtherPageAnnotations(otherPageHydrator.hydrate(otherPages, scope));
     // portalRoot changes on every remount, which clears annotations; reload the supplied records then too.
   }, [observedLocation, persistedAnnotations, portalRoot, projectKey, route]);
 
@@ -2446,15 +2455,25 @@ export function Threadmark({
     };
   }, [interactionSelection?.id]);
 
+  useEffect(() => {
+    if (mode === "idle" || !portalRoot) return;
+    let cancelled = false;
+    import("./fonts.js").then(module => { if (!cancelled) module.registerThreadmarkFonts(); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [mode === "idle", portalRoot]);
+
   // Keep the scheduler alive across host polling and comment additions. Only changed revisions match again.
   const restorationKey = JSON.stringify(annotations.map(item => [item.id, item.payload.updatedAt]));
   useEffect(() => {
     const scheduler = createRestorationScheduler({
       ignoredSelectors,
+      initiallyActive: false,
+      onPositions: results => markerPositions.update(results),
       assess: (annotation, context, deferSuggestions) => assessAnnotation(annotation, ignoredSelectors, buildId, context, deferSuggestions),
       suggest: (annotation, result, context) => suggestAnnotation(annotation, result, ignoredSelectors, context),
       position: positionRestoration,
       onChange: (results) => {
+        markerPositions.update(results);
         setAnnotationRestorations(results);
         setAnnotationRects(Object.fromEntries(Object.entries(results).filter(([, result]) => result.rect)
           .map(([id, result]) => [id, result.rect])));
@@ -2469,6 +2488,10 @@ export function Threadmark({
   useEffect(() => {
     restorationSchedulerRef.current?.update(annotationsRef.current);
   }, [restorationKey]);
+
+  useEffect(() => {
+    restorationSchedulerRef.current?.setActive(Boolean(portalRoot) && mode !== "idle");
+  }, [mode, portalRoot, ignoredSelectorsKey, buildId]);
 
   const captureSnapshot = useCallback(async (selection) => {
     captureControllerRef.current?.abort();
@@ -2990,10 +3013,11 @@ export function Threadmark({
         backToTour();
       }
     };
-    attempt();
-    return () => {
-      cancelled = true;
-    };
+    // The download must not consume the short player-mount retry window.
+    import("./tours/ThreadmarkTours.jsx").then(attempt).catch(() => {
+      if (!cancelled) { showNotice("The tour preview couldn’t load."); backToTour(); }
+    });
+    return () => { cancelled = true; };
   }, [mode, tourPreview?.tour]);
 
   useEffect(() => {
@@ -3184,11 +3208,9 @@ export function Threadmark({
     showNotice("Choose a new element, then confirm Repin comment. Escape cancels.");
   };
 
-  const projectAnnotations = useMemo(() => {
-    const otherPages = (persistedAnnotations || []).filter((record) => record.feedback?.projectKey === projectKey
-      && sanitizeRoute(record.feedback.route) !== activeRoute).map(recordToAnnotation).filter(Boolean);
-    return [...annotations, ...otherPages];
-  }, [persistedAnnotations, annotations, projectKey, activeRoute]);
+  const projectAnnotations = useMemo(() => otherPageAnnotations.length
+    && otherPageScope.current === JSON.stringify([String(projectKey || "").trim(), activeRoute])
+    ? [...annotations, ...otherPageAnnotations] : annotations, [annotations, otherPageAnnotations, projectKey, activeRoute]);
 
   const updateWorkflow = async (action, value) => {
     const current = annotationsRef.current.find((item) => item.id === editingIdRef.current);
@@ -3630,6 +3652,7 @@ export function Threadmark({
       onToggleReplay={toggleReplayAttachment}
       drawRect={drawRect}
       annotations={annotations}
+      markerPositions={markerPositions}
       annotationRects={annotationRects}
       annotationRestorations={annotationRestorations}
       markersHidden={markersHidden}
@@ -3707,5 +3730,5 @@ export function Threadmark({
     portalRoot,
   );
   // A temporary player for "Try it" when the app doesn't mount <ThreadmarkTours> itself.
-  return tourPreview?.needsPlayer ? <>{overlay}<ThreadmarkTours tours={[]} /></> : overlay;
+  return tourPreview?.needsPlayer ? <>{overlay}<Suspense fallback={null}><ThreadmarkTours tours={[]} /></Suspense></> : overlay;
 }

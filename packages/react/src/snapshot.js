@@ -333,9 +333,20 @@ export async function captureRegionSnapshot({
     throw new Error("The page moved while Threadmark prepared the snapshot.");
   }
 
-  const viewportCanvas = await domToCanvas(root, {
-    width: viewportWidth,
-    height: viewportHeight,
+  const pixelWidth = Math.max(1, Math.round(region.width * scale));
+  const pixelHeight = Math.max(1, Math.round(region.height * scale));
+  const cropLeft = Math.round(region.left * scale) / scale;
+  const cropTop = Math.round(region.top * scale) / scale;
+  // Keep the complete cloned layout and privacy filter, but rasterize only the requested crop.
+  const output = await domToCanvas(root, {
+    width: pixelWidth / scale,
+    height: pixelHeight / scale,
+    onCreateForeignObjectSvg(svg) {
+      svg.setAttribute('viewBox', `${cropLeft} ${cropTop} ${pixelWidth / scale} ${pixelHeight / scale}`);
+      const content = svg.querySelector('foreignObject');
+      content?.setAttribute('width', String(viewportWidth));
+      content?.setAttribute('height', String(viewportHeight));
+    },
     scale,
     backgroundColor,
     filter: (node) => !isExcludedNode(node, selectors),
@@ -374,26 +385,8 @@ export async function captureRegionSnapshot({
     throw new Error("The page moved while Threadmark captured the snapshot.");
   }
 
-  const output = documentRef.createElement("canvas");
-  output.width = Math.max(1, Math.round(region.width * scale));
-  output.height = Math.max(1, Math.round(region.height * scale));
   const context = output.getContext("2d", { alpha: false });
   if (!context) throw new Error("The browser could not create a snapshot canvas.");
-
-  context.fillStyle = backgroundColor;
-  context.fillRect(0, 0, output.width, output.height);
-
-  context.drawImage(
-    viewportCanvas,
-    Math.round(region.left * scale),
-    Math.round(region.top * scale),
-    Math.round(region.width * scale),
-    Math.round(region.height * scale),
-    0,
-    0,
-    output.width,
-    output.height,
-  );
 
   context.fillStyle = "#202722";
   for (const rect of redactions) {
