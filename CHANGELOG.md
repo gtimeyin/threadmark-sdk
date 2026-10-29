@@ -4,6 +4,8 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [0.1.0-beta.12] — 2026-10-29
+
 ### Added
 
 - Experimental `threadmark-react/tours` entry with `<ThreadmarkTours>`, a product-tour player for production. Tours are validated data files (`tour.schema.json`, `defineTour`, `validateTour`) whose steps point at stable target ids. The player handles who sees a tour and when, saved progress (in the browser or through `onProgressChange`), tours across pages, waiting for elements without guessing, bottom sheets on phones, keyboard and screen-reader support, theming, events, and notes. It never loads the review overlay, captures nothing, and makes no network requests. Package tests enforce that and a 13 KB minified-and-gzipped budget (about 12 KB today).
@@ -12,6 +14,13 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 - `threadmark-react/vite`: a dev-server-only Vite plugin (`threadmarkTours()`) that lets Tour mode's **Save to code** write tour files into the project, paired with `saveTourToDevServer` for `onTourSave`. It updates the existing file for a tour id or creates `tours/<id>.tour.json`, accepts only same-origin requests with its own header and valid tours, and writes atomically inside the project.
 - Comments on tour steps: **Comment on this step** in Tour mode posts ordinary feedback with a new `tourStep: { tourId, stepId }` field, and each step shows its comment count and threads.
 - `npx threadmark tours check` validates every tour file and confirms each step's target still exists in the code. It exits with 1 for CI when a tour is invalid or a target is missing, and has `--root` and `--json` options.
+
+### Improved
+
+- Saved-comment restoration caches visible text, names, visibility and fallback identities within a pass; hydration no longer resolves targets or repeats matching for observer setup.
+- Match new or updated comments incrementally in approximately 8 ms slices. Body mutations use a 200 ms trailing debounce, while scrolling and resizing only reposition pins. Preserve stable-ID uniqueness checks when matching nodes are added or removed.
+- Compute missing-target suggestions in idle slices, with immediate checks when opening or repairing a thread. Matching thresholds, privacy exclusions and confirmation requirements remain unchanged.
+- Add `npm run benchmark:restoration`: a 1,600-element, 60-comment browser fixture that compares beta.11 results and checks timing, mutation invalidation, hydration and idle fallback.
 
 ## [0.1.0-beta.11] — 2026-10-21
 
