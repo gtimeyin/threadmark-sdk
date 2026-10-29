@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
 import { PauseIcon as Pause } from "@solar-icons/react/linear/pause";
 import { PlayIcon as Play } from "@solar-icons/react/linear/play";
 import { CloseIcon as X } from "@solar-icons/react/linear/close";
 
-// This chunk loads lazily. Helpers arrive through the `kit` prop instead of imports, so the SDK's entry
-// stays one self-contained file and no shared chunk is split out of it.
+import replayerStyles from 'rrweb/dist/style.css?inline';
+import { videoStyles } from './videoStyles.js';
+import { installFeatureStyles } from './featureStyles.js';
+
+// This chunk loads lazily. Helpers arrive through the `kit` prop so playback details stay out of
+// the initial review graph. Replay chrome and rrweb styles install only when this viewer mounts.
 
 const iconProps = { "aria-hidden": true, className: "tm-tool-icon", focusable: "false" };
 const SPEEDS = [1, 2, 4];
@@ -109,7 +113,7 @@ function buildTimeline(events, getNode, kit) {
  * Plays an rrweb replay in a large dialog above the page, with its console, network, and action
  * timelines. Every row seeks the replay. Nothing on the live page is touched.
  */
-export default function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
+function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
   const { EVENT_TYPE, decodeReplayEvents, formatClock } = kit;
   const stageRef = useRef(null);
   const replayerRef = useRef(null);
@@ -335,4 +339,14 @@ export default function ReplayPlayer({ replay, media, kit, onClose, embedded = f
       </section>
     </div>
   );
+}
+
+export default function StyledReplayPlayer(props) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const root = ref.current?.getRootNode();
+    installFeatureStyles(root, videoStyles);
+    installFeatureStyles(root, replayerStyles);
+  }, []);
+  return <span ref={ref} style={{ display: 'contents' }}><ReplayPlayer {...props} /></span>;
 }

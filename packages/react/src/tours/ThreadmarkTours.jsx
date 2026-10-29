@@ -20,13 +20,7 @@ const VISIT_KEY = "threadmark:tours:visit";
 const SLOW_NOTICE_MS = 400;
 const SPOT_PADDING = 6;
 
-// One player per page. useThreadmarkTours() talks to whichever instance is mounted. The registry is
-// page-wide, so two copies of this module (separate bundles, dev-server reloads) still find each other.
-const REGISTRY = Symbol.for("threadmark.tours.activePlayer");
-const getActive = () => (typeof globalThis === "undefined" ? null : globalThis[REGISTRY] || null);
-const setActive = (instance) => {
-  globalThis[REGISTRY] = instance;
-};
+import { getMountedTourPlayer as getActive, setMountedTourPlayer as setActive } from './playerRegistry.js';
 
 function readVisit() {
   try {

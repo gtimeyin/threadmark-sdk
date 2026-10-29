@@ -4,6 +4,16 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [0.1.0-beta.13] — 2026-10-29
+
+### Performance
+
+- Suspend restoration work while review is closed and update marker geometry without React scroll renders.
+- Load optional video, replay, tour, and font resources on demand.
+- Rasterize screenshot crops directly to reduce canvas allocation.
+- Virtualize large feedback lists and reuse unchanged hydrated annotations.
+- Add browser benchmarks for 60, 200, and 1,000 comments, bundles, and screenshot allocation.
+
 ## [0.1.0-beta.12] — 2026-10-29
 
 ### Added
