@@ -6,6 +6,8 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ### Added
 
+- Script-tag build at `dist/embed/threadmark.js` with React bundled in, so Threadmark runs on pages that don't use React. It mounts from `data-*` attributes or through `mount()`, and is served by jsDelivr and unpkg as the package's default file.
+- `threadmark-react/embed` entry exporting `mount()` and `unmount()` for wrappers in other frameworks, with React kept as a peer dependency.
 - Experimental `threadmark-react/tours` entry with `<ThreadmarkTours>`, a product-tour player for production. Tours are validated data files (`tour.schema.json`, `defineTour`, `validateTour`) whose steps point at stable target ids. The player handles who sees a tour and when, saved progress (in the browser or through `onProgressChange`), tours across pages, waiting for elements without guessing, bottom sheets on phones, keyboard and screen-reader support, theming, events, and notes. It never loads the review overlay, captures nothing, and makes no network requests. Package tests enforce that and a 13 KB minified-and-gzipped budget (about 12 KB today).
 - The basic React example has a "Take the tour" button that plays a three-step tour.
 - Tour mode in the review overlay (**Build a tour**): click elements to add steps, edit and reorder them, set who sees a tour and when, try the draft with the real player, and copy it or save it through the new `onTourSave` callback. `<Threadmark>` also accepts `tours`. Untagged elements get a suggested stable id and snippet instead of a step.

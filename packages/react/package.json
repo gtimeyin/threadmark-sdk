@@ -38,14 +38,21 @@
       "types": "./dist/tours.d.ts",
       "import": "./dist/tours.js"
     },
+    "./embed": {
+      "types": "./dist/embed.d.ts",
+      "import": "./dist/embed.js"
+    },
     "./vite": {
       "types": "./dist/vite.d.ts",
       "import": "./dist/vite.js"
     },
     "./tour.schema.json": "./tour.schema.json",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./threadmark.js": "./dist/embed/threadmark.js"
   },
   "types": "./dist/index.d.ts",
+  "unpkg": "./dist/embed/threadmark.js",
+  "jsdelivr": "./dist/embed/threadmark.js",
   "bin": {
     "threadmark": "./bin/threadmark.mjs"
   },
@@ -70,7 +77,7 @@
     "tag": "beta"
   },
   "scripts": {
-    "build": "vite build && node scripts/copy-types.mjs",
+    "build": "vite build && vite build --config vite.standalone.config.mjs && node scripts/copy-types.mjs",
     "test": "npm run build && node --test tests/*.test.mjs && npm run test:browser",
     "test:browser": "playwright test --config tests/playwright.config.mjs",
     "pack:check": "npm pack --dry-run --json"

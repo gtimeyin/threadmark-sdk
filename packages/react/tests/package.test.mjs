@@ -219,9 +219,10 @@ test("the built package exposes exactly the documented runtime API", async () =>
 test("the browser bundle preserves its client boundary and external React imports", async () => {
   const bundle = await readFile(resolvePackagePath("./dist/index.js"), "utf8");
   assert.match(bundle, /^"use client";/);
-  assert.match(bundle, /from "react"/);
-  assert.match(bundle, /from "react-dom"/);
-  assert.match(bundle, /from "@solar-icons\/react\/linear\//);
+  const graph = await collectBuiltModuleGraph(resolvePackagePath("./dist/index.js"));
+  assert.ok(graph.bareImports.has("react"));
+  assert.ok(graph.bareImports.has("react-dom"));
+  assert.ok([...graph.bareImports].some(name => name.startsWith("@solar-icons/react/linear/")));
 });
 
 test("the review chrome uses Solar Linear components instead of authored icon paths", async () => {
@@ -353,14 +354,10 @@ test("ready snapshot evidence shows the image without technical metadata", async
 });
 
 test("the browser bundle ships every relative dynamic-import chunk", async () => {
-  const bundle = await readFile(resolvePackagePath("./dist/index.js"), "utf8");
-  const chunkPaths = [...bundle.matchAll(/import\(["'](\.\/[^"']+)["']\)/g)]
-    .map(([, path]) => path);
-
-  assert.ok(chunkPaths.length > 0, "snapshot renderer should remain a lazy chunk");
-  for (const chunkPath of chunkPaths) {
-    await assert.doesNotReject(access(resolvePackagePath(`./dist/${chunkPath.slice(2)}`)));
-  }
+  const graph = await collectBuiltModuleGraph(resolvePackagePath("./dist/index.js"));
+  const dynamicImports = [...graph.files.values()].flatMap(code => [...code.matchAll(/import\(["'](\.\/[^"']+)["']\)/g)]);
+  assert.ok(dynamicImports.length > 0, "optional features should remain lazy chunks");
+  // Traversing the graph above reads every static and dynamic chunk, so missing files fail the test.
 });
 
 test("the built declarations match the source declarations", async () => {

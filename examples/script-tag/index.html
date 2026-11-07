@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Threadmark script tag example</title>
+    <style>
+      body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #1a1e1b; background: #fbfaf6; }
+      main { max-width: 640px; margin: 0 auto; padding: 64px 16px; }
+      button { font: inherit; padding: 10px 16px; border: 1px solid #035d4733; border-radius: 6px; background: #035d47; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>A plain HTML page</h1>
+      <p>No React, no build step. Threadmark loads from one script tag and draws its own overlay.</p>
+      <button data-threadmark-id="signup">Sign up</button>
+    </main>
+
+    <!--
+      Simplest setup: one tag, no saving. On a CDN this is
+      https://cdn.jsdelivr.net/npm/threadmark-react@beta/dist/embed/threadmark.js
+      <script type="module" src="/threadmark.js" data-project-key="script-tag-example"></script>
+    -->
+
+    <!-- With saving: comments are kept in this browser's localStorage (screenshots aren't). -->
+    <script type="module">
+      import { mount } from "/threadmark.js";
+
+      const KEY = "threadmark-script-tag-example";
+      const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+      const save = (records) => { localStorage.setItem(KEY, JSON.stringify(records)); threadmark.update({ annotations: records }); };
+
+      const threadmark = mount({
+        projectKey: "script-tag-example",
+        reviewer: { id: "local-reviewer", displayName: "You" },
+        annotations: load(),
+        onFeedbackCreate(feedback) {
+          save([...load().filter((record) => record.feedback.id !== feedback.id), { feedback }]);
+        },
+        onFeedbackDelete(feedback) {
+          save(load().filter((record) => record.feedback.id !== feedback.id));
+        },
+        onFeedbackClear(cleared) {
+          const ids = new Set(cleared.map((feedback) => feedback.id));
+          save(load().filter((record) => !ids.has(record.feedback.id)));
+        },
+      });
+    </script>
+  </body>
+</html>

@@ -12,6 +12,8 @@ export default defineConfig({
       entry: {
         index: fileURLToPath(new URL("./src/index.jsx", import.meta.url)),
         tours: fileURLToPath(new URL("./src/tours.js", import.meta.url)),
+        // Framework-agnostic `mount()`; React stays a peer. The script-tag build is vite.standalone.config.mjs.
+        embed: fileURLToPath(new URL("./src/embed.js", import.meta.url)),
         // Node-only `threadmark tours check`, run through bin/threadmark.mjs.
         cli: fileURLToPath(new URL("./src/cli/main.js", import.meta.url)),
         // Node-only dev-server plugin for Tour mode's "Save to code".

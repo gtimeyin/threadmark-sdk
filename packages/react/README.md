@@ -57,6 +57,53 @@ export function App() {
 
 On a local hostname, Threadmark renders a **Review page** launcher. Reviewers can also toggle Review mode with <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>. Once active, one compact toolbar can be dragged by its grip to a convenient position.
 
+## Without React (script tag)
+
+Threadmark works on any page, including plain HTML, Vue, Svelte, Astro, Rails, Django, Laravel, WordPress, and Webflow or Framer custom code. The script-tag build bundles React inside and draws the overlay in its own shadow root, so the host page doesn't need React and its styles stay separate.
+
+The quickest setup is one tag:
+
+```html
+<script type="module"
+  src="https://cdn.jsdelivr.net/npm/threadmark-react@beta/dist/embed/threadmark.js"
+  data-project-key="pk_public_project_identifier"></script>
+```
+
+It reads these data attributes:
+
+| Attribute | Option |
+| --- | --- |
+| `data-project-key` | `projectKey` (required to mount from the tag) |
+| `data-enabled` | `enabled` (`"true"` or `"false"`) |
+| `data-environment` | `environment` |
+| `data-allowed-hosts` | `allowedHosts`, comma separated |
+| `data-ignored-selectors` | `ignoredSelectors`, comma separated |
+| `data-build-id`, `data-route` | `buildId`, `route` |
+| `nonce` or `data-style-nonce` | `styleNonce` |
+
+A tag alone doesn't save anything, so comments last until the page reloads. To save them, or to use callbacks, reviewers, or any other option, call `mount()` with the same options the `<Threadmark>` component takes:
+
+```html
+<script type="module">
+  import { mount } from "https://cdn.jsdelivr.net/npm/threadmark-react@beta/dist/embed/threadmark.js";
+
+  const threadmark = mount({
+    projectKey: "pk_public_project_identifier",
+    reviewer: { id: "user_42", displayName: "Emily R." },
+    annotations: await fetch("/api/threadmark/annotations").then((response) => response.json()),
+    onFeedbackCreate: (feedback, context) => saveToYourBackend(feedback, context),
+  });
+
+  // Later: threadmark.update({ annotations: nextRecords }); threadmark.unmount();
+</script>
+```
+
+`mount()` returns `{ update, unmount }`. `update()` merges new options into the current ones. Only one Threadmark runs per page, so calling `mount()` again while one is mounted updates it and returns the same instance. The same functions are available as `window.Threadmark.mount` and `window.Threadmark.unmount` once the script has loaded.
+
+The same environment safeguards apply as with the React component: local hosts are on by default, and preview or staging hosts need `enabled` plus an allowlisted host. The [script tag example](../../examples/script-tag/README.md) shows `mount()` with `localStorage` saving on a plain HTML page.
+
+To build a wrapper for another framework on top of your own React install, import `mount` from `threadmark-react/embed` instead. That entry keeps React as a peer dependency rather than bundling it.
+
 ## Gesture-first annotations
 
 - Click an eligible element to open its anchored comment popover without activating the host control. Keyboard reviewers can focus an element and press Enter or Space.

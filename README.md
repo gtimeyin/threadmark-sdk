@@ -23,12 +23,25 @@ export function App() {
 
 Local review is enabled by default. Preview and staging activation require explicit configuration and a hostname allowlist; production activation is disabled in this beta. See the [SDK documentation](packages/react/README.md) for configuration, privacy controls, callbacks, and controlled annotation hydration.
 
+### Without React
+
+On a page that doesn't use React (plain HTML, Vue, Svelte, Webflow, WordPress and others), add one script tag instead:
+
+```html
+<script type="module"
+  src="https://cdn.jsdelivr.net/npm/threadmark-react@beta/dist/embed/threadmark.js"
+  data-project-key="my-site"></script>
+```
+
+React is bundled inside the script. See [Without React](packages/react/README.md#without-react-script-tag) for `mount()`, saving comments, and options.
+
 ## Repository layout
 
 | Directory | Purpose |
 | --- | --- |
 | `packages/react/` | Published React SDK and its tests |
 | `examples/basic-react/` | Consumer integration with local persistence |
+| `examples/script-tag/` | Plain HTML page using the script-tag build |
 | `integrations/vercel/` | Optional server-side deployment discovery example |
 | `src/`, `public/` | Reference product prototype and `/about` explainer |
 | `tests/`, `worker/`, `scripts/` | Reference app hosting and verification |
