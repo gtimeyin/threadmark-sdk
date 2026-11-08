@@ -829,6 +829,37 @@ test("a changed element shows a suggested location that the reviewer confirms as
   expect(moved.target.visibleText).toBe("Secondary host action");
 });
 
+test("confirm location does not claim success when the host returns the old pin", async ({ page }) => {
+  await mountPickingFixture(page);
+  await page.locator("#secondary-target").click();
+  await waitForComposer(page);
+  await setComposerComment(page, "Keep this discussion attached.");
+  await submitComposer(page);
+  await page.evaluate(() => {
+    const button = document.querySelector("#secondary-target");
+    button.removeAttribute("data-threadmark-id");
+    button.textContent = "Secondary host action now";
+    const original = window.__threadmarkFeedback[0];
+    window.__threadmarkAuthoritative = () => ({ feedback: original });
+  });
+  await page.locator(".tm-marker--suggested").click();
+  await page.getByRole("button", { name: "Confirm location", exact: true }).click();
+  await expect(page.locator(".tm-toast")).toContainText("wasn’t saved");
+  await expect(page.locator(".tm-marker--suggested")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Confirm location", exact: true })).toBeEnabled();
+
+  await page.evaluate(() => {
+    window.__threadmarkAuthoritative = (feedback) => {
+      window.__threadmarkFeedback.push(feedback);
+      return { feedback };
+    };
+  });
+  await page.getByRole("button", { name: "Confirm location", exact: true }).click();
+  await expect(page.locator(".tm-marker--suggested")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__threadmarkFeedback.at(-1).pin.target.visibleText))
+    .toBe("Secondary host action now");
+});
+
 test("a removed element's comment stays visible as a ghost at its last known position", async ({ page }) => {
   await mountPickingFixture(page);
   await page.locator("#secondary-target").click();

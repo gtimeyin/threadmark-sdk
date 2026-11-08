@@ -1,6 +1,8 @@
+import { createLocalReactionHandler } from "./reactionsDemo.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Threadmark, saveTourToDevServer, threadmarkTarget } from "threadmark-react";
 import { ThreadmarkTours, useThreadmarkTours } from "threadmark-react/tours";
+import { createLocalPageReviewer } from "./localPageReviewer.js";
 import { createFeedbackStore } from "./feedbackStore.js";
 import welcomeTour from "./tours/welcome.tour.json";
 
@@ -10,7 +12,7 @@ function TourButton() {
   return <button type="button" className="tour-button" onClick={() => tours.start("parcel-welcome")}>Take the tour</button>;
 }
 
-const IGNORED_SELECTORS = [".analytics-internal"];
+const IGNORED_SELECTORS = [".analytics-internal", ".event-log"];
 const MAX_LOG_ENTRIES = 6;
 const PROJECT_KEY = "pk_threadmark_basic_react";
 const REVIEWER = {
@@ -20,6 +22,7 @@ const REVIEWER = {
 const CURRENT_BUILD_ID = "basic-react-2026-08";
 const PREVIOUS_BUILD_ID = "basic-react-2026-07";
 const feedbackStore = createFeedbackStore({ projectKey: PROJECT_KEY, route: "/" });
+const localPageReviewer = createLocalPageReviewer({ store: feedbackStore, projectKey: PROJECT_KEY });
 
 function logEntry({ feedback, context }) {
   return {
@@ -89,6 +92,7 @@ function FeedbackLog({ entries, onClear }) {
 export function App() {
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [annotations, setAnnotations] = useState([]);
+  const handleReactionChange = useMemo(() => createLocalReactionHandler({ store: feedbackStore, reviewer: REVIEWER, onRecords: setAnnotations }), []);
   const [status, setStatus] = useState("booting");
   // Tour mode's "Save to code" writes the tour file through threadmark-react/vite; the new version also
   // replaces the bundled one for this session, so it plays right away.
@@ -241,6 +245,14 @@ export function App() {
   return (
     <>
       <Threadmark
+        onPageReviewRequested={async (input, context) => {
+          const result = await localPageReviewer(input, context);
+          if (!context.signal.aborted) {
+            setAnnotations(result.records);
+            setFeedbackEntries(result.records.map(logEntry).reverse().slice(0, MAX_LOG_ENTRIES));
+          }
+          return result;
+        }}
         projectKey={PROJECT_KEY}
         reviewer={REVIEWER}
         reviewers={[REVIEWER, { id: "example-sam", displayName: "Sam Okafor" }]}
@@ -254,6 +266,7 @@ export function App() {
         onTargetSelect={handleTargetSelect}
         onSelectionChange={handleSelectionChange}
         onFeedbackCreate={handleFeedbackCreate}
+        onReactionChange={handleReactionChange}
         onFeedbackDelete={handleFeedbackDelete}
         onFeedbackClear={handleFeedbackClear}
         onPageVersionSelect={(version) => setActiveBuildId(version.buildId || CURRENT_BUILD_ID)}
@@ -265,6 +278,14 @@ export function App() {
         onError={(error) => setStatus(`error:${error.code}`)}
       />
       <ThreadmarkTours tours={tours} theme={{ accent: "#0b4f3a" }} />
+
+      {new URLSearchParams(location.search).has('agent-demo') && <section aria-label="Agent review examples" style={{ margin: '32px auto', maxWidth: 1040, padding: 24, background: '#DCEBE5', borderRadius: 12 }}>
+        <h2>Try a Threadmark Agent review</h2>
+        <p>These sample elements have intentional issues. Open Review page, then Ask Threadmark to add comments.</p>
+        <h4 data-threadmark-id="agent-demo-heading">A heading that skips a level</h4>
+        <p data-threadmark-id="agent-demo-small-text" style={{ fontSize: 11 }}>This sample text is harder to read at a small size.</p>
+        <span>An unnamed control: </span><button data-threadmark-id="agent-demo-button" style={{ width: 40, height: 32 }} />
+      </section>}
 
       <header className="site-header">
         <a className="brand" href="#top" aria-label="Parcel home">

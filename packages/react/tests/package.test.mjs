@@ -205,6 +205,7 @@ test("the built package exposes exactly the documented runtime API", async () =>
     "DEFAULT_ALLOWED_HOSTS",
     "THREADMARK_TARGET_ATTRIBUTE",
     "Threadmark",
+    "collectPageReview",
     "createFeedbackPayload",
     "isLocalHostname",
     "isThreadmarkEnabled",

@@ -89,3 +89,5 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 ## Icon system (updated 2026-10-18)
 
 - Use Solar Linear from `@solar-icons/react` for every functional icon. Import individual icons through public `@solar-icons/react/linear/<name>` exports. Keep the custom open-pin logo as a brand asset. Do not mix icon families or add authored SVG glyphs.
+
+- Saved discussion design (2026-11-03): follow the supplied clean thread reference: dark surface, subtle border/shadow, relaxed message spacing, readable author/body text, compact filled reaction chips and an icon-only smile-plus reaction trigger. Keep mint actions and the existing dark capture/toolbar chrome. The reference guides spacing and simplicity, not its light colour scheme. Avoid outlined reaction buttons and verbose “React” labels.

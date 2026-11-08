@@ -1,3 +1,4 @@
+import { normalizeReactions } from "./reactions.js";
 import { createAnnotationHydrator } from "./annotationHydration.js";
 import { captureEnvironment } from "./captureEnvironment.js";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -73,8 +74,11 @@ import {
   stopStream,
 } from "./videoRecording.js";
 
+import { AgentReview } from "./AgentReview.jsx";
+import { Presence } from "./Presence.jsx";
 
 const MAX_MULTI_TARGETS = 20;
+const EMPTY_IGNORED_SELECTORS = [];
 const MIN_REGION_SIZE = 12;
 const ANNOTATION_QUERY_PARAM = "threadmark";
 const MAX_INTERACTION_DURATION_MS = 15_000;
@@ -199,6 +203,7 @@ function recordToAnnotation(record, reusablePayload = null) {
       tourStep: source.tourStep,
       comment: source.comment,
       replies: source.replies,
+      reactions: source.reactions,
       interaction: source.interaction,
       video: source.video,
       replay: source.replay,
@@ -463,12 +468,13 @@ export function Threadmark({
   projectKey,
   reviewer,
   reviewers = [],
+  presence,
   enabled,
   environment,
   buildId,
   route,
   allowedHosts,
-  ignoredSelectors = [],
+  ignoredSelectors = EMPTY_IGNORED_SELECTORS,
   styleNonce,
   annotations: persistedAnnotations,
   pageVersions,
@@ -485,9 +491,11 @@ export function Threadmark({
   onFeedbackCreate,
   onFeedbackDelete,
   onFeedbackClear,
+  onPageReviewRequested,
   onPageVersionSelect,
   onFeedbackCarryForward,
   onPollVote,
+  onReactionChange,
   onNextStepDone,
   onNextStepsCopy,
   tours,
@@ -600,6 +608,7 @@ export function Threadmark({
     onPageVersionSelect: useLatest(onPageVersionSelect),
     onFeedbackCarryForward: useLatest(onFeedbackCarryForward),
     onPollVote: useLatest(onPollVote),
+    onReactionChange: useLatest(onReactionChange),
     onNextStepDone: useLatest(onNextStepDone),
     onNextStepsCopy: useLatest(onNextStepsCopy),
     onTourSave: useLatest(onTourSave),
@@ -3305,7 +3314,21 @@ export function Threadmark({
       updatedAt: movedAt, lastEditedBy: normalizedReviewer, pin,
       pinHistory: [...(annotation.payload.pinHistory || []), previous] });
     const evidence = annotation.runtime?.evidence || [];
-    return acceptAuthoritative(payload, evidence, await callbacks.onFeedbackCreate.current?.(payload, { evidence }));
+    const result = await callbacks.onFeedbackCreate.current?.(payload, { evidence });
+    if (!result?.feedback) return { payload, evidence };
+    const accepted = recordToAnnotation({
+      feedback: result.feedback,
+      context: { evidence: result.context?.evidence ?? evidence },
+    });
+    // A host can return its authoritative record. Never claim a location was confirmed
+    // if that record omitted, changed, or rejected the requested pin.
+    if (!accepted?.payload.pin
+      || accepted.payload.pin.route !== payload.pin.route
+      || accepted.payload.pin.buildId !== payload.pin.buildId
+      || JSON.stringify(accepted.payload.pin.target) !== JSON.stringify(payload.pin.target)) {
+      throw new Error("The host did not save the requested pin location.");
+    }
+    return { payload: accepted.payload, evidence: accepted.runtime.evidence };
   };
 
   const confirmSuggestedPin = async (id) => {
@@ -3375,6 +3398,26 @@ export function Threadmark({
       setSubmitting(false); showNotice("Thread wasn’t updated. Try again.");
     }
   };
+
+  const changeReaction = useCallback(async (annotationId, messageId, emoji, active) => {
+    const annotation = annotationsRef.current.find((item) => item.id === annotationId);
+    if (!annotation || !normalizedReviewer || !callbacks.onReactionChange.current) return;
+    const generation = submitGenerationRef.current;
+    try {
+      const result = await callbacks.onReactionChange.current(annotation.payload, { messageId, emoji, active });
+      if (generation !== submitGenerationRef.current) return;
+      if (!Array.isArray(result)) throw new Error("The reaction callback must return saved reactions.");
+      const reactions = normalizeReactions(result);
+      setAnnotations((items) => items.map((item) => item.id !== annotationId ? item : { ...item, payload: {
+        ...item.payload,
+        ...(messageId === annotationId ? { reactions } : { replies: (item.payload.replies || []).map((reply) => reply.id === messageId ? { ...reply, reactions } : reply) }),
+      } }));
+    } catch (error) {
+      showNotice("Your reaction wasn’t saved. Try again.");
+      safeCall(callbacks.onError, { code: "reaction_failed", message: error?.message || "The reaction could not be saved." });
+      throw error;
+    }
+  }, [annotationsRef, normalizedReviewer, callbacks.onReactionChange, callbacks.onError, safeCall, showNotice]);
 
   // Votes go to the host, which returns the poll's new results.
   const votePoll = useCallback(async (annotationId, optionIds) => {
@@ -3506,6 +3549,7 @@ export function Threadmark({
           ...editing.payload,
           now: editing.payload.createdAt,
           updatedAt: createdAt,
+          reactions: editing.payload.reactions,
           replies: [...(editing.payload.replies || []), reply],
           workflow: withInlineMentions(editing.payload.workflow, comment, reviewers, normalizedReviewer, buildId),
           lastEditedBy: normalizedReviewer,
@@ -3590,6 +3634,7 @@ export function Threadmark({
         replay: editing?.payload.replay
           || (replayAttachment ? { evidenceId: replayAttachment.id, startedAt: replayAttachment.startedAt, ...replayAttachment.summary } : undefined),
         comment,
+        reactions: editing?.payload.reactions,
         replies: editing?.payload.replies,
         author: editing ? editing.payload.author : normalizedReviewer,
         lastEditedBy: normalizedReviewer,
@@ -3725,6 +3770,13 @@ export function Threadmark({
   }
 
   const overlay = createPortal(
+    <>
+    {onPageReviewRequested && mode === 'picking' && <AgentReview route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
+      onReview={onPageReviewRequested} onRecords={(records) => {
+        const accepted = records.filter(record => record.feedback?.projectKey === projectKey && record.feedback?.route === activeRoute).map(record => recordToAnnotation(record)).filter(Boolean);
+        setAnnotations(current => [...current.filter(item => !accepted.some(next => next.id === item.id)), ...accepted]);
+      }} />}
+    {presence && <Presence transport={presence} route={activeRoute} buildId={buildId} projectKey={projectKey} ignoredSelectors={ignoredSelectors} />}
     <Overlay
       mode={mode}
       onStartTour={startTourMode}
@@ -3877,12 +3929,14 @@ export function Threadmark({
       onPollMultipleChange={setPollMultiple}
       pollsEnabled={Boolean(callbacks.onPollVote.current)}
       onVote={votePoll}
+      onReactionChange={callbacks.onReactionChange.current ? changeReaction : undefined}
       notice={notice}
       submitting={submitting}
       uploadProgress={uploadProgress}
       composingScreenshot={composingScreenshot}
       launcherRef={launcherRef}
-    />,
+    />
+    </>,
     portalRoot,
   );
   // A temporary player for "Try it" when the app doesn't mount <ThreadmarkTours> itself.

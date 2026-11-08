@@ -1,3 +1,5 @@
+import { SmileCircleIcon } from "@solar-icons/react/linear/smile-circle";
+import { REACTIONS } from "./reactions.js";
 import { VirtualCommentList } from "./VirtualCommentList.jsx";
 import { Suspense, lazy, memo, useLayoutEffect, useSyncExternalStore, useMemo, useCallback, useEffect, useRef, useState } from "react";
 import { VideoFramePlayHorizontalIcon as MonitorPlay } from "@solar-icons/react/linear/video-frame-play-horizontal";
@@ -1444,10 +1446,40 @@ function ReviewerAvatar({ reviewer, className = "tm-thread-message__avatar" }) {
   );
 }
 
+function MessageReactions({ message, reviewer, onChange }) {
+  const [pending, setPending] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const reactions = message.reactions || [];
+  const toggle = async (emoji, active) => {
+    setPending(true);
+    try { await onChange(message.id, emoji, active); setChoosing(false); }
+    catch { /* The parent announces the save failure; keep the chooser available for retry. */ }
+    finally { setPending(false); }
+  };
+  return <div className="tm-reactions" role="group" aria-label="Message reactions" aria-busy={pending}>
+    {REACTIONS.filter(([emoji]) => choosing || reactions.some((item) => item.emoji === emoji)).map(([emoji, label]) => {
+      const members = reactions.filter((item) => item.emoji === emoji).map((item) => item.reviewer);
+      const mine = members.some((member) => member.id === reviewer?.id);
+      return <button key={emoji} type="button" aria-pressed={mine}
+        aria-label={`${label}: ${members.length}${mine ? ", including you" : ""}`}
+        title={members.map((member) => member.displayName).join(", ") || label}
+        disabled={pending || !reviewer || !onChange} onClick={() => toggle(emoji, !mine)}>
+        <span aria-hidden="true">{emoji}</span>{members.length > 0 && <span>{members.length}</span>}
+      </button>;
+    })}
+    {onChange && reviewer && <button type="button" aria-expanded={choosing} disabled={pending}
+      className="tm-reaction-trigger" title={choosing ? "Close reaction choices" : "Add reaction"}
+      aria-label={choosing ? "Close reaction choices" : "Add reaction"} onClick={() => setChoosing((value) => !value)}>
+      <span className="tm-reaction-add" aria-hidden="true"><SmileCircleIcon {...iconProps} /><PlusIcon {...iconProps} /></span>
+    </button>}
+  </div>;
+}
+
 function ThreadMessage({
   message,
   annotation = false,
   currentReviewer,
+  onReactionChange,
   onReply,
   onDelete,
   onEdit,
@@ -1478,6 +1510,7 @@ function ThreadMessage({
             </button>
           </div>
           <p>{message.comment}</p>
+          <MessageReactions message={message} reviewer={currentReviewer} onChange={onReactionChange} />
           {/* Kept mounted while closed so the actions remain addressable; `hidden` removes them from view and the accessibility tree. */}
           <div className="tm-thread-message__actions" role="menu" hidden={!menuOpen}>
             <button type="button" role="menuitem" onClick={() => choose(() => onReply(message.id, authorName))}>Reply</button>
@@ -1742,6 +1775,7 @@ function Overlay({
   onPollMultipleChange,
   pollsEnabled = false,
   onVote,
+  onReactionChange,
   notice,
   submitting,
   uploadProgress = null,
@@ -2262,7 +2296,7 @@ function Overlay({
           />
           <aside
             ref={popoverRef}
-            className="tm-popover"
+            className={`tm-popover${editingAnnotation ? " tm-popover--thread" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="tm-popover-title"
@@ -2281,7 +2315,7 @@ function Overlay({
               const noun = editingAnnotation.payload.ask?.kind === "poll" ? "poll" : editingAnnotation.payload.ask?.kind === "question" ? "question" : "comment";
               return editingAnnotation.payload.workflow?.status === "resolved"
                 ? `${noun === "poll" ? "Closed" : "Resolved"} ${noun}`
-                : `${noun[0].toUpperCase()}${noun.slice(1)}`;
+                : noun === "comment" ? "Thread" : `${noun[0].toUpperCase()}${noun.slice(1)}`;
             })()}</h2>
             <div className="tm-thread-header-actions">
               <button type="button" aria-label="More thread actions" title="More thread actions"
@@ -2405,10 +2439,12 @@ function Overlay({
                   message={{
                     id: editingAnnotation.payload.id,
                     comment: editingAnnotation.payload.comment,
+                    reactions: editingAnnotation.payload.reactions,
                     createdAt: editingAnnotation.payload.createdAt,
                     author: editingAnnotation.payload.author,
                   }}
                   annotation
+                  onReactionChange={onReactionChange ? (messageId, emoji, active) => onReactionChange(editingAnnotation.id, messageId, emoji, active) : undefined}
                   currentReviewer={reviewer}
                   onReply={onBeginReply}
                   onDelete={onRequestDelete}
@@ -2447,6 +2483,7 @@ function Overlay({
                   <ThreadMessage
                     key={reply.id}
                     message={reply}
+                    onReactionChange={onReactionChange ? (messageId, emoji, active) => onReactionChange(editingAnnotation.id, messageId, emoji, active) : undefined}
                     currentReviewer={reviewer}
                     onReply={onBeginReply}
                     onDelete={onRequestDelete}

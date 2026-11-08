@@ -57,6 +57,36 @@ export function App() {
 
 On a local hostname, Threadmark renders a **Review page** launcher. Reviewers can also toggle Review mode with <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>. Once active, one compact toolbar can be dragged by its grip to a convenient position.
 
+## Setting up your own storage
+
+The quick-start callback above only logs feedback. Threadmark does **not** include a database, create tables, or save comments automatically. For reviews and comments that survive reloads and can be shared with your team, connect the SDK to storage owned by your application. The local [basic React example](../../examples/basic-react/README.md) uses IndexedDB, which stays in one browser and is useful for trying the SDK without a server.
+
+1. **Create storage in your backend.** Use your existing database or provision one with a provider you control. Store each annotation under its `projectKey` and `id`, with its `route` and the **entire** `feedback` JSON. The original comment and `replies[]` live in that feedback record; edits, replies, resolution changes, and repins update the same record. For example, a PostgreSQL starting table is:
+
+   ```sql
+   CREATE TABLE review_annotations (
+     project_key text NOT NULL,
+     id text NOT NULL,
+     route text NOT NULL,
+     feedback jsonb NOT NULL,
+     PRIMARY KEY (project_key, id)
+   );
+   CREATE INDEX review_annotations_project_route
+     ON review_annotations (project_key, route);
+   ```
+
+   If your application has workspaces or review sessions, add those IDs to the table and use them in every authorization check and query. Keep database credentials on the server, never in React props or browser code.
+
+2. **Create private screenshot storage.** `feedback.evidence` contains image metadata, while `context.evidence` contains `{ id, blob }` pairs with the actual screenshot bytes. Put the Blobs in private object or file storage keyed by project, feedback ID, and evidence ID. Record their storage keys alongside the annotation. On reads, fetch only evidence the signed-in reviewer may access and return it as `context.evidence`; storing only the JSON loses screenshot previews after reload.
+
+3. **Add authenticated API operations.** Your server needs to list authorized annotations, upsert a whole annotation, delete one annotation and its evidence, and clear only the authorized records passed by the SDK. On every request, derive the reviewer identity and project access from your session, validate the submitted record, and scope reads and writes to that project. Do not trust a browser-supplied `projectKey`, author, or annotation ID as proof of access.
+
+4. **Wire the SDK to those operations.** Load `{ feedback, context }` records into `annotations` when the page opens, and keep the array current after writes. `onFeedbackCreate` runs for new comments, edits, replies, and other thread changes; upsert the complete record. Connect `onFeedbackDelete` and `onFeedbackClear` to your delete operations. Await the server response so a failed save stays visible as a failure to the reviewer. The [persistence example below](#persist-and-restore-annotations) shows the callback shape; replace its `reviewStore` with your authenticated API client.
+
+5. **Verify with two signed-in reviewers.** Post a comment with a screenshot, reload, add a reply, and confirm both reviewers can see the same thread. Then verify that a reviewer outside the project cannot list, edit, or fetch its screenshot. This checks both persistence and the access boundary.
+
+If you prefer managed collaboration, explicitly connect Threadmark Cloud instead of implementing these operations yourself. The SDK does not connect to Cloud automatically.
+
 ## Gesture-first annotations
 
 - Click an eligible element to open its anchored comment popover without activating the host control. Keyboard reviewers can focus an element and press Enter or Space.
@@ -461,9 +491,10 @@ const [annotations, setAnnotations] = useState([]);
     await reviewStore.remove(feedback.id);
     setAnnotations(await reviewStore.list());
   }}
-  onFeedbackClear={async () => {
-    await reviewStore.clear();
-    setAnnotations([]);
+  onFeedbackClear={async (feedback) => {
+    const ids = feedback.map((item) => item.id);
+    await reviewStore.clear(ids);
+    setAnnotations((current) => current.filter((item) => !ids.includes(item.feedback.id)));
   }}
 />
 ```
@@ -831,6 +862,8 @@ Persist both the serializable feedback and the Blob sidecar in `context.evidence
 
 **Repin comment** is available on existing discussions and is the primary repair action for missing targets. Select one live element, then confirm. Cancellation or a rejected persistence callback leaves the original location unchanged. The same feedback ID, original `target`/`targets`, build, author, replies, and evidence remain intact. `feedback.pin` identifies the current location; `pinHistory` contains previous locations and reviewer/build/time context. Subsequent edits and reloads retain these fields. Consumers should treat this as an update to the existing record, validate membership and reviewer identity server-side, and persist the full normalized record. Repinning does not take or replace a screenshot.
 
+If `onFeedbackCreate` returns an authoritative record when confirming or repinning a location, it must include the requested `pin.target`, route, and build. A stale or altered return leaves the repair action open and reports that the location was not saved, so the reviewer can retry or choose another target.
+
 Coordinate-only region and Pencil pins require repair when a different known build is active; their original evidence remains available. Ordinary element pins continue using conservative stable-ID/path/fingerprint restoration. Missing or ambiguous matches never silently attach to another element.
 
 ### Feedback panel
@@ -858,6 +891,20 @@ Solar Linear icons by [480 Design](https://www.figma.com/community/file/11668315
 ### Capture environment
 
 New comments include optional `feedback.captureEnvironment`: coarse browser/version, operating system, device category, viewport/pixel ratio, online status and available browser connection estimates. It holds no raw user agent, IP address, device model, connection name or high-entropy browser hints; the more detailed `feedback.device` (see [Browser details and app context](#browser-details-and-app-context)) does use client hints for exact versions and the phone model. `deviceDetails={false}` leaves out both. Connection estimates are approximate and may be absent. Metadata is browser-reported context, never an authorization signal. Edits and hydration retain the original context; older comments remain without it. Consumer-managed stores should preserve this field with the original capture data.
+
+### Optional live presence
+
+`presence` accepts a consumer-owned transport with `connect(scope, onMembers, onError)`, returning `publish(cursor)` and `close()`. It is mounted only when Threadmark activation succeeds. The optional Cloud client provides `client.presence`; pass it after the reviewer explicitly connects. Core SDK usage has no presence requests or account requirement. Named cursors and the page reviewer count live in the isolated overlay, and cursor movement does not rerender the host page. Stable `data-threadmark-id` anchors align positions across viewports. Untagged content uses document coordinates, so responsive layouts may differ. Hidden tabs disconnect; idle pointers fade; Hide cursors affects local display. Presence never transmits typed values or drafts.
+
+## Requested page reviews
+
+Mount `onPageReviewRequested` to enable **Ask Threadmark → Review this page**. With Cloud, pass `adapter.onPageReviewRequested`. The SDK captures up to five issues and supplies masked screenshots for targets inside the current viewport. It excludes hidden/protected content, form values, the overlay and configured ignored selectors. Screenshot failures do not block text comments. Traversal stops at 3,000 elements with a partial-review notice. It never clicks controls, navigates or changes the page.
+
+This starter uses built-in checks for unnamed controls, missing image alt attributes, heading jumps, text below 12px and possible horizontal overflow. It needs no model API key, and does not perform model-based design critique, comprehensive accessibility audits or interaction tests. Ordinary comment mentions do not dispatch tasks; the displayed `@threadmark review this page` command uses the explicit review button. Consumers can replace the callback with a separately authorized provider.
+
+Cloud assigns Threadmark Agent as the displayed author and records the requesting member in activity. The requester retains edit/evidence/delete permissions; invited members can reply and resolve. Scope must match the session page and build. Runs are transactional/idempotent, with exact rule-text/target duplicates skipped, including resolved comments. Stop cancels local work; committed server comments remain, and retry reconciles the run.
+
+`collectPageReview({ route, buildId, ignoredSelectors, signal })` is also exported for consumer-owned command surfaces. It returns `{ version, route, buildId, findings, truncated }` without posting feedback or making network requests.
 
 ### Saved-comment restoration performance
 
@@ -947,3 +994,9 @@ Run `npm run benchmark:list-hydration` for 60-, 200- and 1,000-comment fixtures.
 counts, normalization counts on fresh host arrays and individual edits, scroll retention, keyboard
 navigation, full-list search/filtering, and thumbnail cleanup. Reported poll duration includes host
 JSON copying and browser frame settling; it is not an isolated normalization CPU measurement.
+
+### Message reactions
+
+Supply `onReactionChange(feedback, { messageId, emoji, active })` to enable reactions on comments and replies. Return the saved message's full array of `{ emoji, reviewer: { id, displayName } }` records. Hydrate those records as `feedback.reactions` or `feedback.replies[].reactions`; the SDK renders counts and the current reviewer's pressed state. Supported reactions are 👍, ❤️, 🎉, 👀, and ✅. Each person can add each reaction once, and click again to remove it. The callback should set the requested `active` state rather than blindly toggle, so retries are safe.
+
+Authenticate the actor in your backend; never accept the browser's reviewer identity as authority. Validate that the message belongs to the authorized discussion. Without the callback, saved reactions remain visible but cannot be changed. Cloud's optional adapter provides this callback. The SDK makes no network requests itself.

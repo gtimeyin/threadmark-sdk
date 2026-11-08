@@ -11,3 +11,5 @@ export {
   matchesAllowedHost,
   threadmarkTarget,
 } from "./core.js";
+
+export { collectPageReview } from "./pageReview.js";

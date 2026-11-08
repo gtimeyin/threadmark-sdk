@@ -1,3 +1,4 @@
+import { normalizeReactions } from "./reactions.js";
 import { normalizeCaptureEnvironment } from "./captureEnvironment.js";
 import {
   MAX_REPLAY_ENTRIES,
@@ -166,6 +167,7 @@ function normalizeReply(value) {
     updatedAt: cleanString(value.updatedAt, 48) || createdAt,
     author: normalizeReviewer(value.author),
     lastEditedBy: normalizeReviewer(value.lastEditedBy),
+    ...(Array.isArray(value.reactions) ? { reactions: normalizeReactions(value.reactions) } : {}),
   };
 }
 
@@ -626,6 +628,7 @@ export function createFeedbackPayload({
   evidence,
   comment,
   replies,
+  reactions,
   interaction,
   video,
   replay,
@@ -705,6 +708,7 @@ export function createFeedbackPayload({
       })),
     };
   }
+  if (Array.isArray(reactions)) payload.reactions = normalizeReactions(reactions);
   if (Array.isArray(replies)) {
     payload.replies = replies
       .slice(0, 200)

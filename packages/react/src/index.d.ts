@@ -359,7 +359,14 @@ export interface ThreadmarkVideoRecordingOptions {
   maxDurationMs?: number;
 }
 
+export interface ThreadmarkReaction {
+  emoji: "👍" | "❤️" | "🎉" | "👀" | "✅";
+  reviewer: ThreadmarkReviewer;
+}
+export interface ThreadmarkReactionChange { messageId: string; emoji: ThreadmarkReaction["emoji"]; active: boolean; }
+
 export interface ThreadmarkReply {
+  reactions?: ThreadmarkReaction[];
   id: string;
   /** The feedback id for a root reply, or another reply id when responding in context. */
   parentId: string | null;
@@ -444,6 +451,7 @@ export interface ThreadmarkFeedback {
   /** What the host's `metadata` returned when the comment was posted, cleaned and at most 10 KB. */
   metadata?: ThreadmarkMetadata;
   comment: string;
+  reactions?: ThreadmarkReaction[];
   replies?: ThreadmarkReply[];
   createdAt: string;
   updatedAt: string;
@@ -473,7 +481,31 @@ export interface ThreadmarkError {
   message: string;
 }
 
+export interface ThreadmarkPresenceMember {
+  connectionId: string; member: ThreadmarkReviewer; route: string; buildId: string;
+  updatedAt: number; cursor: { x: number; y: number; targetId?: string; offsetX?: number; offsetY?: number } | null;
+}
+export interface ThreadmarkPresenceTransport {
+  connect(scope: { projectKey: string; route: string; buildId?: string }, onMembers: (members: ThreadmarkPresenceMember[]) => void,
+    onError?: (error: unknown) => void): { publish(cursor: ThreadmarkPresenceMember['cursor']): void; close(): void };
+}
+export interface ThreadmarkPageReview {
+  version: 1; route: string; buildId: string; truncated: boolean;
+  findings: { rule: 'unnamed-control' | 'missing-alt' | 'heading-jump' | 'small-text' | 'horizontal-overflow'; target: ThreadmarkTargetDescriptor }[];
+}
+export interface ThreadmarkPageReviewContext {
+  requestId: string; signal: AbortSignal;
+  evidence: { id: string; rule: string; targetId: string; blob: Blob; metadata: ThreadmarkSnapshotMetadata }[];
+}
+export interface ThreadmarkPageReviewResult {
+  records: ThreadmarkAnnotationRecord[]; annotations?: unknown[]; skipped?: number; evidenceFailures?: number; engine?: string;
+}
+export declare function collectPageReview(options?: { documentRef?: Document; route?: string; buildId?: string; ignoredSelectors?: string[]; signal?: AbortSignal }): Promise<ThreadmarkPageReview>;
 export interface ThreadmarkProps {
+  /** Explicit page-review command; the consumer owns agent dispatch and persistence. */
+  onPageReviewRequested?: (input: ThreadmarkPageReview, context: ThreadmarkPageReviewContext) => Promise<ThreadmarkPageReviewResult>;
+  /** Optional, explicitly authorized presence transport; no network connection by default. */
+  presence?: ThreadmarkPresenceTransport;
   /** Public project identifier; never use a secret token here. */
   projectKey: string;
   /** Authenticated reviewer supplied by the host application. Threadmark does not authenticate users. */
@@ -562,6 +594,8 @@ export interface ThreadmarkProps {
    * Stores the reviewer's vote on a poll (an empty list takes it back) and returns the poll's new results.
    * Providing it adds Comment / Question / Poll to the new-comment composer; without it, posts are comments.
    */
+  /** Host authenticates the actor and returns authoritative reactions for the selected message. */
+  onReactionChange?: (feedback: ThreadmarkFeedback, change: ThreadmarkReactionChange) => ThreadmarkReaction[] | Promise<ThreadmarkReaction[]>;
   onPollVote?: (feedback: ThreadmarkFeedback, optionIds: string[]) => ThreadmarkPollResults | Promise<ThreadmarkPollResults>;
   /**
    * Stores a next step as done or not done. The tick shows at once; a rejection puts it back. Supply the
@@ -634,6 +668,7 @@ export declare function createFeedbackPayload(options: {
   video?: ThreadmarkVideoCapture;
   replay?: ThreadmarkReplaySummary;
   comment: string;
+  reactions?: readonly ThreadmarkReaction[];
   replies?: readonly ThreadmarkReply[];
   author?: ThreadmarkReviewer | null;
   lastEditedBy?: ThreadmarkReviewer | null;
