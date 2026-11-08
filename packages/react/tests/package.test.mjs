@@ -336,7 +336,7 @@ test("page version history is host-driven and exposes explicit navigation and ca
 
   assert.match(source, /aria-label="Feedback panel"/);
   assert.match(source, /role="tablist"/);
-  assert.match(source, /Versions <span>/);
+  assert.match(source, /Versions <span className="tm-sr-only">/);
   assert.match(source, /className="tm-version-list"/);
   assert.match(source, /Carry comment forward/);
   assert.match(styles, /\.tm-version-list\s*\{/);

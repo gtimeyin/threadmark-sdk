@@ -92,6 +92,11 @@ function FeedbackLog({ entries, onClear }) {
 export function App() {
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [annotations, setAnnotations] = useState([]);
+  // Notifications are host-owned. This stand-in shows the Inbox tab and the bar's New reply mood.
+  const [notifications, setNotifications] = useState(() => [
+    { id: "demo-mention", kind: "mention", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "@You can we keep the word launch in the headline?", route: "/", createdAt: new Date(Date.now() - 4 * 60000).toISOString() },
+    { id: "demo-reply", kind: "reply", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "Changed it on the preview, have a look.", route: "/", createdAt: new Date(Date.now() - 50 * 60000).toISOString(), read: true },
+  ]);
   const handleReactionChange = useMemo(() => createLocalReactionHandler({ store: feedbackStore, reviewer: REVIEWER, onRecords: setAnnotations }), []);
   const [status, setStatus] = useState("booting");
   // Tour mode's "Save to code" writes the tour file through threadmark-react/vite; the new version also
@@ -272,6 +277,8 @@ export function App() {
         onPageVersionSelect={(version) => setActiveBuildId(version.buildId || CURRENT_BUILD_ID)}
         onFeedbackCarryForward={handleCarryForward}
         onPollVote={handlePollVote}
+        notifications={notifications}
+        onNotificationsRead={(ids) => setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)))}
         tours={tours}
         onTourSave={saveTour}
         sessionReplay

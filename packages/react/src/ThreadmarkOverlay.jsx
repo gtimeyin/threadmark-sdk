@@ -42,7 +42,8 @@ import { WarningIcon as TriangleAlert } from "./icons.jsx";
 import { ReopenIcon as Undo2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { ResolveIcon, TourIcon } from "./icons.jsx";
+import { InboxIcon, NextStepsIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { Avatar, EmptyState } from "./ui/primitives.jsx";
 import { BarHint, IdleBar } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
 import {
@@ -552,8 +553,40 @@ function NextStepsTab({ nextSteps, canTick, onDone, onOpenSource }) {
   );
 }
 
+// Inbox: replies, mentions and other things that need you, newest first (Figma "Inbox item").
+function InboxList({ notifications, onOpen }) {
+  if (!notifications.length) {
+    return <EmptyState icon={InboxIcon} title="Nothing new">Replies and mentions for you show up here.</EmptyState>;
+  }
+  return (
+    <ul className="tm-inbox" aria-label="Inbox">
+      {notifications.map((item) => (
+        <li key={item.id}>
+          <button type="button" className={`tm-inbox-item${item.read ? "" : " is-unread"}`} onClick={() => onOpen?.(item)}>
+            <Avatar name={item.actor.displayName} src={item.actor.avatarUrl} size={20} />
+            <span className="tm-inbox-item__body">
+              <span className="tm-inbox-item__meta">
+                <strong>{item.actor.displayName}</strong>
+                {item.createdAt && <time dateTime={item.createdAt}>{formatMessageTime(item.createdAt)}</time>}
+                {!item.read && <span className="tm-inbox-item__dot"><span className="tm-sr-only">Unread</span></span>}
+              </span>
+              <span className="tm-inbox-item__text">{item.text}</span>
+              {item.route && <span className="tm-inbox-item__route">{item.route}</span>}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
-  nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps }) {
+  nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen }) {
+  const unreadNotifications = notifications ? notifications.filter((item) => !item.read) : [];
+  useEffect(() => {
+    if (hidden || tab !== "inbox" || !unreadNotifications.length) return;
+    onNotificationsSeen?.(unreadNotifications.map((item) => item.id));
+  }, [hidden, tab, unreadNotifications.map((item) => item.id).join("|")]);
   const [controls, setControls] = useState("collapsed");
   const [filterOpen, setFilterOpen] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState(false);
@@ -638,7 +671,22 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
         }
       }}>
       <header className="tm-comments-header">
-        <div className="tm-comments-heading"><h2>Feedback</h2><p>Current page: {route}</p></div>
+        <h2 className="tm-sr-only">Feedback</h2>
+        <div className="tm-panel-tabs" role="tablist" aria-label="Feedback views">
+          <button type="button" role="tab" aria-selected={tab === "comments"} onClick={() => onTabChange("comments")}>
+            Activity <span className="tm-sr-only">{annotations.length}</span>
+          </button>
+          {notifications && <button type="button" role="tab" aria-selected={tab === "inbox"} onClick={() => onTabChange("inbox")}>
+            <InboxIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />Inbox
+            {unreadNotifications.length > 0 && <span className="tm-panel-tabs__badge">{unreadNotifications.length}<span className="tm-sr-only"> unread</span></span>}
+          </button>}
+          {nextSteps && <button type="button" role="tab" aria-selected={tab === "next-steps"} onClick={() => onTabChange("next-steps")}>
+            <NextStepsIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />Next steps <span className="tm-sr-only">{nextSteps.steps.filter((step) => !step.completed).length}</span>
+          </button>}
+          {pageVersions.length > 0 && <button type="button" role="tab" aria-selected={tab === "versions"} onClick={() => onTabChange("versions")}>
+            Versions <span className="tm-sr-only">{pageVersions.length}</span>
+          </button>}
+        </div>
         <div className="tm-comments-actions">
           {tab === "comments" && <><button type="button" className={controls === "search" || query ? "is-active" : undefined}
             aria-label={controls === "search" ? "Hide search comments" : "Show search comments"}
@@ -706,23 +754,13 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           <button type="button" aria-label="Close feedback panel" onClick={onClose}><X size={18} /></button>
         </div>
       </header>
-      {(pageVersions.length > 0 || nextSteps) && <div className="tm-panel-tabs" role="tablist" aria-label="Feedback views">
-        <button type="button" role="tab" aria-selected={tab === "comments"} onClick={() => onTabChange("comments")}>
-          Comments <span>{annotations.length}</span>
-        </button>
-        {nextSteps && <button type="button" role="tab" aria-selected={tab === "next-steps"} onClick={() => onTabChange("next-steps")}>
-          Next steps <span>{nextSteps.steps.filter((step) => !step.completed).length}</span>
-        </button>}
-        {pageVersions.length > 0 && <button type="button" role="tab" aria-selected={tab === "versions"} onClick={() => onTabChange("versions")}>
-          Versions <span>{pageVersions.length}</span>
-        </button>}
-      </div>}
-      {tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
+      {tab === "inbox" && notifications ? <InboxList notifications={notifications} onOpen={onOpenNotification} />
+        : tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
         : tab === "versions" ? <PageVersionList versions={pageVersions} onSelect={onSelectPageVersion} /> : <>
       {controls === "search" && <div id="tm-comments-search-controls" className="tm-comments-search">
         <input ref={searchRef} aria-label="Search comments" placeholder="Search comments and replies…" value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>}
-      <p className="tm-comments-count" role="status">{visible.length} of {annotations.length} threads</p>
+      <p className="tm-comments-count"><span>Comments</span><span role="status">{visible.length} of {annotations.length} threads</span></p>
       <VirtualCommentList items={visible} hidden={hidden} resetKey={JSON.stringify([search, reviewerId, filter, status, page, build])} renderRow={(annotation) => {
           const feedback = annotation.payload;
           const number = model.numbers.get(annotation.id);
@@ -1748,6 +1786,9 @@ function Overlay({
   onShowVersions,
   onSelectPageVersion,
   nextSteps = null,
+  notifications = null,
+  onOpenNotification,
+  onNotificationsSeen,
   nextStepsOpen = false,
   onShowNextSteps = () => {},
   canTickNextSteps = false,
@@ -1852,6 +1893,7 @@ function Overlay({
   });
   const carryForwardVersions = pageVersions.filter((version) => !version.current && version.state === "ready");
   const [toolbarMenu, setToolbarMenu] = useState(null);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const toolbarMenuRef = useRef(null);
   toolbarMenuRef.current = toolbarMenu;
   const toolsTriggerRef = useRef(null);
@@ -1993,7 +2035,12 @@ function Overlay({
           annotations={annotations}
           route={typeof window === "undefined" ? "/" : window.location.pathname}
           launcherRef={launcherRef}
-          onOpen={(hasComments) => { onStart(); if (hasComments && !allCommentsOpen) onToggleAllComments(); }}
+          notifications={notifications}
+          onOpen={(hasComments, toInbox) => {
+            onStart();
+            setInboxOpen(Boolean(toInbox));
+            if ((hasComments || toInbox) && !allCommentsOpen) onToggleAllComments();
+          }}
           onOpenTools={() => { onStart(); setToolbarMenu("tools"); }}
         />
       )}
@@ -2285,11 +2332,12 @@ function Overlay({
       {allCommentsOpen && ["picking", "selected"].includes(mode) && (
         <AllCommentsPanel annotations={projectAnnotations} restorations={annotationRestorations} reviewer={reviewer}
           route={pageVersionRoute} hidden={mode !== "picking"} onClose={onCloseAllComments} onOpen={onOpenListedAnnotation}
-          tab={versionHistoryOpen && pageVersions.length ? "versions" : nextStepsOpen && nextSteps ? "next-steps" : "comments"}
-          onTabChange={(tab) => { onShowVersions(tab === "versions"); onShowNextSteps(tab === "next-steps"); }}
+          tab={inboxOpen && notifications ? "inbox" : versionHistoryOpen && pageVersions.length ? "versions" : nextStepsOpen && nextSteps ? "next-steps" : "comments"}
+          onTabChange={(tab) => { setInboxOpen(tab === "inbox"); onShowVersions(tab === "versions"); onShowNextSteps(tab === "next-steps"); }}
           pageVersions={pageVersions} onSelectPageVersion={onSelectPageVersion}
           nextSteps={nextSteps} canTickNextSteps={canTickNextSteps} onNextStepDone={onNextStepDone}
-          onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps} />
+          onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps}
+          notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen} />
       )}
 
       {replayViewer && (

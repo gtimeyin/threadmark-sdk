@@ -1,3 +1,4 @@
+import { normalizeNotifications } from "./notifications.js";
 import { normalizeReactions } from "./reactions.js";
 import { createAnnotationHydrator } from "./annotationHydration.js";
 import { captureEnvironment } from "./captureEnvironment.js";
@@ -479,6 +480,7 @@ export function Threadmark({
   annotations: persistedAnnotations,
   pageVersions,
   nextSteps,
+  notifications,
   videoRecording,
   sessionReplay,
   deviceDetails = true,
@@ -498,6 +500,8 @@ export function Threadmark({
   onReactionChange,
   onNextStepDone,
   onNextStepsCopy,
+  onNotificationOpen,
+  onNotificationsRead,
   tours,
   onTourSave,
   onError,
@@ -596,6 +600,7 @@ export function Threadmark({
   const clientHintsRef = useRef(null);
   const metadataRef = useLatest(metadata);
 
+  const normalizedNotifications = useMemo(() => normalizeNotifications(notifications), [notifications]);
   const callbacks = {
     onReady: useLatest(onReady),
     onStatusChange: useLatest(onStatusChange),
@@ -611,6 +616,8 @@ export function Threadmark({
     onReactionChange: useLatest(onReactionChange),
     onNextStepDone: useLatest(onNextStepDone),
     onNextStepsCopy: useLatest(onNextStepsCopy),
+    onNotificationOpen: useLatest(onNotificationOpen),
+    onNotificationsRead: useLatest(onNotificationsRead),
     onTourSave: useLatest(onTourSave),
     onError: useLatest(onError),
   };
@@ -3901,6 +3908,12 @@ export function Threadmark({
       onShowVersions={setVersionHistoryOpen}
       onSelectPageVersion={selectPageVersion}
       nextSteps={shownNextSteps}
+      notifications={Array.isArray(notifications) ? normalizedNotifications : null}
+      onOpenNotification={(notification) => {
+        safeCall(callbacks.onNotificationOpen, notification);
+        if (notification.annotationId && projectAnnotations.some((item) => item.id === notification.annotationId)) openListedAnnotation(notification.annotationId);
+      }}
+      onNotificationsSeen={(ids) => { if (ids.length) safeCall(callbacks.onNotificationsRead, ids); }}
       nextStepsOpen={nextStepsOpen}
       onShowNextSteps={setNextStepsOpen}
       canTickNextSteps={Boolean(shownNextSteps?.canEdit && callbacks.onNextStepDone.current)}

@@ -501,6 +501,20 @@ export interface ThreadmarkPageReviewResult {
   records: ThreadmarkAnnotationRecord[]; annotations?: unknown[]; skipped?: number; evidenceFailures?: number; engine?: string;
 }
 export declare function collectPageReview(options?: { documentRef?: Document; route?: string; buildId?: string; ignoredSelectors?: string[]; signal?: AbortSignal }): Promise<ThreadmarkPageReview>;
+/** Something in the Inbox for the current reviewer. Host-owned, like comments. */
+export interface ThreadmarkNotification {
+  id: string;
+  kind?: "reply" | "mention" | "resolved" | "reaction" | "assigned" | "question" | "other";
+  actor: { id?: string; displayName: string; avatarUrl?: string | null };
+  /** The line shown in the Inbox, e.g. the reply text. */
+  text: string;
+  /** Opens this thread when it is on the current project. */
+  annotationId?: string | null;
+  route?: string | null;
+  createdAt?: string;
+  read?: boolean;
+}
+
 export interface ThreadmarkProps {
   /** Explicit page-review command; the consumer owns agent dispatch and persistence. */
   onPageReviewRequested?: (input: ThreadmarkPageReview, context: ThreadmarkPageReviewContext) => Promise<ThreadmarkPageReviewResult>;
@@ -531,6 +545,8 @@ export interface ThreadmarkProps {
    * shown as plain text, never as HTML.
    */
   nextSteps?: ThreadmarkNextSteps | readonly ThreadmarkNextStep[] | null;
+  /** Replies, mentions and other things for this reviewer. Passing an array shows the Inbox tab and lets the bar say "Maya mentioned you". */
+  notifications?: readonly ThreadmarkNotification[];
   /**
    * Loom-style video feedback with voice, an optional camera bubble, and a pointer track.
    * Enabled by default; `false` hides the recorder. The browser asks before any camera, microphone,
@@ -607,6 +623,10 @@ export interface ThreadmarkProps {
    * write its own prompt to the clipboard.
    */
   onNextStepsCopy?: (steps: readonly ThreadmarkNextStep[]) => void | Promise<void>;
+  /** A notification was opened from the Inbox. Threadmark also opens its thread when it is on this project. */
+  onNotificationOpen?: (notification: ThreadmarkNotification) => void;
+  /** These notifications were shown in the Inbox; mark them read in your store. */
+  onNotificationsRead?: (ids: readonly string[]) => void;
   /**
    * Tours to edit in Tour mode (the same files you pass to <ThreadmarkTours>). Tour mode keeps
    * edits as drafts in the overlay; nothing is written anywhere until onTourSave or Copy file.

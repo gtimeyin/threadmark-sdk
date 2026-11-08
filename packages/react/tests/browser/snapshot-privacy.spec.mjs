@@ -213,43 +213,41 @@ test("shows host-supplied page versions and carries a comment only when requeste
   }]);
 });
 
-test("Feedback uses readable glass in both tabs and a solid high-contrast fallback", async ({ page }) => {
+test("Feedback is a solid dark panel in every tab, with a high-contrast fallback", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 700 });
   await mountPickingFixture(page);
   await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Feedback", exact: true });
-  const glassStyle = () => panel.evaluate((element) => {
+  const panelStyle = () => panel.evaluate((element) => {
     const style = getComputedStyle(element);
     const bounds = element.getBoundingClientRect();
     return {
       background: style.backgroundColor,
       blur: style.backdropFilter,
       opacity: style.opacity,
-      headingColor: getComputedStyle(element.querySelector("h2")).color,
-      metadataColor: getComputedStyle(element.querySelector("header p")).color,
+      selectedTabColor: getComputedStyle(element.querySelector('[role="tab"][aria-selected="true"]')).color,
       withinViewport: bounds.left >= 0 && bounds.right <= innerWidth && bounds.bottom <= innerHeight,
     };
   });
   await expect(panel).toBeVisible();
-  const expectedGlass = {
-    background: "rgba(251, 250, 246, 0.74)",
-    blur: "blur(10px) saturate(1.2)",
+  const expected = {
+    background: "rgb(14, 23, 20)",
+    blur: "none",
     opacity: "1",
-    headingColor: "rgb(20, 32, 28)",
-    metadataColor: "rgb(20, 32, 28)",
+    selectedTabColor: "rgb(251, 250, 246)",
     withinViewport: true,
   };
-  expect(await glassStyle()).toEqual(expectedGlass);
+  await expect.poll(panelStyle).toEqual(expected);
   await panel.getByRole("tab", { name: /^Versions/ }).click();
   await expect(panel.getByRole("tabpanel", { name: "Page versions" })).toBeVisible();
-  expect(await glassStyle()).toEqual(expectedGlass);
+  await expect.poll(panelStyle).toEqual(expected);
   await page.setViewportSize({ width: 320, height: 640 });
-  expect(await glassStyle()).toEqual(expectedGlass);
-  await panel.getByRole("tab", { name: /^Comments/ }).click();
+  await expect.poll(panelStyle).toEqual(expected);
+  await panel.getByRole("tab", { name: /^Activity/ }).click();
   await panel.getByRole("button", { name: "Show search comments" }).click();
   await expect(panel.getByRole("textbox", { name: "Search comments" })).toBeVisible();
   await page.emulateMedia({ forcedColors: "active" });
-  const accessibleStyle = await glassStyle();
+  const accessibleStyle = await panelStyle();
   expect(accessibleStyle.blur).toBe("none");
   expect(accessibleStyle.background).toBe("rgb(255, 255, 255)");
   expect(accessibleStyle.withinViewport).toBe(true);
@@ -1665,7 +1663,7 @@ test("comment filters float over the list, retain search, and dismiss accessibly
   await expect(panel.getByRole('textbox', { name: 'Search comments' })).toHaveValue('issue');
   await panel.getByRole('button', { name: /^Show comment filters/ }).click();
   await expect(popup.getByRole('button', { name: 'Only your threads', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await panel.getByRole('heading', { name: 'Feedback', exact: true }).click();
+  await panel.getByRole('tab', { name: /^Activity/ }).click();
   await expect(popup).toHaveCount(0);
   await expect(panel.locator('.tm-comment-card')).toHaveCount(1);
   await panel.getByRole('button', { name: /^Show comment filters/ }).click();
@@ -1683,7 +1681,7 @@ test("comment filters float over the list, retain search, and dismiss accessibly
   await expect(popup).toHaveCount(0);
   await panel.getByRole('tab', { name: /^Versions/ }).click();
   await expect(popup).toHaveCount(0);
-  await panel.getByRole('tab', { name: /^Comments/ }).click();
+  await panel.getByRole('tab', { name: /^Activity/ }).click();
   await expect(popup).toHaveCount(0);
 });
 
