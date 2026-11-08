@@ -116,6 +116,8 @@ export const panelStyles = `
   }
 
   .tm-comments-panel .tm-comments-list { padding: 0; }
+  /* Rows carry their own faint divider; the light theme's hairline between items is too bright on the dark panel. */
+  .tm-comments-panel .tm-comments-list li + li { border-top: 0; }
   .tm-comments-panel .tm-comment-card {
     display: grid;
     gap: 4px;
