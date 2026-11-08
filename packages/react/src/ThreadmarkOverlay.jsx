@@ -448,13 +448,21 @@ function DeploymentComparison({ original, capture, buildId, originalBuildId, tar
   </>;
 }
 
-function isRecordingEvidence(annotation, item) {
-  return annotation?.payload?.evidence?.some((metadata) => metadata.id === item?.id && metadata.kind === "recording");
+/**
+ * A saved screenshot we can show as an image: captured (not "unavailable"), with an image type. Videos and
+ * session replays are evidence too, but they aren't pictures; showing one as an <img> draws a broken image.
+ */
+function isImageEvidence(annotation, item) {
+  if (!item || !(item.blob || item.url)) return false;
+  const metadata = annotation?.payload?.evidence?.find((entry) => entry.id === item.id);
+  if (!metadata || metadata.kind === "recording" || metadata.kind === "replay" || metadata.quality === "unavailable") return false;
+  const type = item.blob?.type || metadata.mimeType || "";
+  return !type || type.startsWith("image/");
 }
 
 function CommentThumbnail({ annotation }) {
   const evidence = annotation.runtime?.evidence
-    ?.find((item) => (item.blob || item.url) && !isRecordingEvidence(annotation, item));
+    ?.find((item) => isImageEvidence(annotation, item));
   const [url, setUrl] = useState(null);
   useEffect(() => {
     if (!evidence?.blob) { setUrl(evidence?.url || null); return; }
@@ -462,7 +470,9 @@ function CommentThumbnail({ annotation }) {
     setUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [evidence?.blob, evidence?.url]);
-  return url ? <img className="tm-comment-thumbnail" src={url} alt="Saved screenshot" /> : null;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  return url && !failed ? <img className="tm-comment-thumbnail" src={url} alt="Saved screenshot" onError={() => setFailed(true)} /> : null;
 }
 
 const NEXT_STEP_TAG_LABELS = { bug: "Bug", polish: "Polish", copy: "Copy", idea: "Idea", question: "Question" };
@@ -2061,10 +2071,10 @@ function Overlay({
 
   useEffect(() => {
     const evidenceItem = editingAnnotation?.runtime?.evidence
-      ?.find((item) => (item?.blob || item?.url) && !isRecordingEvidence(editingAnnotation, item));
+      ?.find((item) => isImageEvidence(editingAnnotation, item));
     const metadata = editingAnnotation?.payload?.evidence?.find((item) => item.id === evidenceItem?.id);
     if (!(evidenceItem?.blob || evidenceItem?.url) || !metadata || typeof URL === "undefined") {
-      const unavailable = editingAnnotation?.payload?.evidence?.find((item) => item.quality === "unavailable" && item.kind !== "recording");
+      const unavailable = editingAnnotation?.payload?.evidence?.find((item) => item.quality === "unavailable" && item.kind !== "recording" && item.kind !== "replay");
       setEditingEvidencePreview(unavailable ? { snapshot: { status: "failed", metadata: unavailable } } : null);
       return undefined;
     }

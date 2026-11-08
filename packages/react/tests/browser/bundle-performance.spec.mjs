@@ -55,7 +55,7 @@ test('real chunks load on demand and preserve strict CSP styling', async ({ page
   expect(requests.some(name => name.startsWith('videoFeatures-'))).toBe(false);
   await page.getByRole('button', { name: /Feedback tools/ }).click();
   await page.getByRole('menuitemradio', { name: /Record a video/ }).click();
-  await expect(page.getByRole('dialog', { name: /Record video/ })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: /Record a video/ })).toBeVisible();
   await expect.poll(() => requests.some(name => name.startsWith('videoFeatures-'))).toBe(true);
   expect(await page.evaluate(() => document.querySelector('[data-threadmark-root]').shadowRoot.adoptedStyleSheets.length)).toBeGreaterThan(1);
   expect(errors).toEqual([]);
