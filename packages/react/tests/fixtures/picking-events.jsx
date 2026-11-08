@@ -56,8 +56,21 @@ const FIXTURE_NEXT_STEPS = [
   },
   { id: "step-plan", title: "Pick the plan name", tag: "question", source: "person", completed: true, completedVia: "agent", completedBy: { displayName: "Emily R." }, sources: [] },
 ];
+// `?metadata=1` supplies app context read when a comment is posted (`window.__threadmarkCart` changes it);
+// `throw`, `slow`, and `window` supply a broken one. `?nodevice` turns device details off.
+window.__threadmarkCart = 1;
+const metadataMode = fixtureParams.get("metadata");
+const metadata = metadataMode === "1"
+  ? () => ({ appVersion: "2.4.1", flags: { newCheckout: true }, cartItems: window.__threadmarkCart, apiKey: "sk_live_abcdefghijklmnop" })
+  : metadataMode === "throw" ? () => { throw new Error("store not ready"); }
+    : metadataMode === "slow" ? () => new Promise(() => {})
+      : metadataMode === "window" ? () => window
+        : undefined;
 const persistenceEnabled = fixtureParams.has("persist");
-const sessionReplay = fixtureParams.has("replay") ? { bufferMs: 30_000 } : undefined;
+// `?replay=1&network=bodies` also keeps filtered request and response bodies.
+const sessionReplay = fixtureParams.has("replay")
+  ? { bufferMs: 30_000, ...(fixtureParams.get("network") === "bodies" ? { network: { bodies: true } } : {}) }
+  : undefined;
 const videoRecording = fixtureParams.has("novideo")
   ? false
   : fixtureParams.has("videomax") ? { maxDurationMs: Number(fixtureParams.get("videomax")) } : undefined;
@@ -171,6 +184,8 @@ function Fixture() {
         buildId={buildId}
         videoRecording={videoRecording}
         sessionReplay={sessionReplay}
+        metadata={metadata}
+        deviceDetails={!fixtureParams.has("nodevice")}
         pageVersions={[
           {
             id: "fixture-current",
@@ -206,10 +221,17 @@ function Fixture() {
         onTourSave={toursEnabled ? async (tour, file) => { window.__threadmarkTourSaves.push({ tour, file }); } : undefined}
         onStatusChange={(status) => window.__threadmarkStatuses.push(status)}
         onError={(error) => window.__threadmarkErrors.push(error)}
-        onFeedbackCreate={async (feedback, context) => {
+        onFeedbackCreate={async (feedback, context, saving) => {
           if (window.__threadmarkRejectNextSave) {
             window.__threadmarkRejectNextSave = false;
             throw new Error("Fixture save failure");
+          }
+          // `?uploads=1` reports half of each new file sent, then waits for `__threadmarkFinishUpload()`.
+          if (fixtureParams.has("uploads") && saving) {
+            for (const item of context.evidence.filter((entry) => entry.blob)) {
+              saving.onUploadProgress({ evidenceId: item.id, sentBytes: Math.round(item.blob.size / 2), totalBytes: item.blob.size });
+            }
+            await new Promise((resolve) => { window.__threadmarkFinishUpload = resolve; });
           }
           // Simulates a host that answers with its own record instead of updating the controlled prop.
           if (window.__threadmarkAuthoritative) return window.__threadmarkAuthoritative(feedback, context);

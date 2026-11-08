@@ -1,3 +1,6 @@
+import { SITE_PRIVATE_SELECTOR } from "./privacy.js";
+
+// Regions a site marked private for another session tool are masked here too.
 const BUILT_IN_REDACTION_SELECTOR = [
   "input",
   "textarea",
@@ -11,6 +14,7 @@ const BUILT_IN_REDACTION_SELECTOR = [
   "object",
   "embed",
   "canvas",
+  SITE_PRIVATE_SELECTOR,
 ].join(",");
 
 const MAX_PIXEL_AREA = 4_000_000;

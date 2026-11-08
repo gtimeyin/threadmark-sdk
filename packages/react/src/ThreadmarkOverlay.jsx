@@ -57,6 +57,8 @@ import {
   MOUSE_INTERACTION,
   REPLAY_CONSOLE_EVENT,
   REPLAY_NETWORK_EVENT,
+  REPLAY_TIMING_EVENT,
+  REPLAY_SOCKET_EVENT,
   decodeReplayEvents,
 } from "./sessionReplay.js";
 
@@ -67,8 +69,11 @@ function deferred(loader, name) {
   };
 }
 const loadVideo = () => import('./videoFeatures.jsx');
+const BlurPicker = deferred(loadVideo, 'BlurPicker');
 const CameraBubble = deferred(loadVideo, 'CameraBubble');
 const RecordingCursorLayer = deferred(loadVideo, 'RecordingCursorLayer');
+const VideoBlurLayer = deferred(loadVideo, 'VideoBlurLayer');
+const VideoDrawLayer = deferred(loadVideo, 'VideoDrawLayer');
 const VideoPreview = deferred(loadVideo, 'VideoPreview');
 const VideoRecorderBar = deferred(loadVideo, 'VideoRecorderBar');
 const VideoSetupPanel = deferred(loadVideo, 'VideoSetupPanel');
@@ -83,6 +88,8 @@ const replayKit = Object.freeze({
   MOUSE_INTERACTION,
   REPLAY_CONSOLE_EVENT,
   REPLAY_NETWORK_EVENT,
+  REPLAY_TIMING_EVENT,
+  REPLAY_SOCKET_EVENT,
   decodeReplayEvents,
   formatClock,
 });
@@ -1653,6 +1660,11 @@ function Overlay({
   onCancelVideoSetup,
   onToggleVideoPause,
   onRestartVideo,
+  videoBlurred = [],
+  videoTool = null,
+  onVideoTool,
+  onToggleVideoBlur,
+  onVideoStroke,
   onDiscardVideo,
   onStopVideo,
   replayEnabled = false,
@@ -1732,9 +1744,11 @@ function Overlay({
   onVote,
   notice,
   submitting,
+  uploadProgress = null,
   composingScreenshot,
   launcherRef,
 }) {
+  const uploadPercent = Number.isFinite(uploadProgress) ? Math.round(Math.min(1, Math.max(0, uploadProgress)) * 100) : null;
   const targets = editingAnnotation
     ? editingAnnotation.payload.pin ? [editingAnnotation.payload.pin.target] : editingAnnotation.payload.targets || [editingAnnotation.payload.target]
     : videoSelection
@@ -1966,10 +1980,20 @@ function Overlay({
         <Outline rect={videoSelection.displayRect} badge={1} grouped />
       )}
 
-      {mode === "video-setup" && videoSetup && (
+      {/* Tab recordings blur what the site marked private and what the reviewer chose, from setup on. */}
+      {((mode === "video-setup" && videoSetup?.mode === "tab") || (mode === "video-recording" && videoRecording?.mode === "tab")) && (
+        <VideoBlurLayer chosen={videoBlurred} shadowHost={shadowHost} />
+      )}
+      {(mode === "video-setup" || mode === "video-recording") && videoTool === "blur" && (
+        <BlurPicker shadowHost={shadowHost} chosen={videoBlurred} onToggle={onToggleVideoBlur} onDone={() => onVideoTool?.(null)} />
+      )}
+
+      {mode === "video-setup" && videoSetup && videoTool !== "blur" && (
         <VideoSetupPanel
           setup={videoSetup}
           maxDurationMs={videoMaxDurationMs}
+          blurredCount={videoBlurred.length}
+          onBlur={onVideoTool ? () => onVideoTool("blur") : undefined}
           onChange={onVideoSetupChange}
           onStart={onBeginVideoRecording}
           onCancel={onCancelVideoSetup}
@@ -1978,12 +2002,15 @@ function Overlay({
 
       {mode === "video-recording" && videoRecording && (
         <>
+          <VideoDrawLayer active={videoTool === "draw"} onStroke={onVideoStroke} />
           <RecordingCursorLayer shadowHost={shadowHost} />
           {videoSetup?.camera && videoSetup.previewStream?.getVideoTracks?.().length > 0 && (
             <CameraBubble stream={videoSetup.previewStream} />
           )}
           <VideoRecorderBar
             state={videoRecording}
+            tool={videoTool}
+            onTool={onVideoTool}
             onPause={onToggleVideoPause}
             onRestart={onRestartVideo}
             onDiscard={onDiscardVideo}
@@ -2624,6 +2651,11 @@ function Overlay({
               ) : (!editingAnnotation || repinning) ? (
                 /* Saved threads post replies and edits from their own inline controls. */
                 <div className="tm-form__actions" key={`actions-${composerMode}`}>
+                  {submitting && uploadPercent !== null && (
+                    <div className="tm-upload" role="progressbar" aria-label="Uploading" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent}>
+                      <span style={{ transform: `scaleX(${uploadPercent / 100})` }} />
+                    </div>
+                  )}
                   <button type="button" className="tm-cancel" onClick={onRequestDismiss} disabled={submitting}>Cancel</button>
                   <button
                     className="tm-submit"
@@ -2638,7 +2670,7 @@ function Overlay({
                     }
                   >
                     {submitting
-                      ? "Saving…"
+                      ? uploadPercent !== null && uploadPercent < 100 ? `Uploading ${uploadPercent}%` : "Saving…"
                       : repinning ? "Repin comment"
                       : editingAnnotation && composerMode === "reply"
                         ? "Reply"

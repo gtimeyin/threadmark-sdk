@@ -778,4 +778,81 @@ export const videoStyles = `
   @media (prefers-reduced-motion: reduce) {
     .tm-poll, .tm-poll-option__bar { animation: none; transition: none; }
   }
+
+  /* Blurring and drawing while a tab is recorded. Both live in Threadmark's layer, so tab capture records them
+     and the page itself never changes. */
+  .tm-blur-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 42;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .tm-blur-box {
+    position: absolute;
+    left: 0;
+    top: 0;
+    border-radius: 6px;
+    background: rgba(26,31,28,.18);
+    -webkit-backdrop-filter: blur(16px) saturate(.6);
+    backdrop-filter: blur(16px) saturate(.6);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .tm-blur-box { background: var(--tm-ground); }
+  }
+  .tm-blur-picker {
+    position: fixed;
+    inset: 0;
+    z-index: 47;
+    cursor: crosshair;
+    pointer-events: auto;
+  }
+  .tm-blur-picker__outline {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 48;
+    border: 2px dashed var(--tm-coral);
+    border-radius: 6px;
+    pointer-events: none;
+  }
+  .tm-blur-picker__outline.is-blurred { border-style: solid; border-color: var(--tm-mint); }
+  .tm-blur-card {
+    position: fixed;
+    z-index: 49;
+    left: 50%;
+    top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: calc(100vw - 24px);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 13px;
+    padding: 9px 9px 9px 14px;
+    background: rgba(26,31,28,.97);
+    color: var(--tm-text-primary);
+    box-shadow: 0 16px 50px rgba(0,0,0,.32);
+    pointer-events: auto;
+    transform: translateX(-50%);
+    animation: tm-recorder-in var(--tm-motion-surface) var(--tm-ease-emphasized) both;
+  }
+  .tm-blur-card > div { min-width: 0; }
+  .tm-blur-card strong,
+  .tm-blur-card span { display: block; }
+  .tm-blur-card strong { font-size: 12px; line-height: 16px; }
+  .tm-blur-card span { color: var(--tm-text-muted); font-size: 10px; line-height: 14px; }
+  .tm-video-icon-button.is-active { background: var(--tm-mint); color: var(--tm-ground); }
+  .tm-video-setup__blur { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; }
+  .tm-draw-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 43;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+  }
+  .tm-draw-layer.is-active { cursor: crosshair; pointer-events: auto; touch-action: none; }
+  @media (forced-colors: active) {
+    .tm-blur-box { background: Canvas; }
+  }
 `;

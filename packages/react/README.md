@@ -76,14 +76,24 @@ Threadmark derives `captureKind` from the gesture or Pencil action instead of as
 1. An in-page setup card previews the camera and lets the reviewer pick a camera and microphone, turn either off, and choose what to record.
 2. **This tab** records the current tab with `getDisplayMedia` (the browser asks for confirmation) plus the microphone. The camera appears as a draggable bubble on the page, so it is part of the recording. A cursor halo and click ripples make pointer movement unmistakable in the video.
 3. **Voice + cursor** records the microphone (and camera, when on) without screen pixels. It is the automatic fallback when tab capture is unavailable, such as on phones or when the reviewer declines sharing. Saved recordings offer **Replay on page**, which moves a ghost cursor carrying the reviewer's camera or initials along the recorded path over the live page and follows the recorded scroll. Nothing on the page is clicked or changed.
-4. A floating recorder shows the elapsed time against the limit (5 minutes by default) with pause, restart, discard, and stop. Restart and discard ask for confirmation, and <kbd>Escape</kbd> and other Threadmark shortcuts pass through to the host page while recording, so a walkthrough is never lost by accident.
-5. Stopping opens the usual comment popover with the recording and a timed step list. Each step (clicks, form-field changes, command keys, scrolls, submissions, navigation) seeks the recording. The step list follows the interaction-trace privacy rules: no input values and no printable keystrokes. Tab videos are not masked, so they show everything that was visible in the tab.
+4. A floating recorder shows the elapsed time against the limit (5 minutes by default) with blur, draw, pause, restart, discard, and stop. Restart and discard ask for confirmation, and <kbd>Escape</kbd> and other Threadmark shortcuts pass through to the host page while recording, so a walkthrough is never lost by accident.
+5. Stopping opens the usual comment popover with the recording and a timed step list. Each step (clicks, form-field changes, command keys, scrolls, submissions, navigation) seeks the recording. The step list follows the interaction-trace privacy rules: no input values and no printable keystrokes.
+6. Tab videos blur what the site marked private: `[data-threadmark-sensitive]`, the privacy markers of other session tools (FullStory, Hotjar, Clarity, Sentry, LogRocket, and others), and card fields. **Blur** lets the reviewer pick more parts of the page, from the setup card or during the recording (which pauses while they choose); clicking a blurred part again shows it. Everything else visible in the tab is recorded.
+7. **Draw** lets the reviewer circle or underline things: strokes appear in coral and fade after three seconds, and the page doesn't receive the pointer while drawing. They're kept as `feedback.video.drawings` (where each began, then `[ms, x, y]` points), so voice recordings replay them over the page too.
+
+Blur boxes and strokes are drawn in Threadmark's own layer above the page, so the tab capture records them and the page itself never changes.
 
 The media never leaves the browser until the reviewer posts. It is handed to `onFeedbackCreate(feedback, context)` as a Blob in `context.evidence`, next to `feedback.evidence[]` metadata with `kind: "recording"`, the container type (`video/webm`, `video/mp4`, `audio/webm`, …), byte size, duration, and dimensions. `feedback.video` carries the mode, the pointer track (`pointer.samples` as `[offsetMs, x, y]`, `pointer.scrolls` as `[offsetMs, scrollX, scrollY]`), and the step `events[]`. Uploading, transcoding, transcription, and summaries belong to your storage or review service. **Copy as Markdown** includes each video's timed steps with their stable IDs, so an agent can follow a walkthrough without watching it.
 
 Recordings use about 1.2 Mbps for tab video, so a 5-minute take stays under common 50 MB upload limits.
 
-Once your service has stored a file, hydrate it as `{ id, url }` in `context.evidence` instead of a Blob. The URL must be `https:` (or `http:` on localhost), for example a signed storage URL. Threadmark plays or shows the URL and passes the same `{ id, url }` back to `onFeedbackCreate` when someone replies or edits, so stored files are never uploaded twice.
+If you upload the files while saving, report it so the composer shows how far along it is. For a new comment, `onFeedbackCreate` gets a third argument with `onUploadProgress({ evidenceId, sentBytes, totalBytes })`. Call it as often as your upload allows, and **Post** shows "Uploading 42%" with a progress bar until every file is sent. The Supabase adapter's `store.upsert(feedback, context, saving)` does this for you.
+
+```jsx
+onFeedbackCreate={(feedback, context, saving) => store.upsert(feedback, context, saving)}
+```
+
+Once your service has stored a file, hydrate it as `{ id, url }` in `context.evidence` instead of a Blob. The URL must be `https:` (or `http:` on localhost), for example a signed storage URL. Threadmark plays or shows the URL and passes the same `{ id, url }` back to `onFeedbackCreate` when someone replies or edits, so stored files are never uploaded twice. `integrations/supabase` is a complete adapter built this way.
 
 Turn the recorder off with `videoRecording={false}`, or change the limit with `videoRecording={{ maxDurationMs: 120_000 }}` (5 seconds to 10 minutes).
 
@@ -96,18 +106,80 @@ With `sessionReplay` on, Threadmark keeps a rolling recording of the last 30 sec
 ```
 
 - Recording uses [rrweb](https://github.com/rrweb-io/rrweb) DOM snapshots, not video. It is loaded on demand and starts when Threadmark mounts. The buffer is trimmed continuously; nothing leaves the browser unless a comment is posted.
-- When a new comment opens, the buffer is frozen and attached as **Playback attached**, with counts of console errors and failed requests. The reviewer can preview it, remove it, or attach it again before posting. Saved threads show **View playback**, which opens a player with **Console**, **Network**, and **Actions** tabs.
+- While review mode is open, the buffer keeps everything since it opened (up to 11 minutes), so a video recorded in review mode carries its console and network activity too. When a new comment opens, the buffer is attached as **Playback attached**, with counts of console errors and failed requests. The reviewer can preview it, remove it, or attach it again before posting. Saved threads show **View playback**, which opens a player with **Console**, **Network**, and **Actions** tabs.
 - Every input, select, and textarea value is masked. `[data-threadmark-sensitive]` and `[data-threadmark-ignore]` regions are blocked from the recording, and sensitive text is masked. Threadmark's own UI is never recorded.
-- Console errors and warnings and failed `fetch`/XHR requests are captured with their timing. Request URLs keep the origin, path, and query parameter names, but every query value is replaced with `…`. Request and response bodies and headers are never captured.
+- Console messages of every level and `fetch`/XHR requests are captured with their timing; the summary lists errors, warnings, and failed requests. Request URLs keep the origin, path, and query parameter names, but every query value is replaced with `…`.
+- Each request keeps the browser's timing phases (queued, DNS, connect, TLS, waiting, download), its transfer size, and protocol. GraphQL requests keep their operation (`mutation ApplyPromo`), and a response that carries `errors` with HTTP 200 counts as a failed request (`graphql_error`) with its `extensions.code` values.
+- The page's own resources (scripts, stylesheets, images, fonts, media, frames) are listed from the browser's resource timing, with their status where the browser exposes it.
+- WebSocket connections keep when they opened and closed (with the close code) and each message's direction and size. Message text is kept only with `network.bodies`, filtered like a body.
+- Request and response bodies and headers are not kept unless you opt in (see below).
 - Console text is scrubbed before it is kept: URLs in messages and stacks keep only their origin, path, and query names; bearer credentials, JWTs, key-looking strings (`sk-…`, `sb_…`, `xox…`, `ghp_…`, `tmk_…` and similar), `password=`/`token:`-style values, email addresses, and long hex or base64 runs are replaced with `[redacted]` or `[email]`.
 
 Replay URL metadata and URL-bearing snapshot/mutation attributes remove query values, fragments, and URL credentials before buffering. Console messages and error stacks redact recognized credential fields and authorization tokens. This is best-effort scrubbing, not detection of arbitrary unlabelled personal data; mark sensitive page regions and inspect the playback before posting. If the event budget is exceeded, replay starts a fresh snapshot and drops older history. Recorder startup failure restores the instrumented browser APIs.
 
 The recording is handed to `onFeedbackCreate` as a gzipped JSON Blob in `context.evidence`, with `feedback.evidence[]` metadata of `kind: "replay"`. `feedback.replay` carries a summary (duration, viewport, console errors, failed requests, and action counts) that agents and issue trackers can use without opening the recording. **Copy as Markdown** includes that summary.
 
+To debug requests in detail, keep their bodies:
+
+```jsx
+<Threadmark
+  projectKey="pk_checkout"
+  sessionReplay={{
+    network: {
+      bodies: true,
+      // Optional, runs last: return the entry (edited) or null to drop this request's bodies.
+      sanitize: (entry) => (entry.url.includes("/api/billing") ? null : entry),
+    },
+  }}
+/>
+```
+
+Bodies are filtered in the reviewer's browser before they are kept: only JSON, form, and text bodies; fields named
+like credentials (`password`, `token`, `apiKey`, `cvc`, `cardNumber`, …) are replaced at any depth; emails, card
+numbers, JWTs, and key-shaped strings are scrubbed; nothing is kept from sign-in, token, password, or session
+endpoints; only `content-type`, `accept`, and a few response headers (`cache-control`, `etag`, `x-request-id`,
+`traceparent`, `server-timing`, …) are kept, never cookies or authorization; and each body is at most 16,000
+characters, within a rolling memory budget. If `sanitize` throws or returns anything else, the bodies are dropped.
+
 Change the history length with `sessionReplay={{ bufferMs: 60_000 }}` (5 seconds to 2 minutes). `provider` replaces the built-in recorder; the Threadmark browser extension uses it to record in the page's own JavaScript context.
 
 Under a strict Content Security Policy, the overlay loads its styles through a constructed stylesheet and its fonts as binary data, so it needs no `'unsafe-inline'`. rrweb 2.1.6 itself sets a style attribute on a detached element whenever it records a style change, which a `style-src` without `'unsafe-inline'` or `'unsafe-hashes'` reports as a violation. The browser extension patches that call at build time. If you enable `sessionReplay` on a page with such a policy, expect those reports, or apply the same one-line change (`old.setAttribute("style", m.oldValue)` → `old.style.cssText = m.oldValue`) in your bundler.
+
+## Browser details and app context
+
+Every new comment records the reviewer's browser and device as `feedback.device`: browser and version, operating
+system and version (with CPU architecture), desktop/mobile/tablet, touch, screen and viewport size, pixel ratio,
+language, time zone, light or dark mode, reduced motion, forced colors, and the browser's own network estimate. In
+Chromium browsers the exact versions come from client hints, because the user-agent string freezes them (macOS
+always reads 10.15.7, and Windows 11 reads as 10). Nothing is fetched or measured; `deviceDetails={false}` leaves it
+out, along with the shorter `feedback.captureEnvironment`.
+
+Add your app's own context with `metadata`. A function is called when the comment is posted, so the values are
+current:
+
+```jsx
+<Threadmark
+  projectKey="pk_checkout"
+  metadata={() => ({
+    appVersion: import.meta.env.VITE_APP_VERSION,
+    workspace: store.workspace.slug,
+    flags: featureFlags.enabled(),
+    cart: store.cart.items.slice(0, 5).map(({ sku, qty }) => ({ sku, qty })),
+  })}
+/>
+```
+
+- The result must be a plain object that JSON can hold, at most 10 KB once cleaned. Strings are kept to 2,000
+  characters and nesting to six levels.
+- Keys that name credentials (`password`, `apiKey`, `accessToken`, `csrf_token`, `Authorization`, `cookie`, …) and
+  credential-shaped strings (JWTs, `Bearer …`, well-known API key formats) are replaced with `[redacted]`. Leave out
+  anything else you wouldn't want reviewers and agents to read.
+- The function may return a promise and gets 2 seconds. If it throws, times out, or returns something unusable, the
+  comment is posted without it and `onError` reports `metadata_failed`.
+- It's stored as `feedback.metadata`, never changes after posting, and **Copy annotations** includes it.
+
+Threadmark for Chrome and the script tag read the same context from the page: set
+`window.threadmarkMetadata = () => ({ … })` (or a plain object) on your site.
 
 ## Questions and polls
 
@@ -129,7 +201,8 @@ Votes are host-owned, like everything else Threadmark stores:
 />
 ```
 
-Supply current results as `context.poll` on each record. Resolving a poll closes it.
+Supply current results as `context.poll` on each record. Resolving a poll closes it. The Supabase adapter
+implements this as `store.vote` (see `integrations/supabase`).
 
 ## Next steps
 
@@ -152,7 +225,8 @@ it (each opens its thread, here or on its own page through the thread link), and
 
 Tags are `bug`, `polish`, `copy`, `idea`, and `question`. Everything is shown as plain text. Without
 `onNextStepDone`, or with `canEdit: false`, the list is read-only. Like the rest of Threadmark, the SDK never
-loads or stores steps itself: supply the updated `nextSteps` after a tick.
+loads or stores steps itself: supply the updated `nextSteps` after a tick. `integrations/supabase` has a
+ready-made hook (`useThreadmarkNextSteps`) for Threadmark's hosted service.
 
 ## Toolbar and markers
 
@@ -519,6 +593,12 @@ Mark an entire sensitive region when its visible copy or descendants should not 
 </section>
 ```
 
+Privacy markers you already use for other session tools work too: FullStory (`.fs-mask`, `.fs-exclude`, `.fs-block`),
+Hotjar (`[data-hj-suppress]`, `[data-hj-masked]`), LogRocket (`[data-private]`), Microsoft Clarity
+(`[data-clarity-mask]`), Sentry (`.sentry-mask`, `.sentry-block`, and their `data-` forms), rrweb (`.rr-block`,
+`.rr-mask`), OpenReplay, Highlight, ContentSquare, Matomo, Heap, Amplitude, and Jam (`[data-jam-blur]`). Screenshots
+mask those regions, session replays block or mask them, and tab videos blur them.
+
 Exclude product UI that should never receive feedback with `data-threadmark-ignore`:
 
 ```jsx
@@ -550,7 +630,7 @@ Snapshots wait briefly for the host page's fonts and embed available web-font fa
 
 Threadmark can show other deployments for the route currently under review. The React package does not call Vercel directly: fetch deployment records in a trusted server route, combine them with per-build feedback counts, and pass the safe result through `pageVersions`. Use immutable deployment URLs rather than mutable branch aliases.
 
-This repository includes a tested, framework-neutral [Vercel host adapter](https://github.com/gtimeyin/threadmark-sdk/tree/main/integrations/vercel) that performs the provider request, membership boundary, response reduction, count merge, and unavailable-history merge outside the SDK.
+This repository includes a tested, framework-neutral [Vercel host adapter](https://github.com/gtimeyin/threadmark/tree/main/integrations/vercel) that performs the provider request, membership boundary, response reduction, count merge, and unavailable-history merge outside the SDK.
 
 ```jsx
 <Threadmark
@@ -657,8 +737,10 @@ export function ReviewLayer({
 | `annotations` | `readonly { feedback, context? }[]` | Authoritative records loaded by the consumer or review service. |
 | `pageVersions` | `readonly ThreadmarkPageVersion[]` | Host-supplied immutable deployment records, availability state, and feedback counts for the active route. |
 | `videoRecording` | `boolean \| { maxDurationMs? }` | Video feedback is on by default; `false` hides the recorder. `maxDurationMs` defaults to 5 minutes and is clamped to 5 seconds–10 minutes. |
-| `sessionReplay` | `boolean \| { bufferMs?, provider? }` | Off by default. Attaches a masked rrweb recording of the moments before a new comment, with console errors and failed requests. `bufferMs` defaults to 30 seconds (5 seconds–2 minutes). |
+| `sessionReplay` | `boolean \| { bufferMs?, provider?, network? }` | Off by default. Attaches a masked rrweb recording of the moments before a new comment, with console messages, requests (timing, GraphQL operations and errors), and actions. `bufferMs` defaults to 30 seconds (5 seconds–2 minutes). `network: { bodies: true, sanitize? }` also keeps filtered request and response bodies. |
 | `nextSteps` | `{ steps, status?, canEdit? } \| steps[] \| null` | The host's next steps checklist; supplying it adds a **Next steps** tab to the Feedback panel. |
+| `deviceDetails` | `boolean` | On by default. Records the reviewer's browser, OS, device, screen, language, time zone, display settings, and network estimate on new comments as `feedback.device`. |
+| `metadata` | `object \| () => object \| Promise<object>` | App context (feature flags, app version, workspace) for new comments, read when each is posted and stored as `feedback.metadata`. At most 10 KB; credential-named keys are redacted. |
 | `onReady` | `() => void` | Called once when the overlay is mounted. |
 | `onStatusChange` | `(status) => void` | Reports `disabled`, `ready`, `selecting`, `selected`, `submitting`, `submitted`, or `error`. |
 | `onOpenChange` | `(open) => void` | Reports entry to and exit from Review mode. |
@@ -775,7 +857,7 @@ Solar Linear icons by [480 Design](https://www.figma.com/community/file/11668315
 
 ### Capture environment
 
-New comments include optional `feedback.captureEnvironment`: coarse browser/version, operating system, device category, viewport/pixel ratio, online status and available browser connection estimates. No raw user agent, IP address, device model, connection name or high-entropy browser hints are collected. Connection estimates are approximate and may be absent. Metadata is browser-reported context, never an authorization signal. Edits and hydration retain the original context; older comments remain without it. Consumer-managed stores should preserve this field with the original capture data.
+New comments include optional `feedback.captureEnvironment`: coarse browser/version, operating system, device category, viewport/pixel ratio, online status and available browser connection estimates. It holds no raw user agent, IP address, device model, connection name or high-entropy browser hints; the more detailed `feedback.device` (see [Browser details and app context](#browser-details-and-app-context)) does use client hints for exact versions and the phone model. `deviceDetails={false}` leaves out both. Connection estimates are approximate and may be absent. Metadata is browser-reported context, never an authorization signal. Edits and hydration retain the original context; older comments remain without it. Consumer-managed stores should preserve this field with the original capture data.
 
 ### Saved-comment restoration performance
 

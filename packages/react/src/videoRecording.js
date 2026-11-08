@@ -183,33 +183,62 @@ export function activeEventIndex(events, offsetMs) {
   return active;
 }
 
-/** Elapsed recording time that excludes paused spans. */
+/**
+ * Elapsed recording time that excludes paused spans. `pauses` lists each finished pause as its position in
+ * recording time and its length, so clock-time events (console, network) can be placed on the video.
+ */
 export function createRecordingClock(now = () => Date.now()) {
   let startedAt = now();
   let pausedAt = null;
   let pausedTotal = 0;
+  let pauses = [];
+  const elapsed = () => Math.max(0, (pausedAt ?? now()) - startedAt - pausedTotal);
   return {
-    elapsed() {
-      const reference = pausedAt ?? now();
-      return Math.max(0, reference - startedAt - pausedTotal);
-    },
+    elapsed,
     pause() {
       if (pausedAt == null) pausedAt = now();
     },
     resume() {
       if (pausedAt == null) return;
-      pausedTotal += now() - pausedAt;
+      const offsetMs = elapsed();
+      const durationMs = now() - pausedAt;
+      pausedTotal += durationMs;
       pausedAt = null;
+      if (durationMs > 0) pauses.push({ offsetMs, durationMs });
     },
     reset() {
       startedAt = now();
       pausedAt = null;
       pausedTotal = 0;
+      pauses = [];
     },
     get paused() {
       return pausedAt != null;
     },
+    get pauses() {
+      return pauses.map((pause) => ({ ...pause }));
+    },
   };
+}
+
+/**
+ * Where a clock-time moment falls in a video: milliseconds into the recording, or null when it happened
+ * before the recording started or after it ended. A moment during a pause maps to where the pause began.
+ */
+export function videoOffsetAt(timestamp, video) {
+  const start = Date.parse(video?.startedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(timestamp)) return null;
+  let wall = timestamp - start;
+  if (wall < 0) return null;
+  let skipped = 0;
+  for (const pause of video.pauses || []) {
+    const pausedAtWall = pause.offsetMs + skipped;
+    if (wall < pausedAtWall) break;
+    if (wall < pausedAtWall + pause.durationMs) return pause.offsetMs;
+    skipped += pause.durationMs;
+  }
+  wall -= skipped;
+  return wall > (Number(video.durationMs) || 0) + 1000 ? null : Math.min(wall, Number(video.durationMs) || wall);
 }
 
 function stopStream(stream) {
@@ -291,6 +320,31 @@ export async function openTabStream(mediaDevices = globalThis.navigator?.mediaDe
     if (error?.name !== "TypeError") throw error;
     return mediaDevices.getDisplayMedia({ video, audio: false });
   }
+}
+
+/**
+ * Any screen, window, or tab the person picks, for recording outside the page being reviewed (a customer showing
+ * a problem from Threadmark's recorder page). The browser asks them to choose; a refusal rejects.
+ */
+export async function openScreenStream(mediaDevices = globalThis.navigator?.mediaDevices) {
+  const video = { frameRate: { ideal: 30 }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+  try {
+    return await mediaDevices.getDisplayMedia({
+      video,
+      audio: false,
+      selfBrowserSurface: "exclude",
+      surfaceSwitching: "include",
+      monitorTypeSurfaces: "include",
+    });
+  } catch (error) {
+    if (error?.name !== "TypeError") throw error;
+    return mediaDevices.getDisplayMedia({ video, audio: false });
+  }
+}
+
+/** The microphone alone, for narrating a screen recording. */
+export function openMicrophoneStream(mediaDevices = globalThis.navigator?.mediaDevices) {
+  return mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
 }
 
 /**

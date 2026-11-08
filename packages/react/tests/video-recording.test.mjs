@@ -16,10 +16,12 @@ import {
   createRecordingClock,
   detectVideoSupport,
   formatClock,
+  openScreenStream,
   pickRecorderMimeType,
   pointerPositionAt,
   resolveVideoRecordingOptions,
   scrollPositionAt,
+  videoOffsetAt,
 } from "../src/videoRecording.js";
 
 const target = {
@@ -125,8 +127,45 @@ test("clock labels and the recording clock exclude paused time", () => {
   clock.resume();
   now = 10_000;
   assert.equal(clock.elapsed(), 4_000);
+  assert.deepEqual(clock.pauses, [{ offsetMs: 3_000, durationMs: 5_000 }], "each pause is kept in recording time");
   clock.reset();
   assert.equal(clock.elapsed(), 0);
+  assert.deepEqual(clock.pauses, []);
+});
+
+test("clock-time moments land on the right second of a paused video", () => {
+  const video = {
+    startedAt: new Date(100_000).toISOString(),
+    durationMs: 20_000,
+    pauses: [{ offsetMs: 5_000, durationMs: 10_000 }, { offsetMs: 12_000, durationMs: 3_000 }],
+  };
+  assert.equal(videoOffsetAt(99_000, video), null, "before the recording");
+  assert.equal(videoOffsetAt(104_000, video), 4_000);
+  assert.equal(videoOffsetAt(108_000, video), 5_000, "during the first pause: where it paused");
+  assert.equal(videoOffsetAt(116_000, video), 6_000, "after it, ten seconds less");
+  assert.equal(videoOffsetAt(123_500, video), 12_000, "during the second pause");
+  assert.equal(videoOffsetAt(131_000, video), 18_000, "after both, thirteen seconds less");
+  assert.equal(videoOffsetAt(160_000, video), null, "after the recording");
+  assert.equal(videoOffsetAt(104_000, { durationMs: 20_000 }), null, "a video without a start time has no clock");
+});
+
+test("pauses travel with a video's payload, ordered and inside the recording", () => {
+  const payload = videoPayload({
+    video: {
+      version: 1,
+      mode: "tab",
+      startedAt: "2026-10-16T10:00:00.000Z",
+      durationMs: 12_400,
+      evidenceId: "evidence_video",
+      viewport: { width: 1280, height: 720 },
+      pointer: { samples: [], scrolls: [] },
+      events: [],
+      pauses: [{ offsetMs: 9_000, durationMs: 2_000 }, { offsetMs: 99_000, durationMs: 1_000 }, { offsetMs: 1_000, durationMs: 0 }, "junk"],
+    },
+  });
+  assert.deepEqual(payload.video.pauses, [{ offsetMs: 9_000, durationMs: 2_000 }, { offsetMs: 12_400, durationMs: 1_000 }]);
+  const unpaused = videoPayload();
+  assert.equal("pauses" in unpaused.video, false);
 });
 
 test("pointer samples are throttled, need real movement, stay ordered, and are capped", () => {
@@ -295,9 +334,12 @@ test("video payload normalization rejects leaks, unknown containers, and orphane
   assert.deepEqual(leaky.video.pointer.samples, [[500, 1, 1], [500, 2, 2], [500, 3, 3]]);
   assert.deepEqual(leaky.video.pointer.scrolls, []);
 
+  const avi = videoPayload({ evidence: [{ ...recordingEvidence, mimeType: "video/x-msvideo" }] });
+  assert.equal(avi.evidence[0].quality, "unavailable");
+  assert.equal(avi.evidence[0].mimeType, null);
+  // Videos from a phone's or Mac's own screen recorder are QuickTime.
   const quicktime = videoPayload({ evidence: [{ ...recordingEvidence, mimeType: "video/quicktime" }] });
-  assert.equal(quicktime.evidence[0].quality, "unavailable");
-  assert.equal(quicktime.evidence[0].mimeType, null);
+  assert.deepEqual([quicktime.evidence[0].quality, quicktime.evidence[0].mimeType], ["captured", "video/quicktime"]);
 
   const orphaned = videoPayload({ evidence: [{ ...recordingEvidence, id: "someone_else" }] });
   assert.equal(orphaned.video, undefined, "a video without its recording evidence is dropped");
@@ -310,4 +352,67 @@ test("Markdown export gives agents a timed, code-searchable step list for videos
   assert.match(markdown, /- 0:07 · click · Checkout \(`checkout-submit`\)/);
   assert.match(markdown, /- 0:08 · keydown · Enter/);
   assert.match(markdown, /omits input values and printable keystrokes/);
+});
+
+test("drawings travel with a video's payload, bounded", () => {
+  const payload = videoPayload({
+    video: {
+      version: 1,
+      mode: "voice",
+      startedAt: "2026-10-16T10:00:00.000Z",
+      durationMs: 12_400,
+      evidenceId: "evidence_video",
+      viewport: { width: 1280, height: 720 },
+      pointer: { samples: [], scrolls: [] },
+      events: [],
+      drawings: [
+        { offsetMs: 3_000, points: [[0, 10, 10], [40, 30.4, 12], [20, 50, 14], [90_000, 60, 20]] },
+        { offsetMs: 99_000, points: [[0, 1, 1], [10, 2, 2]] },
+        { offsetMs: 1_000, points: [[0, 1, 1]] },
+        "junk",
+      ],
+    },
+  });
+  assert.deepEqual(payload.video.drawings, [
+    { offsetMs: 3_000, points: [[0, 10, 10], [40, 30, 12], [40, 50, 14], [10_000, 60, 20]] },
+    { offsetMs: 12_400, points: [[0, 1, 1], [10, 2, 2]] },
+  ], "times stay in order and within ten seconds; one-point strokes are dropped");
+  assert.equal("drawings" in videoPayload().video, false);
+});
+
+test("screen recordings ask for any screen or window, never this page, and fall back on older engines", async () => {
+  const requests = [];
+  const stream = { id: "screen" };
+  const mediaDevices = {
+    getDisplayMedia: async (constraints) => {
+      requests.push(constraints);
+      if (requests.length === 1) throw new TypeError("Unknown capture hint");
+      return stream;
+    },
+  };
+  assert.equal(await openScreenStream(mediaDevices), stream);
+  assert.deepEqual(requests[0], {
+    video: { frameRate: { ideal: 30 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    audio: false,
+    selfBrowserSurface: "exclude",
+    surfaceSwitching: "include",
+    monitorTypeSurfaces: "include",
+  });
+  assert.deepEqual(requests[1], { video: requests[0].video, audio: false });
+  const declined = { getDisplayMedia: async () => { throw new DOMException("No", "NotAllowedError"); } };
+  await assert.rejects(openScreenStream(declined), { name: "NotAllowedError" });
+});
+
+test("a screen recording keeps its mode, and exports name it", () => {
+  const payload = createFeedbackPayload({
+    projectKey: "lumen",
+    route: "/checkout",
+    targets: [{ tagName: "html", locatorCandidates: { domPath: "html" } }],
+    captureKind: "video",
+    evidence: [{ id: "rec", kind: "recording", mimeType: "video/webm", byteSize: 10, durationMs: 4_000 }],
+    video: { mode: "screen", startedAt: "2026-10-23T10:00:00.000Z", durationMs: 4_000, evidenceId: "rec", events: [] },
+    comment: "Pay does nothing",
+  });
+  assert.equal(payload.video.mode, "screen");
+  assert.match(formatAnnotationsMarkdown([{ payload }]), /screen recording · 0:04/);
 });

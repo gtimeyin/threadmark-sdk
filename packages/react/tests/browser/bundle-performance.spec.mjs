@@ -6,6 +6,9 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 const sdk = fileURLToPath(new URL('../../', import.meta.url));
+// They compare with 0.1.0-beta.12 from threadmark-sdk's history, which this repository doesn't have; run them there.
+const hasBaseline = (() => { try { execFileSync('git', ['rev-parse', '--verify', '--quiet', 'v0.1.0-beta.12^{commit}'], { cwd: sdk, stdio: 'ignore' }); return true; } catch { return false; } })();
+test.skip(!hasBaseline, 'Needs the v0.1.0-beta.12 tag from threadmark-sdk.');
 let current, previous;
 async function consumerBuild(baseline) {
   const files = new Set(['Threadmark.jsx', 'ThreadmarkOverlay.jsx', 'tours/ThreadmarkTours.jsx', 'ReplayPlayer.jsx', 'snapshot.js']);

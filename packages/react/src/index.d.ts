@@ -126,14 +126,21 @@ export interface ThreadmarkReplaySummary {
   network: {
     requests: number;
     failed: number;
-    /** Failed requests only. URLs keep origin, path, and query names; never values, bodies, or headers. */
+    /**
+     * Failed requests only, including GraphQL responses that carried errors with HTTP 200. URLs keep origin,
+     * path, and query names; never values, bodies, or headers.
+     */
     entries: Array<{
       offsetMs: number;
       method: string;
       url: string;
       status: number;
       durationMs: number;
-      outcome: "successful" | "client_error" | "server_error" | "transport_failure" | "incomplete";
+      outcome: "successful" | "client_error" | "server_error" | "graphql_error" | "transport_failure" | "incomplete";
+      /** For GraphQL: `"query GetCart"`. */
+      operation?: string;
+      /** For GraphQL errors: their `extensions.code` values. */
+      errorCodes?: string[];
     }>;
   };
   actions: { clicks: number; inputs: number; navigations: number };
@@ -158,7 +165,31 @@ export interface ThreadmarkSessionReplayOptions {
       capture: () => Promise<ThreadmarkReplayCapture | null>;
       hold?: () => void;
       release?: () => void;
+      /** Receives changed `network` options while recording. */
+      configure?: (options: { network: { bodies: boolean } }) => void;
     };
+  /**
+   * What is kept from requests besides method, path, status, timing, and GraphQL operation names and error
+   * codes (always kept). `bodies: true` also keeps request and response bodies and a few safe headers,
+   * filtered: JSON, form, and text only; credential-named fields redacted; emails, card numbers, JWTs, and
+   * key-shaped strings scrubbed; nothing from sign-in, token, or password endpoints; at most 16,000
+   * characters each. `sanitize` sees each request last and returns it (edited) or null to drop its bodies; if
+   * it throws, they are dropped.
+   */
+  network?: {
+    bodies?: boolean;
+    sanitize?: (entry: ThreadmarkNetworkEntry) => ThreadmarkNetworkEntry | null;
+  };
+}
+
+/** A request as `sessionReplay.network.sanitize` sees it. Header names are lowercase. */
+export interface ThreadmarkNetworkEntry {
+  method: string;
+  /** Origin, path, and query names; query values are already removed. */
+  url: string;
+  status: number;
+  request: { headers: Record<string, string>; body: string | null };
+  response: { headers: Record<string, string>; body: string | null };
 }
 
 /**
@@ -172,6 +203,12 @@ export interface ThreadmarkFeedbackContext {
   evidence: ThreadmarkEvidenceSource[];
   /** Current results when the feedback is a poll (supplied by the host). */
   poll?: ThreadmarkPollResults;
+}
+
+/** Passed to `onFeedbackCreate` with a new comment. */
+export interface ThreadmarkSaving {
+  /** Report how much of one evidence file has been uploaded; call it as often as the upload allows. */
+  onUploadProgress: (progress: { evidenceId: string; sentBytes: number; totalBytes: number }) => void;
 }
 
 /** A question answered in replies, or a poll answered by votes. Option ids stay stable. */
@@ -249,7 +286,8 @@ export interface ThreadmarkInteractionCapture {
  */
 export interface ThreadmarkVideoCapture {
   version: 1;
-  mode: "tab" | "voice";
+  /** `screen` is a recording of any screen or window, sent through a recording request. */
+  mode: "tab" | "voice" | "screen";
   startedAt: string;
   durationMs: number;
   /** Id of the `recording` evidence item whose Blob holds the media. */
@@ -265,7 +303,56 @@ export interface ThreadmarkVideoCapture {
   };
   /** The same privacy-safe step timeline as interaction captures, timed against the recording. */
   events: ThreadmarkInteractionEvent[];
+  /**
+   * Where the reviewer paused (in recording time) and for how long, so clock-time activity such as console
+   * and network entries can be placed on the video. Absent when the recording was never paused.
+   */
+  pauses?: Array<{ offsetMs: number; durationMs: number }>;
+  /**
+   * Strokes the reviewer drew on the page while recording (they fade after 3 seconds): where each began in the
+   * recording, then `[ms into the stroke, clientX, clientY]` points. Voice recordings replay them over the page.
+   */
+  drawings?: Array<{ offsetMs: number; points: Array<[number, number, number]> }>;
 }
+
+/**
+ * The reviewer's browser, operating system, device, screen, and settings when the comment was posted. Exact
+ * versions and CPU architecture come from client hints in Chromium browsers. `network` is the browser's
+ * own estimate (Chromium only, capped at 10 Mbps); nothing is measured.
+ */
+export interface ThreadmarkDeviceInfo {
+  browser: { name: string; version: string };
+  os: { name: string; version: string; architecture?: string };
+  type: "desktop" | "mobile" | "tablet";
+  model?: string;
+  touch: boolean;
+  screen: { width: number; height: number };
+  viewport: { width: number; height: number };
+  devicePixelRatio: number;
+  language: string;
+  timeZone: string;
+  colorScheme: "light" | "dark";
+  reducedMotion: boolean;
+  forcedColors: boolean;
+  network?: {
+    effectiveType: "slow-2g" | "2g" | "3g" | "4g" | null;
+    downlinkMbps: number | null;
+    rttMs: number | null;
+    saveData: boolean;
+  };
+}
+
+/** JSON values allowed in `metadata`. */
+export type ThreadmarkMetadataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ThreadmarkMetadataValue[]
+  | { [key: string]: ThreadmarkMetadataValue };
+
+/** App context attached to a new comment: feature flags, app version, workspace, sanitized state. */
+export type ThreadmarkMetadata = { [key: string]: ThreadmarkMetadataValue };
 
 export interface ThreadmarkVideoRecordingOptions {
   /** Longest recording in milliseconds. Defaults to 5 minutes; clamped to 5 seconds–10 minutes. */
@@ -352,6 +439,10 @@ export interface ThreadmarkFeedback {
   ask?: ThreadmarkAsk;
   /** Set when the comment was left on a product-tour step in Tour mode. */
   tourStep?: { tourId: string; stepId: string };
+  /** The reviewer's browser and device when the comment was posted, unless `deviceDetails` is false. */
+  device?: ThreadmarkDeviceInfo;
+  /** What the host's `metadata` returned when the comment was posted, cleaned and at most 10 KB. */
+  metadata?: ThreadmarkMetadata;
   comment: string;
   replies?: ThreadmarkReply[];
   createdAt: string;
@@ -377,6 +468,7 @@ export interface ThreadmarkError {
     | "poll_vote_failed"
     | "next_step_failed"
     | "next_steps_copy_failed"
+    | "metadata_failed"
     | (string & {});
   message: string;
 }
@@ -419,6 +511,21 @@ export interface ThreadmarkProps {
    * activity, and offers the lead-up to each new comment as a removable attachment.
    */
   sessionReplay?: boolean | ThreadmarkSessionReplayOptions;
+  /**
+   * Records the reviewer's browser, OS, device, screen, language, time zone, display settings, and the
+   * browser's network estimate on each new comment as `feedback.device`. On by default; `false` leaves it out,
+   * along with `feedback.captureEnvironment`.
+   */
+  deviceDetails?: boolean;
+  /**
+   * App context for each new comment, such as feature flags, the app version, or the selected workspace.
+   * A function is called when the comment is posted (it may return a promise; it gets 2 seconds), so the
+   * values are current. The result must be a plain object that JSON can hold, at most 10 KB once cleaned.
+   * Keys that name credentials (`password`, `apiKey`, `accessToken`, …) and credential-shaped strings are
+   * replaced. If it throws or returns something unusable, the comment is posted without it and `onError`
+   * reports `metadata_failed`.
+   */
+  metadata?: ThreadmarkMetadata | (() => ThreadmarkMetadata | null | undefined | Promise<ThreadmarkMetadata | null | undefined>);
   onReady?: () => void;
   onStatusChange?: (status: ThreadmarkStatus) => void;
   onOpenChange?: (open: boolean) => void;
@@ -430,11 +537,13 @@ export interface ThreadmarkProps {
   /**
    * Upserts a thread: called for new comments and for edits, reply additions/removals, workflow changes and repins.
    * Return the host's authoritative record to replace the local one; its `feedback.id` may differ from the local ID.
-   * When the returned record omits `context`, the local evidence is kept.
+   * When the returned record omits `context`, the local evidence is kept. For a new comment, a host that uploads
+   * the evidence while saving can report it through `saving.onUploadProgress`, and the composer shows the share sent.
    */
   onFeedbackCreate?: (
     feedback: ThreadmarkFeedback,
     context: ThreadmarkFeedbackContext,
+    saving?: ThreadmarkSaving,
   ) => void | ThreadmarkAnnotationRecord | Promise<void | ThreadmarkAnnotationRecord>;
   onFeedbackDelete?: (feedback: ThreadmarkFeedback) => void | Promise<void>;
   onFeedbackClear?: (feedback: readonly ThreadmarkFeedback[]) => void | Promise<void>;
@@ -531,6 +640,8 @@ export declare function createFeedbackPayload(options: {
   pin?: ThreadmarkPinLocation;
   pinHistory?: ThreadmarkPinLocation[];
   workflow?: ThreadmarkWorkflow;
+  device?: ThreadmarkDeviceInfo;
+  metadata?: ThreadmarkMetadata;
 }): ThreadmarkFeedback;
 
 export declare const THREADMARK_TARGET_ATTRIBUTE: "data-threadmark-id";

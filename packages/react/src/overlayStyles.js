@@ -1606,6 +1606,22 @@ export const overlayStyles = `
     min-width: 0;
   }
 
+  /* Upload progress while a new comment's files are sent: a full-width track above Cancel and Post. */
+  .tm-upload {
+    flex: 1 0 100%;
+    height: 3px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--tm-overlay-subtle);
+  }
+  .tm-upload span {
+    display: block;
+    height: 100%;
+    background: var(--tm-action-primary);
+    transform-origin: 0 50%;
+    transition: transform var(--tm-motion-fast) linear;
+  }
+
   /* Saved threads use inline actions; an empty footer must not add a grid gap below Reply. */
   .tm-form__footer:empty { display: none; }
 

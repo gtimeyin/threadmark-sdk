@@ -225,6 +225,14 @@ test("a declined tab share falls back to voice + cursor, which replays over the 
   await expect(page.locator(".tm-camera-bubble")).toHaveCount(0);
   await tracePointer(page, [[60, 60], [100, 80], [140, 100], [180, 120], [220, 140]]);
   await page.locator("#secondary-target").click();
+  // Voice recordings have no blur (nothing on screen is recorded), but drawings are kept for the replay.
+  await expect(page.getByRole("button", { name: "Blur parts of the page" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Draw on the page" }).click();
+  await page.mouse.move(80, 200);
+  await page.mouse.down();
+  for (let step = 1; step <= 5; step += 1) await page.mouse.move(80 + step * 25, 200 + step * 5);
+  await page.mouse.up();
+  await page.getByRole("button", { name: "Draw on the page" }).click();
   await page.waitForTimeout(1100);
   await page.locator(".tm-recording-stop").click();
 
@@ -235,12 +243,14 @@ test("a declined tab share falls back to voice + cursor, which replays over the 
   expect(saved.video).toMatchObject({ mode: "voice", camera: false, microphone: true });
   expect(saved.evidence[0]).toMatchObject({ kind: "recording", mimeType: "audio/webm", hasVideo: false });
   expect(saved.video.pointer.samples.length).toBeGreaterThan(3);
+  expect(saved.video.drawings).toHaveLength(1);
   expect(await allCapturedTracksEnded(page)).toBe(true);
 
   await page.locator(".tm-marker").first().click();
   await page.getByRole("button", { name: "Replay on page" }).click();
   await expect(page.locator(".tm-replay-bar")).toBeVisible();
   await expect(page.locator(".tm-replay-cursor")).toHaveCount(1);
+  await expect(page.locator(".tm-replay-layer .tm-draw-layer")).toHaveAttribute("data-strokes", "1", { timeout: 10_000 });
   await expect(page.locator(".tm-popover")).toHaveCount(0);
   await expect(page.locator(".tm-replay-bar")).toContainText("Replaying Emily R.’s cursor");
   await page.keyboard.press("Escape");
@@ -374,4 +384,83 @@ test("recordings the host stored elsewhere play from their URL and are handed ba
     .map((item) => ({ id: item.id, url: item.url, hasBlob: "blob" in item }))))
     .toEqual([{ id: "ev-stored", url: stored.url, hasBlob: false }]);
   expect(await page.evaluate(() => window.__threadmarkFeedback.at(-1).replies.at(-1).comment)).toBe("Seen on the stored copy too.");
+});
+
+// The picker covers the page, so pick by position, as a reviewer's click lands.
+async function clickThrough(page, locator) {
+  const box = await locator.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+async function boxOf(locator) {
+  const box = await locator.boundingBox();
+  return box && { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
+}
+
+test("tab videos blur what the site marked private and what the reviewer picks, and drawings fade", async ({ page }) => {
+  const pageErrors = await mountFixture(page);
+  // A region another session tool already masks (FullStory's class): blurred without anyone choosing it.
+  await page.evaluate(() => {
+    const note = document.createElement("p");
+    note.id = "card-note";
+    note.className = "fs-mask";
+    note.textContent = "Card ending 4242, expires 09/29";
+    document.body.prepend(note);
+  });
+  await openVideoSetup(page);
+  const blurBoxes = page.locator(".tm-blur-box");
+  await expect(blurBoxes).toHaveCount(1);
+
+  // Before recording: pick an element to blur; clicks pick instead of reaching the page.
+  await page.getByRole("button", { name: "Blur parts of the page" }).click();
+  await expect(page.getByRole("region", { name: "Blur parts of the page" })).toBeVisible();
+  await clickThrough(page, page.locator("#secondary-target"));
+  await expect(page.getByRole("region", { name: "Blur parts of the page" })).toContainText("1 blurred");
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator(".tm-video-setup")).toBeVisible();
+  await expect(page.getByRole("button", { name: "1 blurred" })).toBeVisible();
+  expect(await page.evaluate(() => window.__threadmarkHostEvents.filter((event) => event === "secondary-click").length)).toBe(0);
+  await expect(blurBoxes).toHaveCount(2);
+
+  await page.locator(".tm-video-start").click();
+  await expect(page.locator(".tm-video-recorder")).toBeVisible();
+  // Each box covers its element, following it on the page.
+  const target = await boxOf(page.locator("#secondary-target"));
+  const boxes = await Promise.all((await blurBoxes.all()).map(boxOf));
+  expect(boxes.some((box) => Math.abs(box.x - (target.x - 4)) <= 1 && Math.abs(box.y - (target.y - 4)) <= 1 && Math.abs(box.width - (target.width + 8)) <= 1)).toBe(true);
+  const note = await boxOf(page.locator("#card-note"));
+  expect(boxes.some((box) => Math.abs(box.y - (note.y - 4)) <= 1)).toBe(true);
+
+  // During recording, choosing what to blur pauses the recording and resumes it after.
+  await page.getByRole("button", { name: "Blur parts of the page" }).click();
+  await expect(page.locator(".tm-video-recorder")).toHaveClass(/is-paused/);
+  await clickThrough(page, page.locator("#interaction-output"));
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator(".tm-video-recorder")).not.toHaveClass(/is-paused/);
+  await expect(blurBoxes).toHaveCount(3);
+
+  // Drawing: the page doesn't get the pointer, and the stroke fades after three seconds.
+  await page.getByRole("button", { name: "Draw on the page" }).click();
+  await expect(page.getByRole("button", { name: "Draw on the page" })).toHaveAttribute("aria-pressed", "true");
+  const area = await boxOf(page.locator("#custom-target"));
+  await page.mouse.move(area.x + 10, area.y + 10);
+  await page.mouse.down();
+  for (let step = 1; step <= 6; step += 1) await page.mouse.move(area.x + 10 + step * 20, area.y + 10 + step * 4);
+  await page.mouse.up();
+  await expect(page.locator(".tm-draw-layer").first()).toHaveAttribute("data-strokes", "1");
+  expect(await page.evaluate(() => window.__threadmarkHostEvents.filter((event) => event === "click" || event === "pointerdown").length)).toBe(0);
+  await expect(page.locator(".tm-draw-layer").first()).toHaveAttribute("data-strokes", "0", { timeout: 6000 });
+  await page.getByRole("button", { name: "Draw on the page" }).click();
+  await page.waitForTimeout(500);
+
+  await page.locator(".tm-recording-stop").click();
+  await expect(page.locator(".tm-popover")).toBeVisible();
+  await expect(blurBoxes).toHaveCount(0);
+  await setComment(page, "The numbers are blurred.");
+  await submitComposer(page);
+  const saved = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
+  expect(saved.video.drawings).toHaveLength(1);
+  expect(saved.video.drawings[0].points.length).toBeGreaterThan(3);
+  expect(saved.video.pauses).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
 });
