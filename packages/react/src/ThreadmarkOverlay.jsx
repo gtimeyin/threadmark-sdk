@@ -591,6 +591,7 @@ function InboxList({ notifications, onOpen }) {
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
   nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
   surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null }) {
+  const [halfSheet, setHalfSheet] = useState(false);
   const unreadNotifications = notifications ? notifications.filter((item) => !item.read) : [];
   useEffect(() => {
     if (hidden || tab !== "inbox" || !unreadNotifications.length) return;
@@ -669,7 +670,10 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
       && (!search || model.searchText.get(item.id).includes(search));
   }), [annotations, model, reviewerId, filter, status, page, build, search, repairFilter]);
   return (
-    <aside id="tm-all-comments" className="tm-comments-panel" aria-label="Feedback" hidden={hidden}
+    <>
+    {/* Tablets in portrait: the panel is a drawer over a dimmed page; tapping the page closes it (board 11, 36b). */}
+    {!hidden && <div className="tm-panel-scrim" aria-hidden="true" onClick={onClose} />}
+    <aside id="tm-all-comments" className={`tm-comments-panel${halfSheet ? " is-half" : ""}`} aria-label="Feedback" hidden={hidden}
       data-menu-open={filterOpen ? "true" : undefined}
       onKeyDown={(event) => {
         if (event.key === "Escape" && filterOpen) {
@@ -679,6 +683,9 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           filterButtonRef.current?.focus();
         }
       }}>
+      {/* Phones: a tall sheet you can drop to half height to see the page while you read (35d). */}
+      <button type="button" className="tm-sheet-handle" aria-label={halfSheet ? "Make the panel taller" : "Make the panel shorter"}
+        aria-pressed={halfSheet} onClick={() => setHalfSheet((value) => !value)} />
       <header className="tm-comments-header">
         <h2 className="tm-sr-only">Feedback</h2>
         <div className="tm-panel-tabs" role="tablist" aria-label="Feedback views">
@@ -821,6 +828,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
       </div>}
       </>}
     </aside>
+    </>
   );
 }
 
@@ -1997,6 +2005,16 @@ function Overlay({
   const [sendTarget, setSendTarget] = useState(null);
   const [aiReviewOpen, setAiReviewOpen] = useState(false);
   const [askAiElement, setAskAiElement] = useState(null);
+  // Phones: the composer and thread are bottom sheets, so keep what they're about in view above them (35b-c).
+  const sheetSubject = lastSelection?.element || editingAnnotation?.runtime?.elements?.[0] || null;
+  useEffect(() => {
+    if (!sheetSubject?.isConnected || typeof window.matchMedia !== "function" || !window.matchMedia("(max-width: 599px)").matches) return;
+    const rect = sheetSubject.getBoundingClientRect();
+    const room = window.innerHeight * 0.3;
+    if (rect.top >= 8 && rect.bottom <= room) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollBy({ top: rect.top - Math.min(64, room / 3), behavior: reduce ? "auto" : "smooth" });
+  }, [sheetSubject]);
   const askAiTarget = onAskAi && onPostAiComment && !editingAnnotation && selections.length === 1 && !textSelection && !regionSelection
     && !screenshotSelection && !interactionSelection && !videoSelection ? selections[0]?.element : null;
   useEffect(() => {

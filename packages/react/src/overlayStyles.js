@@ -4,11 +4,12 @@ import { threadStyles } from "./surfaces/threadStyles.js";
 import { panelStyles } from "./surfaces/panelStyles.js";
 import { surveyStyles } from "./surfaces/surveyStyles.js";
 import { aiStyles } from "./surfaces/aiStyles.js";
+import { smallScreenStyles } from "./surfaces/smallScreenStyles.js";
 import { composerExtrasStyles } from "./surfaces/composerExtrasStyles.js";
 
 export const overlayStyles = `
   /* The older built-in page check (onPageReviewRequested), on the dark chrome like the rest of the overlay. */
-  .tm-agent { position: fixed; bottom: 84px; right: 20px; pointer-events: auto; z-index: 2147483646; font: 13px/1.4 var(--tm-font); color: var(--tm-text-primary); }
+  .tm-agent { position: fixed; bottom: 84px; right: 20px; pointer-events: auto; z-index: 35; font: 13px/1.4 var(--tm-font); color: var(--tm-text-primary); }
   .tm-agent button { font: inherit; cursor: pointer; border: 1px solid rgba(251, 250, 246, .12); border-radius: var(--tm-radius-button); padding: 7px 12px; background: var(--tm-raised); color: var(--tm-text-primary); }
   .tm-agent button:hover:not(:disabled) { background: rgba(251, 250, 246, .14); }
   .tm-agent-trigger { display: flex; gap: 6px; align-items: center; margin-left: auto; background: var(--tm-ground) !important; box-shadow: 0 8px 24px rgba(14, 23, 20, .25); }
@@ -2470,4 +2471,5 @@ ${threadStyles}
 ${panelStyles}
 ${surveyStyles}
 ${aiStyles}
+${smallScreenStyles}
 `;

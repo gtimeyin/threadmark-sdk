@@ -56,9 +56,30 @@ export function barMood({ count, questions, seen, online }) {
   return { mood: "caught-up", primary: "All caught up", secondary: plural(count, "comment") };
 }
 
+/** On phones the bar steps out of the way while you scroll down and comes back when you scroll up (board 11, 35a). */
+export function useScrollAway(enabled = true) {
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    if (!enabled || typeof window.matchMedia !== "function") return undefined;
+    const phone = window.matchMedia("(max-width: 599px)");
+    let last = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (!phone.matches) { setAway(false); last = y; return; }
+      if (y > last + 12 && y > 80) setAway(true);
+      else if (y < last - 12 || y <= 80) setAway(false);
+      if (Math.abs(y - last) > 12) last = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [enabled]);
+  return away;
+}
+
 /** The idle bar. `onOpen` opens the review (and the panel when there is something to read). */
 export function IdleBar({ annotations = [], notifications = null, route, launcherRef, onOpen, onOpenTools, position = "bottom-center", shrunk = false, onShrink }) {
   const online = useOnline();
+  const away = useScrollAway(!shrunk);
   const count = annotations.length;
   const questions = annotations.filter((annotation) => annotation?.payload?.ask && !annotation?.payload?.resolvedAt && annotation?.runtime?.status !== "resolved").length;
   const [seen, setSeen] = useState(() => readSeen(route));
@@ -100,7 +121,7 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
   }
 
   return (
-    <div className={`tm-bar tm-bar--idle tm-bar--${mood} tm-bar--at-${position}`} role="group" aria-label="Threadmark">
+    <div className={`tm-bar tm-bar--idle tm-bar--${mood} tm-bar--at-${position}${away ? " is-away" : ""}`} role="group" aria-label="Threadmark">
       {(count > 0 || latest) && (
         <>
           <button type="button" className="tm-bar__tools" aria-label="Comment on the page" title="Comment on the page (C)" onClick={onOpenTools}>

@@ -3905,11 +3905,12 @@ export function Threadmark({
 
   const overlay = createPortal(
     <>
-    {onPageReviewRequested && mode === 'picking' && <AgentReview route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
+    {/* Inside a tm-root so the widget gets the brand tokens. */}
+    {onPageReviewRequested && mode === 'picking' && <div className="tm-root"><AgentReview route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
       onReview={onPageReviewRequested} onRecords={(records) => {
         const accepted = records.filter(record => record.feedback?.projectKey === projectKey && record.feedback?.route === activeRoute).map(record => recordToAnnotation(record)).filter(Boolean);
         setAnnotations(current => [...current.filter(item => !accepted.some(next => next.id === item.id)), ...accepted]);
-      }} />}
+      }} /></div>}
     {presence && <Presence transport={presence} route={activeRoute} buildId={buildId} projectKey={projectKey} ignoredSelectors={ignoredSelectors} />}
     <Overlay
       mode={mode}

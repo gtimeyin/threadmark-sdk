@@ -160,6 +160,7 @@ export const panelStyles = `
   .tm-comments-panel .tm-comment-repair { color: var(--tm-orange-on-dark); }
 
   .tm-comments-panel .tm-comments-empty { color: var(--tm-text-secondary); }
+  .tm-comments-panel .tm-comments-empty p { color: var(--tm-text-secondary); }
   .tm-comments-panel .tm-comments-empty strong { color: var(--tm-text-primary); }
   .tm-comments-panel .tm-comments-empty svg { color: var(--tm-action-primary); }
   .tm-comments-panel .tm-comments-empty button { border: 1px solid rgba(251, 250, 246, .15); border-radius: var(--tm-radius-button); background: transparent; color: var(--tm-text-primary); }
