@@ -2,6 +2,7 @@ import { primitiveStyles } from "./ui/primitiveStyles.js";
 import { barStyles } from "./surfaces/barStyles.js";
 import { threadStyles } from "./surfaces/threadStyles.js";
 import { panelStyles } from "./surfaces/panelStyles.js";
+import { surveyStyles } from "./surfaces/surveyStyles.js";
 import { composerExtrasStyles } from "./surfaces/composerExtrasStyles.js";
 
 export const overlayStyles = `
@@ -2433,4 +2434,5 @@ ${barStyles}
 ${composerExtrasStyles}
 ${threadStyles}
 ${panelStyles}
+${surveyStyles}
 `;

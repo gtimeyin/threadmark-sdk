@@ -1,4 +1,5 @@
 import { normalizeNotifications } from "./notifications.js";
+import { normalizeSurveys, surveyPageMatches } from "./surveys/schema.js";
 import { normalizeReactions } from "./reactions.js";
 import { createAnnotationHydrator } from "./annotationHydration.js";
 import { captureEnvironment } from "./captureEnvironment.js";
@@ -481,6 +482,8 @@ export function Threadmark({
   pageVersions,
   nextSteps,
   notifications,
+  surveys,
+  surveyResults,
   videoRecording,
   sessionReplay,
   deviceDetails = true,
@@ -502,6 +505,8 @@ export function Threadmark({
   onNextStepsCopy,
   onNotificationOpen,
   onNotificationsRead,
+  onSurveyPublish,
+  onSurveyEnd,
   tours,
   onTourSave,
   onError,
@@ -601,6 +606,7 @@ export function Threadmark({
   const metadataRef = useLatest(metadata);
 
   const normalizedNotifications = useMemo(() => normalizeNotifications(notifications), [notifications]);
+  const normalizedSurveys = useMemo(() => normalizeSurveys(surveys), [surveys]);
   const callbacks = {
     onReady: useLatest(onReady),
     onStatusChange: useLatest(onStatusChange),
@@ -618,6 +624,8 @@ export function Threadmark({
     onNextStepsCopy: useLatest(onNextStepsCopy),
     onNotificationOpen: useLatest(onNotificationOpen),
     onNotificationsRead: useLatest(onNotificationsRead),
+    onSurveyPublish: useLatest(onSurveyPublish),
+    onSurveyEnd: useLatest(onSurveyEnd),
     onTourSave: useLatest(onTourSave),
     onError: useLatest(onError),
   };
@@ -3914,6 +3922,14 @@ export function Threadmark({
         if (notification.annotationId && projectAnnotations.some((item) => item.id === notification.annotationId)) openListedAnnotation(notification.annotationId);
       }}
       onNotificationsSeen={(ids) => { if (ids.length) safeCall(callbacks.onNotificationsRead, ids); }}
+      surveys={Array.isArray(surveys) ? normalizedSurveys.filter((survey) => survey.pages.some((page) => surveyPageMatches(page, activeRoute))) : null}
+      surveyResults={surveyResults && typeof surveyResults === "object" ? surveyResults : {}}
+      onSurveyPublish={onSurveyPublish ? async (survey) => {
+        await callbacks.onSurveyPublish.current?.(survey);
+        showNotice(`Your question is live on ${survey.pages.join(", ")}`);
+      } : null}
+      onSurveyEnd={onSurveyEnd ? (survey) => safeCall(callbacks.onSurveyEnd, survey.id) : null}
+      surveyRoute={activeRoute}
       nextStepsOpen={nextStepsOpen}
       onShowNextSteps={setNextStepsOpen}
       canTickNextSteps={Boolean(shownNextSteps?.canEdit && callbacks.onNextStepDone.current)}

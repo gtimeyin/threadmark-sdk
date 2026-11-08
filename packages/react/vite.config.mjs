@@ -12,6 +12,8 @@ export default defineConfig({
       entry: {
         index: fileURLToPath(new URL("./src/index.jsx", import.meta.url)),
         tours: fileURLToPath(new URL("./src/tours.js", import.meta.url)),
+        // `surveys` is the production-safe visitor survey player; like tours, no review overlay.
+        surveys: fileURLToPath(new URL("./src/surveys.js", import.meta.url)),
         // Node-only `threadmark tours check`, run through bin/threadmark.mjs.
         cli: fileURLToPath(new URL("./src/cli/main.js", import.meta.url)),
         // Node-only dev-server plugin for Tour mode's "Save to code".
@@ -24,7 +26,7 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       // rrweb stays a runtime dependency; its stylesheet (imported with ?inline) is still bundled.
-      external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", /^@solar-icons\/react(?:\/|$)/, /^rrweb$/, /^node:/],
+      external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", /^rrweb$/, /^node:/],
       output: {
         // Only modules that render or use React are client modules. The rest (the tours entry,
         // threadmarkTarget, validateTour, the CLI and Vite plugin) stay callable from Server
@@ -34,6 +36,8 @@ export default defineConfig({
         manualChunks: (id) => {
           if (id.endsWith("/src/targetId.js")) return "targetId";
           if (id.endsWith("/src/tours/schema.js")) return "tourSchema";
+          if (id.endsWith("/src/surveys/schema.js")) return "surveySchema";
+          if (id.endsWith("/src/resolveStableTarget.js")) return "resolveStableTarget";
           return undefined;
         },
       },

@@ -2,10 +2,27 @@ import { createLocalReactionHandler } from "./reactionsDemo.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Threadmark, saveTourToDevServer, threadmarkTarget } from "threadmark-react";
 import { ThreadmarkTours, useThreadmarkTours } from "threadmark-react/tours";
+import { ThreadmarkSurveys, summarizeSurveyAnswers } from "threadmark-react/surveys";
 import { createLocalPageReviewer } from "./localPageReviewer.js";
 import { createFeedbackStore } from "./feedbackStore.js";
+
 import welcomeTour from "./tours/welcome.tour.json";
 
+function readJson(key, fallback) {
+  try {
+    return JSON.parse(window.localStorage.getItem(key)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage is optional in the example.
+  }
+}
 
 function TourButton() {
   const tours = useThreadmarkTours();
@@ -92,6 +109,13 @@ function FeedbackLog({ entries, onClear }) {
 export function App() {
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [annotations, setAnnotations] = useState([]);
+  // Surveys and their answers are host-owned too; this example keeps them in localStorage.
+  const [surveys, setSurveys] = useState(() => readJson("example:surveys", []));
+  const [surveyAnswers, setSurveyAnswers] = useState(() => readJson("example:survey-answers", []));
+  useEffect(() => writeJson("example:surveys", surveys), [surveys]);
+  useEffect(() => writeJson("example:survey-answers", surveyAnswers), [surveyAnswers]);
+  const surveyResults = useMemo(() => Object.fromEntries(surveys.map((survey) => [survey.id, summarizeSurveyAnswers(survey, surveyAnswers)])), [surveys, surveyAnswers]);
+  const answerCounts = useMemo(() => Object.fromEntries(Object.entries(surveyResults).map(([id, result]) => [id, result.total])), [surveyResults]);
   // Notifications are host-owned. This stand-in shows the Inbox tab and the bar's New reply mood.
   const [notifications, setNotifications] = useState(() => [
     { id: "demo-mention", kind: "mention", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "@You can we keep the word launch in the headline?", route: "/", createdAt: new Date(Date.now() - 4 * 60000).toISOString() },
@@ -278,6 +302,10 @@ export function App() {
         onFeedbackCarryForward={handleCarryForward}
         onPollVote={handlePollVote}
         notifications={notifications}
+        surveys={surveys}
+        surveyResults={surveyResults}
+        onSurveyPublish={(survey) => setSurveys((list) => [...list.filter((item) => item.id !== survey.id), survey])}
+        onSurveyEnd={(id) => setSurveys((list) => list.map((item) => (item.id === id ? { ...item, status: "ended" } : item)))}
         onNotificationsRead={(ids) => setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)))}
         tours={tours}
         onTourSave={saveTour}
@@ -285,6 +313,11 @@ export function App() {
         onError={(error) => setStatus(`error:${error.code}`)}
       />
       <ThreadmarkTours tours={tours} theme={{ accent: "#0b4f3a" }} />
+      <ThreadmarkSurveys
+        surveys={surveys}
+        answerCounts={answerCounts}
+        onAnswer={(answer) => setSurveyAnswers((list) => (list.some((item) => item.key === answer.key) ? list : [...list, answer]))}
+      />
 
       {new URLSearchParams(location.search).has('agent-demo') && <section aria-label="Agent review examples" style={{ margin: '32px auto', maxWidth: 1040, padding: 24, background: '#DCEBE5', borderRadius: 12 }}>
         <h2>Try a Threadmark Agent review</h2>

@@ -38,6 +38,10 @@
       "types": "./dist/tours.d.ts",
       "import": "./dist/tours.js"
     },
+    "./surveys": {
+      "types": "./dist/surveys.d.ts",
+      "import": "./dist/surveys.js"
+    },
     "./vite": {
       "types": "./dist/vite.d.ts",
       "import": "./dist/vite.js"

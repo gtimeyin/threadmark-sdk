@@ -42,7 +42,9 @@ import { WarningIcon as TriangleAlert } from "./icons.jsx";
 import { ReopenIcon as Undo2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { InboxIcon, NextStepsIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { InboxIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
+import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
 import { Avatar, EmptyState } from "./ui/primitives.jsx";
 import { BarHint, IdleBar } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
@@ -581,7 +583,8 @@ function InboxList({ notifications, onOpen }) {
 }
 
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
-  nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen }) {
+  nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
+  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd }) {
   const unreadNotifications = notifications ? notifications.filter((item) => !item.read) : [];
   useEffect(() => {
     if (hidden || tab !== "inbox" || !unreadNotifications.length) return;
@@ -756,7 +759,17 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
       </header>
       {tab === "inbox" && notifications ? <InboxList notifications={notifications} onOpen={onOpenNotification} />
         : tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
-        : tab === "versions" ? <PageVersionList versions={pageVersions} onSelect={onSelectPageVersion} /> : <>
+        : tab === "versions" ? <PageVersionList versions={pageVersions} onSelect={onSelectPageVersion} />
+        : openSurveyId && surveys?.some((survey) => survey.id === openSurveyId) ? (() => {
+          const survey = surveys.find((item) => item.id === openSurveyId);
+          return <SurveyResultsView survey={survey} results={surveyResults[survey.id]} onBack={() => onOpenSurvey(null)}
+            onEnd={onSurveyEnd ? (item) => onSurveyEnd(item) : null}
+            onExport={(item) => {
+              const rows = [["answer"], ...((surveyResults[item.id]?.texts) || []).map((text) => [text])];
+              navigator.clipboard?.writeText(rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n")).catch(() => {});
+            }} />;
+        })() : <>
+      {surveys && surveys.length > 0 && !query && <SurveyList surveys={surveys} results={surveyResults} onOpen={onOpenSurvey} />}
       {controls === "search" && <div id="tm-comments-search-controls" className="tm-comments-search">
         <input ref={searchRef} aria-label="Search comments" placeholder="Search comments and replies…" value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>}
@@ -1791,6 +1804,11 @@ function Overlay({
   notifications = null,
   onOpenNotification,
   onNotificationsSeen,
+  surveys = null,
+  surveyResults = {},
+  onSurveyPublish = null,
+  onSurveyEnd = null,
+  surveyRoute = "/",
   nextStepsOpen = false,
   onShowNextSteps = () => {},
   canTickNextSteps = false,
@@ -1896,6 +1914,8 @@ function Overlay({
   const carryForwardVersions = pageVersions.filter((version) => !version.current && version.state === "ready");
   const [toolbarMenu, setToolbarMenu] = useState(null);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [surveyBuilderOpen, setSurveyBuilderOpen] = useState(false);
+  const [openSurveyId, setOpenSurveyId] = useState(null);
   const toolbarMenuRef = useRef(null);
   toolbarMenuRef.current = toolbarMenu;
   const toolsTriggerRef = useRef(null);
@@ -2253,6 +2273,11 @@ function Overlay({
                     icon={<VideoIcon />} label="Record a video" description="Your tab, voice, and camera"
                     shortcut="V" keyshortcuts="V" onClick={runToolbarItem(onStartVideo)} />
                 )}
+                {onSurveyPublish && (
+                  <ToolbarMenuItem role="menuitemradio" aria-checked="false"
+                    icon={<PollIcon {...iconProps} />} label="Ask a question" description="A short poll, scale or question for people on this page"
+                    onClick={runToolbarItem(() => setSurveyBuilderOpen(true))} />
+                )}
                 <div className="tm-toolbar-menu__separator" role="separator" />
                 <ToolbarMenuItem role="menuitemradio" aria-checked="false"
                   icon={<TourIcon {...iconProps} />} label="Build a tour" description="Click elements to add tour steps"
@@ -2331,6 +2356,9 @@ function Overlay({
         </div>
       )}
 
+      {surveyBuilderOpen && mode === "picking" && onSurveyPublish && (
+        <SurveyBuilder route={surveyRoute} onPublish={onSurveyPublish} onClose={() => setSurveyBuilderOpen(false)} />
+      )}
       {allCommentsOpen && ["picking", "selected"].includes(mode) && (
         <AllCommentsPanel annotations={projectAnnotations} restorations={annotationRestorations} reviewer={reviewer}
           route={pageVersionRoute} hidden={mode !== "picking"} onClose={onCloseAllComments} onOpen={onOpenListedAnnotation}
@@ -2339,7 +2367,8 @@ function Overlay({
           pageVersions={pageVersions} onSelectPageVersion={onSelectPageVersion}
           nextSteps={nextSteps} canTickNextSteps={canTickNextSteps} onNextStepDone={onNextStepDone}
           onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps}
-          notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen} />
+          notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen}
+          surveys={surveys} surveyResults={surveyResults} openSurveyId={openSurveyId} onOpenSurvey={setOpenSurveyId} onSurveyEnd={onSurveyEnd} />
       )}
 
       {replayViewer && (

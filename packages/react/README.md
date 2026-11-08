@@ -234,6 +234,27 @@ Votes are host-owned, like everything else Threadmark stores:
 Supply current results as `context.poll` on each record. Resolving a poll closes it. The Supabase adapter
 implements this as `store.vote` (see `integrations/supabase`).
 
+## Surveys
+
+Ask the people on a page one short question: a poll, a 1–3/5/7/10 scale (numbers, stars, faces or a slider), or an open question, with an optional follow-up. Reviewers write them in the overlay (**Tools → Ask a question**: Question, Where, Who and when), and visitors answer them through a separate, production-safe player. Surveys and answers are yours to store, like comments.
+
+```jsx
+// Review overlay: let your team publish and end questions, and read the answers.
+<Threadmark
+  surveys={surveys}
+  surveyResults={results}                 // { [surveyId]: { total, counts, average, texts, summary? } }
+  onSurveyPublish={(survey) => save(survey)}
+  onSurveyEnd={(id) => end(id)}
+/>
+
+// Your live site: shows at most one question per page, once per person by default.
+import { ThreadmarkSurveys, summarizeSurveyAnswers } from "threadmark-react/surveys";
+
+<ThreadmarkSurveys surveys={liveSurveys} answerCounts={counts} onAnswer={(answer) => storeAnswer(answer)} />
+```
+
+The player waits a few seconds before showing the card, never covers the page with more than one question, and keeps an answer that fails to send on the device, retrying it quietly. `summarizeSurveyAnswers(survey, answers)` turns stored answers into the `surveyResults` shape. A survey stops when you end it, at `endsAt`, or after `stopAfterAnswers` answers.
+
 ## Next steps
 
 Pass `nextSteps` and the **Feedback** panel gets a **Next steps** tab beside **Comments** (and **Versions**): a

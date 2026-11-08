@@ -139,6 +139,27 @@ test("the tours entry never reaches review, capture, or icon code", async () => 
   }
 });
 
+test("the survey player renders nothing on the server and mounts only in the browser", async () => {
+  const { ThreadmarkSurveys } = await import("threadmark-react/surveys");
+  const markup = renderToString(React.createElement("main", null, "App", React.createElement(ThreadmarkSurveys, { surveys: [] })));
+  assert.equal(markup, "<main>App</main>");
+});
+
+test("the surveys entry never reaches review or capture code, and never calls the network itself", async () => {
+  const { files, bareImports } = await collectBuiltModuleGraph(resolvePackagePath("./dist/surveys.js"));
+  const allowedPackages = new Set(["react", "react/jsx-runtime", "react-dom"]);
+  for (const specifier of bareImports) {
+    assert.ok(allowedPackages.has(specifier), `surveys entry must not import ${specifier}`);
+  }
+  for (const [href, code] of files) {
+    assert.ok(!href.endsWith("/dist/index.js"), "surveys entry must not import the review entry");
+    assert.doesNotMatch(code, /data-threadmark-root|getDisplayMedia|getUserMedia|domToBlob/, `${href} contains review or capture code`);
+    assert.doesNotMatch(code, /innerHTML|outerHTML|insertAdjacentHTML|dangerouslySetInnerHTML|document\.write|createContextualFragment/, `${href} can inject HTML`);
+    assert.doesNotMatch(code, /\beval\(|new Function\(|\bimport\(/, `${href} evaluates or loads code at runtime`);
+    assert.doesNotMatch(code, /fetch\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|new Image\(|window\.open\(|location\.(?:href|assign|replace)/, `${href} makes network requests or navigates on its own`);
+  }
+});
+
 test("Node-only code (the CLI and the Vite plugin) never reaches the browser bundles", async () => {
   for (const entry of ["./dist/index.js", "./dist/tours.js"]) {
     const { files, bareImports } = await collectBuiltModuleGraph(resolvePackagePath(entry));

@@ -20,6 +20,9 @@ const fixtureParams = new URLSearchParams(window.location.search);
 const pollsEnabled = fixtureParams.get("polls") === "1";
 // ?tours=1 passes one tour to Tour mode and records what "Save to code" receives.
 const toursEnabled = fixtureParams.get("tours") === "1";
+// ?surveys=1 lets reviewers publish survey questions, kept in memory the way a host would.
+const surveysEnabled = fixtureParams.get("surveys") === "1";
+window.__threadmarkSurveys = [];
 window.__threadmarkTourSaves = [];
 const fixtureTours = [{
   id: "fixture-tour",
@@ -92,6 +95,7 @@ function Fixture() {
   const [duplicatePrimary, setDuplicatePrimary] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [styleNonce, setStyleNonce] = useState("fixture-nonce-0");
+  const [surveys, setSurveys] = useState([]);
   const [nextSteps, setNextSteps] = useState(() => (nextStepsMode ? {
     steps: FIXTURE_NEXT_STEPS,
     status: { state: "ready", generatedAt: new Date(Date.now() - 5 * 60_000).toISOString() },
@@ -259,6 +263,13 @@ function Fixture() {
           window.__threadmarkCarryForwards.push({ feedback, version, context });
         }}
         onPollVote={pollsEnabled ? fixturePollVote : undefined}
+        surveys={surveysEnabled ? surveys : undefined}
+        surveyResults={surveysEnabled ? Object.fromEntries(surveys.map((survey) => [survey.id, { total: 3, counts: { 5: 2, 3: 1 }, average: 4.3, texts: ["Wanted to see the price per seat."] }])) : undefined}
+        onSurveyPublish={surveysEnabled ? async (survey) => {
+          window.__threadmarkSurveys.push(survey);
+          setSurveys((current) => [...current, survey]);
+        } : undefined}
+        onSurveyEnd={surveysEnabled ? (id) => setSurveys((current) => current.map((survey) => (survey.id === id ? { ...survey, status: "ended" } : survey))) : undefined}
         nextSteps={nextSteps}
         onNextStepDone={nextStepsMode ? async (step, done) => {
           window.__threadmarkNextStepTicks.push([step.id, done]);

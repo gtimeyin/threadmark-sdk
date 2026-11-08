@@ -117,3 +117,52 @@ test("designers ask questions and run polls; reviewers vote and change their vot
 
   expect(pageErrors).toEqual([]);
 });
+
+test("reviewers ask people a survey question in three steps; problems are named next to their field", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "?surveys=1");
+  await page.locator(".tm-launcher").click();
+  await page.getByRole("button", { name: /^Feedback tools/ }).click();
+  await page.getByRole("menuitemradio", { name: /Ask a question/ }).click();
+  const builder = page.getByRole("dialog", { name: "Ask a question" });
+  await expect(builder).toBeVisible();
+
+  // Next with nothing filled in says what's missing, beside the fields, and stays on step 1.
+  await builder.getByRole("button", { name: /^Next/ }).click();
+  await expect(builder.getByText("Write the question people will see.")).toBeVisible();
+  await expect(builder.getByText("Add at least two answers.")).toBeVisible();
+  await expect(builder.locator('[aria-current="step"]')).toContainText("Question");
+
+  await builder.getByRole("radio", { name: "Scale" }).click();
+  await builder.getByLabel("Question", { exact: true }).fill("How easy was it to find pricing?");
+  await builder.getByLabel("Low end").fill("Hard");
+  await builder.getByLabel("High end").fill("Easy");
+  await builder.getByRole("radio", { name: "7" }).click();
+  await builder.getByRole("button", { name: /^Next/ }).click();
+  await expect(builder.locator('[aria-current="step"]')).toContainText("Where");
+  await builder.getByRole("radio", { name: "Banner" }).click();
+  await expect(page.locator(".tm-survey-ghost--banner")).toHaveCount(1);
+  await builder.getByRole("button", { name: /^Next/ }).click();
+  await expect(builder.getByText("Live on /picking-events")).toBeVisible();
+  await builder.getByRole("button", { name: /^Publish/ }).click();
+  await expect(builder).toHaveCount(0);
+  await expect(page.locator(".tm-toast")).toContainText("Your question is live on /picking-events");
+
+  const published = await page.evaluate(() => window.__threadmarkSurveys);
+  expect(published).toEqual([expect.objectContaining({
+    status: "live",
+    pages: ["/picking-events"],
+    audience: "visitors",
+    placement: { kind: "page", position: "banner", target: null },
+    question: expect.objectContaining({ kind: "scale", text: "How easy was it to find pricing?", scale: { points: 7, display: "numbers", low: "Hard", high: "Easy" } }),
+  })]);
+
+  // The team sees it at the top of Activity and can read the answers, then end it.
+  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: /How easy was it to find pricing\?/ }).click();
+  const results = page.getByRole("tabpanel", { name: /^Answers:/ });
+  await expect(results).toContainText("4.3 of 7 · 3 answers");
+  await expect(results).toContainText("“Wanted to see the price per seat.”");
+  await results.getByRole("button", { name: "End survey" }).click();
+  await expect(results).toContainText("Ended");
+  expect(pageErrors).toEqual([]);
+});

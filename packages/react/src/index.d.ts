@@ -547,6 +547,10 @@ export interface ThreadmarkProps {
   nextSteps?: ThreadmarkNextSteps | readonly ThreadmarkNextStep[] | null;
   /** Replies, mentions and other things for this reviewer. Passing an array shows the Inbox tab and lets the bar say "Maya mentioned you". */
   notifications?: readonly ThreadmarkNotification[];
+  /** Survey questions for this project. Ones on the current page show at the top of Activity. */
+  surveys?: readonly import("./surveys.js").ThreadmarkSurvey[];
+  /** Answers per survey id, e.g. from `summarizeSurveyAnswers`. `summary` is an optional one-line read. */
+  surveyResults?: Readonly<Record<string, import("./surveys.js").ThreadmarkSurveyResults & { summary?: string }>>;
   /**
    * Loom-style video feedback with voice, an optional camera bubble, and a pointer track.
    * Enabled by default; `false` hides the recorder. The browser asks before any camera, microphone,
@@ -627,6 +631,10 @@ export interface ThreadmarkProps {
   onNotificationOpen?: (notification: ThreadmarkNotification) => void;
   /** These notifications were shown in the Inbox; mark them read in your store. */
   onNotificationsRead?: (ids: readonly string[]) => void;
+  /** Store a question published from Tools → Ask a question. Passing this shows the menu item. */
+  onSurveyPublish?: (survey: import("./surveys.js").ThreadmarkSurvey) => void | Promise<void>;
+  /** End a live survey from its results. */
+  onSurveyEnd?: (surveyId: string) => void;
   /**
    * Tours to edit in Tour mode (the same files you pass to <ThreadmarkTours>). Tour mode keeps
    * edits as drafts in the overlay; nothing is written anywhere until onTourSave or Copy file.
