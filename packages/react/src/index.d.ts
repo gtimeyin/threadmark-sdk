@@ -452,6 +452,8 @@ export interface ThreadmarkFeedback {
   device?: ThreadmarkDeviceInfo;
   /** What the host's `metadata` returned when the comment was posted, cleaned and at most 10 KB. */
   metadata?: ThreadmarkMetadata;
+  /** Where this comment was sent with Send to…, such as a GitHub issue. */
+  links?: ThreadmarkCommentLink[];
   comment: string;
   reactions?: ThreadmarkReaction[];
   replies?: ThreadmarkReply[];
@@ -674,6 +676,23 @@ export interface ThreadmarkProps {
    * a rejection keeps the draft and tells the reviewer it didn't save.
    */
   onTourSave?: (tour: ThreadmarkTourFile, file: { fileName: string; contents: string }) => void | { path?: string } | Promise<void | { path?: string }>;
+  /** The coding AI the host has connected, shown in Save to code. Threadmark never edits code itself. */
+  aiConnection?: { name: string; connected: boolean; detail?: string };
+  /** Adds "Send to <AI>" to Save to code when `aiConnection.connected` is true. */
+  onTourSendToAi?: (tour: ThreadmarkTourFile, file: { fileName: string; contents: string }) => void | Promise<void>;
+  /** Adds Connect next to an AI that isn't connected; open your own connection flow. */
+  onConnectAi?: () => void;
+  /** Places a comment can be sent: issue trackers or channels the project has connected. */
+  destinations?: readonly ThreadmarkDestination[];
+  /**
+   * Send a comment to a destination. Create the issue or message and return where it lives; Threadmark
+   * keeps the link on the comment. Throw an Error to show its message in the sheet; give the error a
+   * `fix: { label, url }` to show a way to fix it, such as installing an app.
+   */
+  onSendTo?: (feedback: ThreadmarkFeedback, draft: { destinationId: string; targetId: string | null; title: string | null; body: string }) =>
+    Promise<{ label: string; url?: string; status?: "open" | "closed" | null }>;
+  /** Adds "Send feedback to…" to the More menu, listing destinations with Connect or Manage. */
+  onConnectDestination?: (destinationId: string) => void;
   onError?: (error: ThreadmarkError) => void;
 }
 
@@ -766,4 +785,36 @@ export interface ThreadmarkMember {
   guest?: boolean;
   /** A short line under the name, such as "link expires in 7 days". */
   note?: string;
+}
+
+export interface ThreadmarkCommentLink {
+  destination: string | null;
+  /** Shown on the comment, such as "GitHub #482". */
+  label: string;
+  url: string | null;
+  /** "closed" shows "closed in GitHub #482". */
+  status: "open" | "closed" | null;
+}
+
+export interface ThreadmarkDestination {
+  id: string;
+  kind?: "github" | "linear" | "slack" | string;
+  name: string;
+  /** Only connected destinations appear in a comment's Send to menu. */
+  connected: boolean;
+  /** A short line in the destinations list, such as "Connected to studio · 3 repositories". */
+  detail?: string;
+  /** Repositories, teams or channels to pick from. */
+  targets?: readonly { id: string; label: string }[];
+  defaultTargetId?: string;
+  /** The picker's label, such as "Repository". */
+  targetLabel?: string;
+  /** The sheet's title, such as "New GitHub issue". */
+  sheetTitle?: string;
+  /** The send button, such as "Create issue". */
+  actionLabel?: string;
+  /** A note in the sheet's footer, such as "Label: feedback". */
+  note?: string;
+  /** A small same-origin logo. Without it, a generic icon is shown. */
+  iconUrl?: string;
 }

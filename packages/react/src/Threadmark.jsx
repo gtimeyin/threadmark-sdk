@@ -17,6 +17,7 @@ import {
 import {
   MAX_METADATA_BYTES,
   createFeedbackPayload,
+  normalizeLinks,
   isLocalHostname,
   isThreadmarkEnabled,
   normalizeMetadata,
@@ -204,6 +205,7 @@ function recordToAnnotation(record, reusablePayload = null) {
       workflow: source.workflow,
       ask: source.ask,
       tourStep: source.tourStep,
+      links: source.links,
       comment: source.comment,
       replies: source.replies,
       reactions: source.reactions,
@@ -505,6 +507,9 @@ export function Threadmark({
   onFeedbackCarryForward,
   onPollVote,
   onReactionChange,
+  destinations,
+  onSendTo,
+  onConnectDestination,
   onNextStepDone,
   onNextStepsCopy,
   onNotificationOpen,
@@ -523,6 +528,9 @@ export function Threadmark({
   onLinkAccessChange,
   tours,
   onTourSave,
+  aiConnection,
+  onTourSendToAi,
+  onConnectAi,
   onError,
 }) {
   const [portalRoot, setPortalRoot] = useState(null);
@@ -643,6 +651,7 @@ export function Threadmark({
     onFeedbackCarryForward: useLatest(onFeedbackCarryForward),
     onPollVote: useLatest(onPollVote),
     onReactionChange: useLatest(onReactionChange),
+    onSendTo: useLatest(onSendTo),
     onNextStepDone: useLatest(onNextStepDone),
     onNextStepsCopy: useLatest(onNextStepsCopy),
     onNotificationOpen: useLatest(onNotificationOpen),
@@ -650,6 +659,7 @@ export function Threadmark({
     onSurveyPublish: useLatest(onSurveyPublish),
     onSurveyEnd: useLatest(onSurveyEnd),
     onTourSave: useLatest(onTourSave),
+    onTourSendToAi: useLatest(onTourSendToAi),
     onError: useLatest(onError),
   };
   const toursRef = useLatest(tours);
@@ -3474,6 +3484,30 @@ export function Threadmark({
     }
   };
 
+  // Send a comment to an issue tracker or channel (board 10). The host creates the issue and returns
+  // where it lives; Threadmark keeps that link on the comment so it points both ways.
+  const sendToDestination = async (annotationId, destinationId, draft) => {
+    const current = annotationsRef.current.find((item) => item.id === annotationId);
+    if (!current || !callbacks.onSendTo.current) return null;
+    const result = await callbacks.onSendTo.current(current.payload, { destinationId, ...draft });
+    const [link] = normalizeLinks([{ destination: destinationId, status: "open", ...(result || {}) }]);
+    if (!link) return null;
+    const links = [...(current.payload.links || []).filter((item) => item.label !== link.label), link];
+    let payload = createFeedbackPayload({ ...current.payload, now: current.payload.createdAt,
+      updatedAt: new Date().toISOString(), lastEditedBy: normalizedReviewer, links });
+    try {
+      const evidence = current.runtime?.evidence || [];
+      const accepted = acceptAuthoritative(payload, evidence, await callbacks.onFeedbackCreate.current?.(payload, { evidence }));
+      setAnnotations((items) => items.map((item) => mergeAccepted(item, current.id, accepted)));
+    } catch {
+      // The issue exists even if the link didn't save; say so rather than pretend.
+      showNotice(`${link.label} created, but the link back wasn’t saved.`);
+      return link;
+    }
+    showNotice(`${link.label} created`);
+    return link;
+  };
+
   const changeReaction = useCallback(async (annotationId, messageId, emoji, active) => {
     const annotation = annotationsRef.current.find((item) => item.id === annotationId);
     if (!annotation || !normalizedReviewer || !callbacks.onReactionChange.current) return;
@@ -3689,6 +3723,7 @@ export function Threadmark({
         route: editing ? editing.payload.route : sanitizeRoute(route || window.location.pathname || "/"),
         pin: editing?.payload.pin,
         pinHistory: editing?.payload.pinHistory,
+        links: editing?.payload.links,
         workflow: withInlineMentions(editing?.payload.workflow, comment, reviewers, normalizedReviewer, buildId),
         ask: editing
           ? editing.payload.ask
@@ -3863,6 +3898,9 @@ export function Threadmark({
       onTourPreview={previewTour}
       onStopTourPreview={stopTourPreview}
       onTourSave={callbacks.onTourSave.current ? (tour, file) => callbacks.onTourSave.current(tour, file) : undefined}
+      onTourSendToAi={callbacks.onTourSendToAi.current ? (tour, file) => callbacks.onTourSendToAi.current(tour, file) : undefined}
+      aiConnection={aiConnection && typeof aiConnection.name === "string" ? { name: aiConnection.name.slice(0, 60), connected: aiConnection.connected === true, detail: typeof aiConnection.detail === "string" ? aiConnection.detail.slice(0, 120) : null } : null}
+      onConnectAi={onConnectAi}
       onCopyText={copyText}
       tourStepComments={tourStepComments}
       tourCodeRules={tourCodeRules}
@@ -4047,6 +4085,9 @@ export function Threadmark({
       pollsEnabled={Boolean(callbacks.onPollVote.current)}
       onVote={votePoll}
       onReactionChange={callbacks.onReactionChange.current ? changeReaction : undefined}
+      destinations={Array.isArray(destinations) ? destinations.filter((item) => item && item.id && item.name) : []}
+      onSendTo={callbacks.onSendTo.current ? sendToDestination : undefined}
+      onConnectDestination={onConnectDestination}
       notice={notice}
       submitting={submitting}
       uploadProgress={uploadProgress}

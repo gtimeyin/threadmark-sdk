@@ -32,6 +32,12 @@ function TourButton() {
 const IGNORED_SELECTORS = [".analytics-internal", ".event-log"];
 const MAX_LOG_ENTRIES = 6;
 const PROJECT_KEY = "pk_threadmark_basic_react";
+const EXAMPLE_DESTINATIONS = [
+  { id: "github", kind: "github", name: "GitHub", connected: true, detail: "Connected to studio · 2 repositories", targetLabel: "Repository",
+    targets: [{ id: "studio/marketing-site", label: "studio/marketing-site" }, { id: "studio/archive", label: "studio/archive" }], note: "Label: feedback" },
+  { id: "linear", kind: "linear", name: "Linear", connected: true, detail: "Parcel team", targetLabel: "Team", targets: [{ id: "parcel", label: "Parcel" }] },
+  { id: "slack", kind: "slack", name: "Slack", connected: false, detail: "Post new comments to a channel" },
+];
 const EXAMPLE_FACES = ["maya", "jo", "ade", "kemi", "sam", "ojie", "kai", "tobi"].map((id) => ({ id, name: id[0].toUpperCase() + id.slice(1), url: `/faces/${id}.jpg` }));
 
 const REVIEWER = {
@@ -301,6 +307,17 @@ export function App() {
         notificationSettings={notificationSettings}
         onReviewerChange={(change) => { const next = { ...me, ...change }; setMe(next); writeJson("example:me", next); }}
         onNotificationSettingsChange={(settings) => { setNotificationSettings(settings); writeJson("example:notification-settings", settings); }}
+        destinations={EXAMPLE_DESTINATIONS}
+        onSendTo={async (feedback, { destinationId, targetId }) => {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          // One repository plays the "not installed" case from board 10, 24c.
+          if (targetId === "studio/archive") throw Object.assign(new Error("Threadmark isn’t installed on studio/archive, so it can’t create issues there."), { fix: { label: "Install on GitHub", url: "https://github.com/apps" } });
+          const number = 480 + Math.floor(Math.random() * 40);
+          return destinationId === "slack"
+            ? { label: "Slack #design-feedback", url: "https://slack.com/", status: null }
+            : { label: `${destinationId === "linear" ? "Linear PAR-" : "GitHub #"}${number}`, url: "https://github.com/", status: "open" };
+        }}
+        onConnectDestination={(id) => window.alert(`Your app opens its own ${id} connection flow here.`)}
         shareUrl={`${window.location.origin}/r/parcel`}
         linkAccess={linkAccess}
         onLinkAccessChange={setLinkAccess}
@@ -333,6 +350,9 @@ export function App() {
         onNotificationsRead={(ids) => setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)))}
         tours={tours}
         onTourSave={saveTour}
+        // A stand-in for a connected coding AI. A real app hands the file to its AI here.
+        aiConnection={{ name: "your AI (example)", connected: true, detail: "nothing is sent" }}
+        onTourSendToAi={async () => { await new Promise((resolve) => setTimeout(resolve, 400)); }}
         sessionReplay
         onError={(error) => setStatus(`error:${error.code}`)}
       />

@@ -4,9 +4,9 @@ import { ChevronUpIcon as ChevronUp } from "./icons.jsx";
 import { CommentIcon as Chat } from "./icons.jsx";
 import { CopyIcon as ClipboardCopy } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { TourFileIcon as Diskette } from "./icons.jsx";
 import { PlayIcon as Play } from "./icons.jsx";
 import { DeleteIcon as Trash } from "./icons.jsx";
+import { AddIcon, InfoIcon, CodeIcon, DragIcon, EditIcon, ModalIcon, SpotlightIcon, TargetingIcon, TooltipIcon, TourIcon } from "./icons.jsx";
 
 import { resolveStableTarget } from "./resolveStableTarget.js";
 import {
@@ -44,6 +44,23 @@ function startFor(kind, previous) {
   if (kind === "wait") return { after: "pageLoad", wait: previous?.wait || "2s" };
   if (kind === "event") return { on: previous?.on || "app.ready" };
   return kind;
+}
+
+const STYLE_ICONS = { tooltip: TooltipIcon, spotlight: SpotlightIcon, modal: ModalIcon };
+const STYLE_OPTIONS = [["tooltip", "Tooltip"], ["spotlight", "Spotlight"], ["modal", "Modal"]];
+
+/** "New sign-ups, on their first visit to /pricing. Once. If they skip, ask again after 7 days." (20c) */
+export function describeWhoAndWhen(tour) {
+  const showTo = tour?.showTo || {};
+  const who = { desktop: "People on laptops and desktops", phone: "People on phones" }[showTo.device] || "Everyone";
+  const page = showTo.path || "any page";
+  const kind = startKind(tour?.start);
+  const when = kind === "manual" ? "only when your code starts it"
+    : kind === "event" ? `after the “${tour.start.on}” event`
+      : kind === "wait" ? `a moment after ${page} loads` : `when ${page} loads`;
+  const repeat = { untilFinished: "Until they finish it.", everyVisit: "Every visit." }[tour?.repeat] || "Once.";
+  const skip = { "7d": "If they skip, ask again after 7 days.", "30d": "If they skip, ask again after a month." }[tour?.afterSkip] || "If they skip, it stays gone.";
+  return `${who}, ${when}. ${repeat} ${skip}`;
 }
 
 /** Numbered marks on the page for the steps of the tour being edited. */
@@ -92,11 +109,83 @@ function useStepMarks(tour, route) {
  * Tour mode's panel: pick a tour, add steps by clicking the page, edit them, set who sees the tour,
  * try it, and save it back to code. Drafts live in the overlay until saved; nothing is sent anywhere.
  */
-export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, onSave, onCopy, onClose, stepComments = {}, onCommentOnStep, onOpenComment, codeRuleTourIds = [] }) {
-  const [tab, setTab] = useState("steps");
+/**
+ * 20e Save to code: the file, what's in it, and where it can go. "Send to <your AI>" appears only when
+ * the host connects one (`onTourSendToAi` + `aiConnection`); Threadmark never edits code itself.
+ */
+function TourSaveSheet({ tour, onSave, onSendToAi, aiConnection, onConnectAi, onCopy, onClose, onStatus }) {
+  const [busy, setBusy] = useState(null);
+  const [problem, setProblem] = useState("");
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); }, []);
+  const file = { fileName: tourFileName(tour), contents: serializeTour(tour) };
+  const canSendToAi = Boolean(onSendToAi && aiConnection?.connected);
+  const run = async (kind) => {
+    setBusy(kind);
+    setProblem("");
+    try {
+      if (kind === "copy") {
+        const ok = await onCopy(file.contents);
+        if (!ok) throw new Error("Your browser blocked the clipboard.");
+        onStatus(`Copied. Paste it into ${file.fileName}.`);
+      } else if (kind === "save") {
+        const result = await onSave(tour, file);
+        onStatus(`Saved ${typeof result?.path === "string" ? result.path : file.fileName}.`);
+      } else {
+        await onSendToAi(tour, file);
+        onStatus(`Sent to ${aiConnection.name}. It asks before it changes anything.`);
+      }
+      onClose();
+    } catch (error) {
+      const reason = typeof error?.message === "string" && error.message ? ` ${error.message}` : "";
+      setProblem(`${kind === "copy" ? "Couldn’t copy." : kind === "save" ? "Saving didn’t work." : `Couldn’t reach ${aiConnection.name}.`}${reason} Your draft is still here.`);
+      setBusy(null);
+    }
+  };
+  const primary = canSendToAi ? "ai" : onSave ? "save" : "copy";
+  return (
+    <div className="tm-sheet-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section ref={ref} className="tm-you tm-tour-save" role="dialog" aria-modal="true" aria-labelledby="tm-tour-save-title" tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") { event.stopPropagation(); onClose(); }
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); run(primary); }
+        }}>
+        <header className="tm-you__header">
+          <CodeIcon aria-hidden="true" focusable="false" />
+          <h2 id="tm-tour-save-title">Save {tour.title || "tour"}</h2>
+          <button type="button" onClick={onClose} aria-label="Close"><kbd className="tm-ui-key">Esc</kbd></button>
+        </header>
+        <div className="tm-you__body">
+          <p className="tm-tour-save__file"><ClipboardCopy {...iconProps} /><code>{file.fileName}</code></p>
+          <pre className="tm-tour-save__code" aria-label={`Contents of ${file.fileName}`}>{file.contents}</pre>
+          <p className="tm-tour-save__tip"><InfoIcon {...iconProps} /><span>Add <code>npx threadmark tours check</code> to CI to catch missing targets.</span></p>
+          {aiConnection && (
+            <p className={`tm-tour-save__ai${aiConnection.connected ? " is-connected" : ""}`}>
+              <span className="tm-tour-save__dot" aria-hidden="true" />
+              <span>{aiConnection.connected ? `${aiConnection.name} is connected` : `${aiConnection.name} isn’t connected`}{aiConnection.detail ? ` · ${aiConnection.detail}` : ""}</span>
+              {!aiConnection.connected && onConnectAi && <button type="button" onClick={() => { onClose(); onConnectAi(); }}>Connect</button>}
+            </p>
+          )}
+          {problem && <p className="tm-tour-problems tm-tour-code-rule" role="alert">{problem}</p>}
+          <footer className="tm-you__footer">
+            <button type="button" className="tm-tour-secondary" disabled={Boolean(busy)} onClick={() => run("copy")}>Copy file</button>
+            <span className="tm-tour-row">
+              {onSave && <button type="button" className={primary === "save" ? "tm-tour-primary" : "tm-tour-secondary"} disabled={Boolean(busy)} onClick={() => run("save")}>{busy === "save" ? "Saving…" : "Save to project"}</button>}
+              {canSendToAi && <button type="button" className="tm-tour-primary" disabled={Boolean(busy)} onClick={() => run("ai")}>{busy === "ai" ? "Sending…" : `Send to ${aiConnection.name}`}</button>}
+            </span>
+          </footer>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, onSave, onSendToAi, aiConnection, onConnectAi, onCopy, onClose, stepComments = {}, onCommentOnStep, onOpenComment, codeRuleTourIds = [] }) {
+  const [tab, setTab] = useState("steps"); // "steps" | "who": editing who and when
   const [openStepId, setOpenStepId] = useState(null);
   const [untagged, setUntagged] = useState(null);
   const [status, setStatus] = useState("");
+  const [saveOpen, setSaveOpen] = useState(false);
   const handledPick = useRef(pick?.nonce ?? null);
   const panelRef = useRef(null);
 
@@ -147,17 +236,6 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
     panelRef.current?.querySelector(`[data-step-id="${CSS.escape(openStepId)}"] input`)?.focus();
   }, [openStepId]);
 
-  async function save() {
-    setStatus("Saving…");
-    try {
-      const result = await onSave(tour, { fileName: tourFileName(tour), contents: serializeTour(tour) });
-      setStatus(`Saved ${typeof result?.path === "string" ? result.path : tourFileName(tour)}.`);
-    } catch (error) {
-      const reason = typeof error?.message === "string" && error.message ? ` ${error.message}` : "";
-      setStatus(`Saving didn’t work.${reason} Your draft is still here; try again or copy the file.`);
-    }
-  }
-
   async function copy() {
     const ok = await onCopy(serializeTour(tour));
     setStatus(ok ? `Copied. Paste it into ${tourFileName(tour)}.` : "Couldn’t copy. Your browser blocked the clipboard.");
@@ -175,11 +253,10 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
         </span>
       ))}
       <aside ref={panelRef} id="tm-tour-panel" className="tm-comments-panel tm-tour-panel" aria-label="Tour">
-        <div className="tm-comments-header">
-          <div className="tm-comments-heading">
-            <h2>Tour</h2>
-            <p>{tour ? "Click anything on the page to add a step." : "Click anything on the page to start a tour, or pick one below."}</p>
-          </div>
+        <div className="tm-comments-header tm-tour-header">
+          <TourIcon {...iconProps} />
+          <h2>{tour?.title || "Tour"}</h2>
+          {tour && <button type="button" className="tm-tour-rename" aria-label="Rename tour" title="Rename tour" onClick={() => setTab("who")}><EditIcon {...iconProps} /></button>}
           <div className="tm-comments-actions">
             <button type="button" aria-label="Back to review" title="Back to review (Esc)" onClick={onClose}><X {...iconProps} /></button>
           </div>
@@ -196,6 +273,8 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
           <button type="button" className="tm-tour-secondary" onClick={newTour}>New tour</button>
         </div>
 
+        {!tour && <p className="tm-tour-add"><AddIcon {...iconProps} />Click anything on the page to start a tour, or pick one above.</p>}
+
         {untagged && (
           <div className="tm-tour-untagged" role="status">
             <strong>“{untagged.name}” needs a stable id first</strong>
@@ -210,12 +289,8 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
 
         {tour && (
           <>
-            <div className="tm-panel-tabs" role="tablist" aria-label="Tour sections">
-              <button type="button" role="tab" aria-selected={tab === "steps"} onClick={() => setTab("steps")}>Steps <span>{tour.steps.length}</span></button>
-              <button type="button" role="tab" aria-selected={tab === "who"} onClick={() => setTab("who")}>Who and when</button>
-            </div>
-
-            {tab === "steps" ? (
+            {tab === "steps" ? (<div className="tm-tour-scroll">
+              <p className="tm-tour-section"><span>Steps</span><span>{tour.steps.length} step{tour.steps.length === 1 ? "" : "s"}{new Set(stepPagesOf(tour).filter(Boolean)).size > 1 ? ` · ${new Set(stepPagesOf(tour).filter(Boolean)).size} pages` : ""}</span></p>
               <ol className="tm-tour-steps">
                 {!tour.steps.length && <li className="tm-tour-empty">No steps yet. Click an element on the page to add the first one.</li>}
                 {tour.steps.map((step, index) => {
@@ -227,11 +302,13 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
                   return (
                     <li key={step.id} className={`tm-tour-step${open ? " is-open" : ""}`} data-step-id={step.id}>
                       <div className="tm-tour-step-head">
+                        <DragIcon {...iconProps} className="tm-tool-icon tm-tour-grip" />
                         <span className="tm-tour-number" aria-hidden="true">{index + 1}</span>
                         <button type="button" className="tm-tour-step-summary" aria-expanded={open} onClick={() => setOpenStepId(open ? null : step.id)}>
                           <strong>{step.title || "Untitled step"}</strong>
-                          <code>{step.target}{elsewhere ? ` · ${page}` : ""}</code>
+                          <code>{[page, `#${step.target}`].filter(Boolean).join(" · ")}</code>
                         </button>
+                        {(() => { const StyleIcon = STYLE_ICONS[step.style || "spotlight"] || SpotlightIcon; return <StyleIcon {...iconProps} className="tm-tool-icon tm-tour-style-icon" />; })()}
                         <div className="tm-tour-step-actions">
                           {comments.length > 0 && (
                             <button type="button" className="tm-tour-comment-count" aria-label={`${comments.length} comment${comments.length === 1 ? "" : "s"} on step ${index + 1}`}
@@ -258,13 +335,18 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
                               <option value="click">They use the element</option>
                             </select>
                           </label>
-                          <label><span>Style</span>
-                            <select value={step.style || "spotlight"} onChange={(event) => commit(updateStep(tour, step.id, { style: event.target.value }))}>
-                              <option value="spotlight">Spotlight</option>
-                              <option value="tooltip">Tooltip</option>
-                              <option value="modal">Modal</option>
-                            </select>
-                          </label>
+                          <div className="tm-tour-styles" role="radiogroup" aria-label="Style">
+                            {STYLE_OPTIONS.map(([value, label]) => {
+                              const Icon = STYLE_ICONS[value];
+                              const selected = (step.style || "spotlight") === value;
+                              return (
+                                <button key={value} type="button" role="radio" aria-checked={selected} className={selected ? "is-selected" : undefined}
+                                  onClick={() => commit(updateStep(tour, step.id, { style: value }))}>
+                                  <Icon {...iconProps} /><span>{label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                           <div className="tm-tour-comments">
                             <span className="tm-tour-comments-label">Talk it over</span>
                             {comments.length > 0 && (
@@ -292,8 +374,16 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
                   );
                 })}
               </ol>
-            ) : (
+              <p className="tm-tour-add"><AddIcon {...iconProps} />Click anything on the page to add a step</p>
+              <div className="tm-tour-who">
+                <p className="tm-tour-section"><span><TargetingIcon {...iconProps} />Who and when</span>
+                  <button type="button" aria-label="Edit who and when" onClick={() => setTab("who")}>Edit</button></p>
+                <p className="tm-tour-who__text">{describeWhoAndWhen(tour)}</p>
+              </div>
+            </div>) : (
               <div className="tm-tour-fields tm-tour-settings">
+                <p className="tm-tour-section"><span><TargetingIcon {...iconProps} />Who and when</span>
+                  <button type="button" onClick={() => setTab("steps")}>Done</button></p>
                 <label><span>Tour name</span>
                   <input value={tour.title} maxLength={120} onChange={(event) => commit({ ...tour, title: event.target.value }, tour.id)} />
                 </label>
@@ -354,7 +444,7 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
               <div className="tm-tour-row">
                 <button type="button" className="tm-tour-secondary" disabled={problems.length > 0} onClick={() => onPreview(tour)}><Play {...iconProps} />Try it</button>
                 <button type="button" className="tm-tour-secondary" disabled={hasCodeRule} onClick={copy}><ClipboardCopy {...iconProps} />Copy file</button>
-                {onSave && <button type="button" className="tm-tour-primary" disabled={problems.length > 0 || hasCodeRule} onClick={save}><Diskette {...iconProps} />Save to code</button>}
+                {(onSave || onSendToAi) && <button type="button" className="tm-tour-primary" disabled={problems.length > 0 || hasCodeRule} onClick={() => setSaveOpen(true)}><CodeIcon {...iconProps} />Save to code</button>}
               </div>
               <p className="tm-tour-file"><code>{tourFileName(tour)}</code></p>
             </div>
@@ -367,6 +457,10 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
           </div>
         )}
       </aside>
+      {saveOpen && tour && (
+        <TourSaveSheet tour={tour} onSave={onSave} onSendToAi={onSendToAi} aiConnection={aiConnection} onConnectAi={onConnectAi}
+          onCopy={onCopy} onClose={() => setSaveOpen(false)} onStatus={setStatus} />
+      )}
     </>
   );
 }

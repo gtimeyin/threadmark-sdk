@@ -686,13 +686,16 @@ export function ThreadmarkTours({
     } else if (showingStep) {
       const isLast = run.index + 1 >= total;
       content = {
-        count: total > 1 ? `Step ${run.index + 1} of ${total}` : null,
+        // 21a: the tour's name and where you are, e.g. "Welcome · 1 of 3".
+        count: total > 1 ? (tour.title ? `${tour.title} · ${run.index + 1} of ${total}` : `Step ${run.index + 1} of ${total}`) : tour.title || null,
+        progress: total > 1 ? { index: run.index, total } : null,
+        closable: true,
         title: step.title,
         body: step.body,
         hint: step.next === "click" && targetStatus === "resolved"
           ? `Use ${target.name ? `“${target.name}”` : "the highlighted element"} to continue.`
           : null,
-        secondary: <button type="button" className="tmt-link" onClick={() => finish("paused")}>Not now</button>,
+        secondary: null,
         actions: (
           <>
             {run.index > 0 ? <button type="button" className="tmt-btn" onClick={() => goTo(run.index - 1)}>Back</button> : null}
@@ -736,11 +739,27 @@ export function ThreadmarkTours({
                 style={placement.side === "top" || placement.side === "bottom" ? { left: placement.arrowOffset - 6 } : { top: placement.arrowOffset - 6 }}
               />
             ) : null}
-            {content.count ? <div className="tmt-count">{content.count}</div> : null}
+            {content.count || content.closable ? (
+              <div className="tmt-top">
+                {content.count ? <div className="tmt-count">{content.count}</div> : <span />}
+                {content.closable ? (
+                  <button type="button" className="tmt-close" aria-label="Not now" title="Close the tour" onClick={() => finish("paused")}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6L18 18M18 6L6 18" /></svg>
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <h2 ref={titleRef} id={ids.title} className="tmt-title" tabIndex={-1}>{content.title}</h2>
             {content.body ? <p id={ids.body} className="tmt-body">{content.body}</p> : null}
             {content.hint ? <p className="tmt-hint">{content.hint}</p> : null}
             <div className="tmt-row">
+              {content.progress ? (
+                <span className="tmt-dots" aria-hidden="true">
+                  {Array.from({ length: Math.min(content.progress.total, 8) }, (_, index) => (
+                    <span key={index} className={index === Math.min(content.progress.index, 7) ? "is-current" : index < content.progress.index ? "is-done" : undefined} />
+                  ))}
+                </span>
+              ) : null}
               {content.secondary}
               <div className="tmt-actions">{content.actions}</div>
             </div>
@@ -764,7 +783,10 @@ export function ThreadmarkTours({
                 ) : note.state === "sent" ? (
                   <p className="tmt-hint" role="status">Thanks. The team will see this on this step.</p>
                 ) : (
-                  <button type="button" className="tmt-link" onClick={() => setNote({ open: true, text: "", state: "idle" })}>Something unclear here?</button>
+                  <button type="button" className="tmt-link tmt-link--note" onClick={() => setNote({ open: true, text: "", state: "idle" })}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20.5C16.69 20.5 20.5 16.69 20.5 12C20.5 7.31 16.69 3.5 12 3.5C7.31 3.5 3.5 7.31 3.5 12C3.5 13.5 3.89 14.91 4.58 16.13L3.5 20.5L7.87 19.42C9.09 20.11 10.5 20.5 12 20.5Z" /></svg>
+                    Something unclear here?
+                  </button>
                 )}
               </div>
             ) : null}

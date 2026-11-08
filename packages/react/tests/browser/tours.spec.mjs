@@ -57,7 +57,8 @@ test("plays a tour on page load, with focus on the title and keyboard controls i
   await expect(card(page)).toBeVisible();
   await expect(card(page)).toHaveAccessibleName("Start something new");
   await expect(card(page)).toHaveAttribute("aria-modal", "false");
-  await expect(card(page).getByText("Step 1 of 4")).toBeVisible();
+  await expect(card(page).locator(".tmt-count")).toHaveText(/· 1 of 4$/);
+  await expect(card(page).locator(".tmt-dots span")).toHaveCount(4);
   await expect.poll(() => activeText(page)).toBe("Start something new");
 
   // The card sits beside its target with an arrow, and the spotlight surrounds the target.

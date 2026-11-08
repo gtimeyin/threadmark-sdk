@@ -72,7 +72,7 @@ test("Tour mode edits a tour by clicking the page, then saves it to code", async
   // Clicking a tagged element adds a step without activating the host's handlers.
   await page.locator("#secondary-target").click();
   await expect(panel(page).locator(".tm-tour-step")).toHaveCount(2);
-  await expect(panel(page).locator(".tm-tour-step.is-open code")).toHaveText("secondary-action");
+  await expect(panel(page).locator(".tm-tour-step.is-open code")).toHaveText("/picking-events · #secondary-action");
   expect(await page.evaluate(() => window.__threadmarkHostEvents)).not.toContain("secondary-click");
   await expect(page.locator(".tm-tour-mark")).toHaveCount(2);
 
@@ -82,7 +82,7 @@ test("Tour mode edits a tour by clicking the page, then saves it to code", async
   await panel(page).getByRole("button", { name: "Move step 2 up" }).click();
   await expect(panel(page).locator(".tm-tour-step strong").first()).toHaveText("Try the secondary action");
 
-  await panel(page).getByRole("tab", { name: "Who and when" }).click();
+  await panel(page).getByRole("button", { name: "Edit who and when" }).click();
   await panel(page).getByRole("combobox", { name: "Shows" }).selectOption("untilFinished");
 
   // An element without a stable id gets a suggested id and snippet instead of a step.
@@ -91,6 +91,11 @@ test("Tour mode edits a tour by clicking the page, then saves it to code", async
   await expect(panel(page).locator(".tm-tour-untagged code")).toHaveText('{...threadmarkTarget("animated.fixture.target")}');
 
   await panel(page).getByRole("button", { name: "Save to code" }).click();
+  const saveSheet = page.getByRole("dialog", { name: "Save Fixture tour" });
+  await expect(saveSheet.locator("pre")).toContainText('"id": "fixture-tour"');
+  await expect(saveSheet).toContainText("npx threadmark tours check");
+  await saveSheet.getByRole("button", { name: "Save to project" }).click();
+  await expect(saveSheet).toBeHidden();
   await expect(panel(page).getByText("Saved tours/fixture-tour.tour.json.")).toBeVisible();
   const [saved] = await page.evaluate(() => window.__threadmarkTourSaves);
   expect(saved.file.fileName).toBe("tours/fixture-tour.tour.json");

@@ -42,10 +42,11 @@ import { WarningIcon as TriangleAlert } from "./icons.jsx";
 import { ReopenIcon as Undo2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { EditIcon, HideIcon, InboxIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { EditIcon, HideIcon, InboxIcon, IntegrationsIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
 import { ShortcutSheet } from "./surfaces/ShortcutSheet.jsx";
 import { YouSheet } from "./surfaces/YouSheet.jsx";
 import { ShareSheet } from "./surfaces/ShareSheet.jsx";
+import { DestinationMark, DestinationsSheet, SendSheet } from "./surfaces/SendSheet.jsx";
 import { pageBrightness } from "./barPrefs.js";
 import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
@@ -803,6 +804,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
                 <span>{feedback.workflow?.status === "resolved" ? "Resolved" : "Open"}</span>
                 <span>{feedback.route}</span>
                 {feedback.workflow?.assignee && <span>Assigned to {feedback.workflow.assignee.displayName}</span>}
+                {feedback.links?.length > 0 && <CommentLinks links={feedback.links} plain />}
                 <span>{(feedback.replies || []).length} replies</span>
                 {needsRepair(annotation) && <span className="tm-comment-repair"><TriangleAlert size={12} /> Target needs repair</span>}
                 {feedback.evidence?.some((item) => item.quality === "unavailable") && <span>Screenshot unavailable</span>}
@@ -1540,6 +1542,24 @@ function MessageReactions({ message, reviewer, onChange }) {
   </div>;
 }
 
+/** Where a comment was sent, linked both ways (board 10, 23c-d). */
+function CommentLinks({ links, plain = false }) {
+  if (!links?.length) return null;
+  return (
+    <span className="tm-comment-links">
+      {links.map((link) => {
+        const text = link.status === "closed" ? `closed in ${link.label}` : link.label;
+        return (
+          <span key={link.label} className={`tm-comment-link${link.status === "closed" ? " is-closed" : ""}`}>
+            {!plain && link.url ? <a href={link.url} target="_blank" rel="noreferrer">{text}</a> : <span>{text}</span>}
+            {link.status === "open" && <span className="tm-comment-link__status"> · Open</span>}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function ThreadMessage({
   message,
   annotation = false,
@@ -1549,6 +1569,7 @@ function ThreadMessage({
   onDelete,
   onEdit,
   editor = null,
+  links = null,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const author = message.author;
@@ -1576,6 +1597,7 @@ function ThreadMessage({
             </button>
           </div>
           <p>{message.comment}</p>
+          <CommentLinks links={links} />
           <MessageReactions message={message} reviewer={currentReviewer} onChange={onReactionChange} />
           {/* Kept mounted while closed so the actions remain addressable; `hidden` removes them from view and the accessibility tree. */}
           <div className="tm-thread-message__actions" role="menu" hidden={!menuOpen}>
@@ -1845,6 +1867,12 @@ function Overlay({
   onMemberChange,
   onResendInvite,
   onLinkAccessChange,
+  destinations = [],
+  onTourSendToAi,
+  aiConnection = null,
+  onConnectAi,
+  onSendTo,
+  onConnectDestination,
   nextStepsOpen = false,
   onShowNextSteps = () => {},
   canTickNextSteps = false,
@@ -1954,6 +1982,10 @@ function Overlay({
   const [youOpen, setYouOpen] = useState(false);
   const canEditYou = Boolean(onReviewerChange || onNotificationSettingsChange || onLeaveProject);
   const [shareOpen, setShareOpen] = useState(false);
+  const [sendTarget, setSendTarget] = useState(null);
+  const [destinationsOpen, setDestinationsOpen] = useState(false);
+  const sendDestination = sendTarget && destinations.find((destination) => destination.id === sendTarget.destinationId);
+  const sendAnnotation = sendTarget && annotations.find((annotation) => annotation.id === sendTarget.annotationId);
   const canShare = Boolean(shareUrl || onInvite);
   // A dark host page gets a faint paper edge around the bar and panel (board 09, 32a/b).
   const [darkPage, setDarkPage] = useState(false);
@@ -2344,6 +2376,8 @@ function Overlay({
                   onClick={runToolbarItem(onBarHide)} />}
                 {canShare && <ToolbarMenuItem icon={<ShareIcon {...iconProps} />} label="Share"
                   onClick={runToolbarItem(() => setShareOpen(true))} />}
+                {onConnectDestination && destinations.length > 0 && <ToolbarMenuItem icon={<IntegrationsIcon {...iconProps} />} label="Send feedback to…"
+                  onClick={runToolbarItem(() => setDestinationsOpen(true))} />}
                 {canEditYou && <ToolbarMenuItem icon={<EditIcon {...iconProps} />} label="Your settings"
                   onClick={runToolbarItem(() => setYouOpen(true))} />}
                 {onShortcutsOpenChange && <ToolbarMenuItem icon={<InfoIcon {...iconProps} />} label="Keyboard shortcuts"
@@ -2405,6 +2439,17 @@ function Overlay({
           onLinkAccessChange={onLinkAccessChange} onClose={() => setShareOpen(false)} />
       )}
 
+      {sendDestination && sendAnnotation && onSendTo && (
+        <SendSheet destination={sendDestination} annotation={sendAnnotation}
+          targetName={targetName(sendAnnotation.payload.pin?.target || sendAnnotation.payload.target)}
+          onSend={(draft) => onSendTo(sendAnnotation.id, sendDestination.id, draft)}
+          onClose={() => setSendTarget(null)} />
+      )}
+      {destinationsOpen && onConnectDestination && (
+        <DestinationsSheet destinations={destinations} onConnect={(id) => { setDestinationsOpen(false); onConnectDestination(id); }}
+          onClose={() => setDestinationsOpen(false)} />
+      )}
+
       {mode === "tour" && (
         <>
           <Outline rect={hoverRect} hover />
@@ -2417,6 +2462,9 @@ function Overlay({
             route={window.location.pathname}
             onPreview={onTourPreview}
             onSave={onTourSave}
+            onSendToAi={onTourSendToAi}
+            aiConnection={aiConnection}
+            onConnectAi={onConnectAi}
             onCopy={onCopyText}
             onClose={onExitTour}
             stepComments={tourStepComments}
@@ -2528,6 +2576,11 @@ function Overlay({
                 onCarryFeedbackForward && carryForwardVersions.length > 0
                   && { key: "carry", label: "Carry forward", icon: <CopyPlus size={15} />, run: () => setCarryForwardOpen(true) },
                 { key: "compare", label: "Compare with current page", icon: <GitCompare size={15} />, run: () => setThreadPanel("compare") },
+                ...(onSendTo ? destinations.filter((destination) => destination.connected).map((destination) => ({
+                  key: `send-${destination.id}`, label: `Send to ${destination.name}`,
+                  icon: <DestinationMark destination={destination} size={15} />,
+                  run: () => setSendTarget({ destinationId: destination.id, annotationId: editingAnnotation.id }),
+                })) : []),
                 !!editingAnnotation.payload.workflow?.history?.length
                   && { key: "history", label: "Activity history", icon: <History size={15} />, run: () => setThreadPanel("history") },
               ].filter(Boolean).map((item) => (
@@ -2627,6 +2680,7 @@ function Overlay({
                     author: editingAnnotation.payload.author,
                   }}
                   annotation
+                  links={editingAnnotation.payload.links}
                   onReactionChange={onReactionChange ? (messageId, emoji, active) => onReactionChange(editingAnnotation.id, messageId, emoji, active) : undefined}
                   currentReviewer={reviewer}
                   onReply={onBeginReply}

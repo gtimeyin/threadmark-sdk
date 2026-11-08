@@ -3,7 +3,7 @@
 export const tourStyles = `
 :host { all: initial; font-family: inherit; }
 .tmt {
-  --a: var(--tm-tour-accent, #14201c);
+  --a: var(--tm-tour-accent, #035d47);
   --at: var(--tm-tour-accent-text, #fff);
   --s: var(--tm-tour-surface, #fff);
   --t: var(--tm-tour-text, #14201c);
@@ -40,10 +40,21 @@ export const tourStyles = `
 .tmt-arrow[data-side="top"] { bottom: -7px; border-left: 0; border-top: 0; }
 .tmt-arrow[data-side="right"] { left: -7px; border-top: 0; border-right: 0; }
 .tmt-arrow[data-side="left"] { right: -7px; border-bottom: 0; border-left: 0; }
-.tmt-count { font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--m); }
-.tmt-title { margin: 0; font-size: 16px; line-height: 1.3; font-weight: 600; outline: none; }
+.tmt-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: -4px; }
+.tmt-count { font-size: 12px; font-weight: 500; color: var(--m); }
+.tmt-close { display: grid; place-items: center; width: 24px; height: 24px; margin: -4px -6px -4px 0; padding: 0; border: 0; border-radius: var(--tm-radius-button, 6px); background: none; color: var(--m); cursor: pointer; }
+.tmt-close:hover { background: color-mix(in srgb, var(--t) 6%, transparent); color: var(--t); }
+.tmt-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.tmt-dots { display: inline-flex; align-items: center; gap: 4px; }
+.tmt-dots span { width: 6px; height: 6px; border-radius: 3px; background: var(--b); transition: width .18s ease, background-color .18s ease; }
+.tmt-dots span.is-current { width: 16px; background: var(--a); }
+.tmt-dots span.is-done { background: color-mix(in srgb, var(--a) 40%, var(--b)); }
+.tmt-link--note { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; align-self: flex-start; font-size: 13px; font-weight: 400; }
+.tmt-link--note svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linejoin: round; }
+.tmt-link:hover { color: var(--t); }
+.tmt-title { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; outline: none; }
 .tmt-title:focus-visible { outline: 2px solid var(--a); outline-offset: 3px; border-radius: 4px; }
-.tmt-body { margin: 0; color: var(--m); }
+.tmt-body { margin: 0; color: color-mix(in srgb, var(--t) 80%, var(--s)); font-size: 15px; line-height: 1.45; }
 .tmt-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .tmt-actions { display: flex; gap: 8px; margin-left: auto; }
 .tmt button, .tmt textarea { font: inherit; color: inherit; }
@@ -55,7 +66,7 @@ export const tourStyles = `
 .tmt-link { min-height: 36px; padding: 0 2px; border: 0; background: none; color: var(--m); cursor: pointer; font-weight: 500; }
 .tmt button:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
 .tmt-hint { margin: 0; font-size: 13px; font-weight: 500; color: var(--t); }
-.tmt-note { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--b); }
+.tmt-note { display: flex; flex-direction: column; gap: 8px; margin: 2px -16px 0; padding: 10px 16px 0; border-top: 1px solid var(--b); }
 .tmt-note textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--b); border-radius: var(--tm-radius-button); background: var(--s); resize: vertical; }
 .tmt-bar {
   position: fixed; z-index: 2147483001; left: 16px; bottom: 16px; max-width: calc(100vw - 32px);
@@ -69,7 +80,7 @@ export const tourStyles = `
 @keyframes tmt-spin { to { transform: rotate(360deg); } }
 @media (pointer: coarse) { .tmt-btn, .tmt-link { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) {
-  .tmt-spot { transition: none; }
+  .tmt-spot, .tmt-dots span { transition: none; }
   .tmt-card, .tmt-spinner { animation: none; }
 }
 @media (forced-colors: active) {

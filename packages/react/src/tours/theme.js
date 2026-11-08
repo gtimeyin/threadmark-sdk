@@ -13,7 +13,7 @@ export const THEME_PROPERTIES = {
 };
 
 export const DEFAULT_THEME = Object.freeze({
-  accent: "#14201c",
+  accent: "#035d47",
   accentText: "#ffffff",
   surface: "#ffffff",
   text: "#14201c",

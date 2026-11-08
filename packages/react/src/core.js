@@ -171,6 +171,31 @@ function normalizeReply(value) {
   };
 }
 
+/**
+ * Where a comment was sent (board 10): `{ destination, label, url, status }`, such as
+ * `{ destination: "github", label: "GitHub #482", url: "https://github.com/…", status: "open" }`.
+ * Only http(s) links are kept.
+ */
+export function normalizeLinks(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).map((item) => {
+    if (!item || typeof item !== "object") return null;
+    const label = cleanString(item.label, 120);
+    let url = null;
+    try {
+      const parsed = new URL(String(item.url || ""));
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") url = parsed.href;
+    } catch { url = null; }
+    if (!label) return null;
+    return {
+      destination: cleanString(item.destination, 60) || null,
+      label,
+      url,
+      status: item.status === "closed" ? "closed" : item.status === "open" ? "open" : null,
+    };
+  }).filter(Boolean);
+}
+
 export function normalizeReviewer(value) {
   if (!value || typeof value !== "object") return null;
   const id = cleanString(value.id, 160);
@@ -641,6 +666,7 @@ export function createFeedbackPayload({
   tourStep,
   device,
   metadata,
+  links,
 }) {
   const payloadId = cleanString(id, 160)
     || globalThis.crypto?.randomUUID?.()
@@ -709,6 +735,8 @@ export function createFeedbackPayload({
     };
   }
   if (Array.isArray(reactions)) payload.reactions = normalizeReactions(reactions);
+  const normalizedLinks = normalizeLinks(links);
+  if (normalizedLinks.length) payload.links = normalizedLinks;
   if (Array.isArray(replies)) {
     payload.replies = replies
       .slice(0, 200)
