@@ -1644,7 +1644,7 @@ function PollCard({ ask, results, closed, onVote }) {
     onVote(next);
   };
   return (
-    <section className="tm-poll" aria-label="Poll">
+    <section className={`tm-poll${mine.length || closed ? " tm-poll--results" : ""}`} aria-label="Poll">
       <div className="tm-poll__header">
         <ChartNoAxesColumn size={14} aria-hidden="true" />
         <strong>Poll</strong>
@@ -1652,10 +1652,11 @@ function PollCard({ ask, results, closed, onVote }) {
         <span className="tm-poll__total">{total} {total === 1 ? "vote" : "votes"}</span>
       </div>
       <div role={ask.multiple ? "group" : "radiogroup"} aria-label="Answers" className="tm-poll__options">
-        {ask.options.map((option) => {
+        {ask.options.map((option, index) => {
           const count = results?.counts?.[option.id] || 0;
           const share = total ? Math.round((count / total) * 100) : 0;
           const chosen = mine.includes(option.id);
+          const leading = total > 0 && count === Math.max(...ask.options.map((item) => results?.counts?.[item.id] || 0));
           const names = (results?.voters || []).filter((voter) => voter.optionIds.includes(option.id)).map((voter) => voter.reviewer.displayName);
           return (
             <button
@@ -1663,14 +1664,15 @@ function PollCard({ ask, results, closed, onVote }) {
               type="button"
               role={ask.multiple ? "checkbox" : "radio"}
               aria-checked={chosen}
-              className={`tm-poll-option${chosen ? " is-chosen" : ""}`}
+              className={`tm-poll-option${chosen ? " is-chosen" : ""}${leading ? " is-leading" : ""}`}
               disabled={closed || !onVote}
               title={names.length ? names.join(", ") : undefined}
               onClick={() => toggle(option.id)}
             >
+              <span className="tm-poll-option__key" aria-hidden="true">{index + 1}</span>
+              <span className="tm-poll-option__label">{option.label}{chosen && <CircleCheck size={14} aria-hidden="true" />}</span>
+              <span className="tm-poll-option__count"><span className="tm-poll-option__votes">{count}{total ? " · " : ""}</span>{total ? `${share}%` : ""}</span>
               <span className="tm-poll-option__bar" style={{ width: `${share}%` }} aria-hidden="true" />
-              <span className="tm-poll-option__label">{chosen && <Check size={13} aria-hidden="true" />}{option.label}</span>
-              <span className="tm-poll-option__count">{count}{total ? ` · ${share}%` : ""}</span>
             </button>
           );
         })}

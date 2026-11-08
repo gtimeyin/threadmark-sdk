@@ -174,13 +174,14 @@ export const videoStyles = `
     display: flex;
     align-items: center;
     gap: 8px;
-    border: 1px solid rgba(255,255,255,.12);
-    border-radius: 13px;
-    padding: 8px 9px 8px 12px;
-    background: rgba(26,31,28,.97);
+    min-height: 44px;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: var(--tm-radius-panel);
+    padding: 6px 6px 6px 12px;
+    background: var(--tm-ground);
     color: var(--tm-text-primary);
-    box-shadow: 0 16px 50px rgba(0,0,0,.32);
-    backdrop-filter: blur(14px);
+    box-shadow: 0 12px 32px rgba(14, 23, 20, .18), 0 0 0 1px rgba(251, 250, 246, .06);
     pointer-events: auto;
     transform: translateX(-50%);
     animation: tm-recorder-in var(--tm-motion-surface) var(--tm-ease-emphasized) both;
@@ -189,7 +190,7 @@ export const videoStyles = `
   .tm-video-recorder__copy { min-width: 0; flex: 1; }
   .tm-video-recorder__copy > strong,
   .tm-video-recorder__copy > span { display: block; }
-  .tm-video-recorder__copy > strong { font-size: 12px; line-height: 16px; white-space: nowrap; }
+  .tm-video-recorder__copy > strong { font: 600 13px/18px var(--tm-font); white-space: nowrap; }
   .tm-video-recorder__copy > span {
     margin-top: 1px;
     overflow: hidden;

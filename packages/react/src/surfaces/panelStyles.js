@@ -216,4 +216,49 @@ export const panelStyles = `
   @media (forced-colors: active) {
     .tm-comments-panel { border: 1px solid CanvasText; background: Canvas; color: CanvasText; box-shadow: none; }
   }
+
+  /* Next steps (Figma "Next step"): a checkbox row, the step in 14px, mono meta; open rows show who
+     asked for it. Progress is a thin Lime bar. */
+  .tm-comments-panel .tm-next-steps { overflow: auto; flex: 1; }
+  .tm-comments-panel .tm-next-steps__summary { padding: 12px 16px 8px; border-bottom: 1px solid rgba(251, 250, 246, .08); }
+  .tm-comments-panel .tm-next-steps__progress { color: var(--tm-text-secondary); font: 500 11px/14px var(--tm-font); }
+  .tm-comments-panel .tm-next-steps__progress strong { color: var(--tm-text-primary); }
+  .tm-comments-panel .tm-next-steps__bar { height: 3px; border-radius: 2px; background: rgba(251, 250, 246, .12); }
+  .tm-comments-panel .tm-next-steps__bar span { border-radius: 2px; background: var(--tm-action-primary); }
+  .tm-comments-panel .tm-next-steps__list { margin: 0; padding: 0; }
+  .tm-comments-panel .tm-next-step { border-bottom: 1px solid rgba(251, 250, 246, .08); }
+  .tm-comments-panel .tm-next-step.is-open { background: rgba(251, 250, 246, .04); }
+  .tm-comments-panel .tm-next-step__row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px 10px; }
+  .tm-comments-panel .tm-next-step__check {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 1px 0 0;
+    border: 1.5px solid rgba(251, 250, 246, .32);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .tm-comments-panel .tm-next-step__check:checked {
+    border-color: var(--tm-action-primary);
+    background: var(--tm-action-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230E1714' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5L10 17.5L19 7'/%3E%3C/svg%3E") center/12px no-repeat;
+  }
+  .tm-comments-panel .tm-next-step__check:disabled { cursor: default; opacity: .6; }
+  .tm-comments-panel .tm-next-step__check:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
+  .tm-comments-panel .tm-next-step__summary { display: grid; gap: 4px; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+  .tm-comments-panel .tm-next-step__title { color: var(--tm-text-primary); font: 400 14px/20px var(--tm-font); }
+  .tm-comments-panel .tm-next-step.is-done .tm-next-step__title { color: var(--tm-text-secondary); text-decoration: line-through; text-decoration-color: rgba(163, 173, 168, .5); }
+  .tm-comments-panel .tm-next-step__meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font-mono); }
+  .tm-comments-panel .tm-next-step__count { display: inline-flex; align-items: center; gap: 4px; }
+  .tm-comments-panel .tm-step-tag { border-radius: 4px; padding: 0 5px; background: rgba(251, 250, 246, .10); color: var(--tm-text-secondary); font: 500 11px/16px var(--tm-font); }
+  .tm-comments-panel .tm-next-step__details { display: grid; gap: 10px; padding: 0 16px 12px 44px; }
+  .tm-comments-panel .tm-next-step__notes { margin: 0; padding: 10px 12px; border: 1px solid rgba(251, 250, 246, .14); border-radius: var(--tm-radius-button); color: var(--tm-text-primary); font: 400 13px/20px var(--tm-font-mono); }
+  .tm-comments-panel .tm-next-step__sources { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .tm-comments-panel .tm-next-step__sources button { display: grid; gap: 2px; width: 100%; padding: 4px 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+  .tm-comments-panel .tm-next-step__source-who { display: flex; gap: 8px; align-items: baseline; font: 400 12px/16px var(--tm-font); color: var(--tm-text-secondary); }
+  .tm-comments-panel .tm-next-step__source-who strong { color: var(--tm-text-primary); font: 600 13px/18px var(--tm-font); }
+  .tm-comments-panel .tm-next-step__sources q { color: var(--tm-text-secondary); font: 400 13px/18px var(--tm-font); }
+  .tm-comments-panel .tm-next-step__provenance { margin: 0; color: var(--tm-text-secondary); font: 400 11px/14px var(--tm-font); }
 `;

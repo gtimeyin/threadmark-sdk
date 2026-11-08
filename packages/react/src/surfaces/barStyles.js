@@ -163,4 +163,27 @@ export const barStyles = `
     color: #fff;
     box-shadow: 0 12px 32px rgba(14, 23, 20, .18);
   }
+
+  /* Recording bars (Bar, Mood=Recording): the same dark bar with an Orange dot and an Orange Stop. */
+  .tm-interaction-recorder {
+    min-height: 44px;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: var(--tm-radius-panel);
+    padding: 6px 6px 6px 12px;
+    background: var(--tm-ground);
+    box-shadow: 0 12px 32px rgba(14, 23, 20, .18), 0 0 0 1px rgba(251, 250, 246, .06);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .tm-recording-dot { width: 6px; height: 6px; background: var(--tm-orange); box-shadow: none; }
+  .tm-recording-stop {
+    min-height: 32px;
+    border: 0;
+    border-radius: var(--tm-radius-button);
+    background: var(--tm-orange);
+    color: #fff;
+    font: 600 13px/18px var(--tm-font);
+  }
+  .tm-recording-stop:hover:not(:disabled) { background: #d9481a; }
 `;
