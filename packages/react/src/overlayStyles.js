@@ -1,5 +1,7 @@
 import { primitiveStyles } from "./ui/primitiveStyles.js";
 import { barStyles } from "./surfaces/barStyles.js";
+import { threadStyles } from "./surfaces/threadStyles.js";
+import { composerExtrasStyles } from "./surfaces/composerExtrasStyles.js";
 
 export const overlayStyles = `
   .tm-agent { position: fixed; bottom: 84px; right: 20px; pointer-events: auto; z-index: 2147483646; font: 13px/1.4 'Threadmark Geist', sans-serif; color: #14201c; }
@@ -2427,4 +2429,6 @@ export const overlayStyles = `
   }
 ${primitiveStyles}
 ${barStyles}
+${composerExtrasStyles}
+${threadStyles}
 `;

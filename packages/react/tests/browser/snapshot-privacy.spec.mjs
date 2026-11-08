@@ -330,7 +330,7 @@ test("keeps reviewer identity out of the composer and attributes submitted feedb
     };
   })).toEqual({
     contextIsCollapsed: true,
-    contextLabel: "Selected context",
+    contextLabel: "Selected context: Element · Select this custom text control without activating the host application.",
     hasVisibleReviewer: false,
     fieldLabelIsVisuallyHidden: true,
   });
@@ -404,7 +404,8 @@ test("replies to a previous comment and confirms reply or annotation deletion wi
     const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
     return Math.round(shadow.querySelector(".tm-popover").getBoundingClientRect().bottom
       - shadow.querySelector(".tm-reply").getBoundingClientRect().bottom);
-  })).toBe(15);
+  // The reply row closes the inner panel: panel border + the card's 4px inset + its border.
+  })).toBe(6);
 
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot

@@ -1969,6 +1969,23 @@ function Overlay({
     return () => popover.removeEventListener("pointerdown", close);
   }, [workflowMoreOpen]);
 
+  // A readable kind for the context line: "Button", "Link", "Heading"; generic containers say "Element".
+  function contextKind(target) {
+    const kind = String(target.role || target.tagName || "").toLowerCase();
+    if (!kind || ["div", "span", "section", "generic", "group", "presentation", "none"].includes(kind)) return "Element";
+    const names = { a: "Link", img: "Image", h1: "Heading", h2: "Heading", h3: "Heading", h4: "Heading", p: "Text", li: "List item", ul: "List", input: "Field", textarea: "Field" };
+    return names[kind] || kind[0].toUpperCase() + kind.slice(1);
+  }
+  // The mono context line at the top of the composer and thread, e.g. "Button · Start free".
+  const composerContext = !primaryTarget ? ""
+    : captureKind === "video" ? `${videoSelection?.video.mode === "tab" ? "Tab" : "Voice + cursor"} recording · ${formatClock(videoSelection?.video.durationMs)}`
+    : captureKind === "interaction" ? `Interaction · ${interactionSelection?.interaction.events.length || 0} steps`
+    : captureKind === "screenshot" ? `Sketch · ${primaryTarget.bounds?.width} × ${primaryTarget.bounds?.height}`
+    : captureKind === "region" ? `Area · ${primaryTarget.bounds?.width} × ${primaryTarget.bounds?.height}`
+    : captureKind === "multi" ? `${targets.length} elements`
+    : captureKind === "text" ? `Text · ${targetName(primaryTarget)}`
+    : [contextKind(primaryTarget), targetName(primaryTarget)].filter(Boolean).join(" · ");
+
   return (
     <div className="tm-root">
       {mode === "idle" && (
@@ -2319,9 +2336,11 @@ function Overlay({
           <div className="tm-popover__header tm-popover__header--thread">
             <h2 id="tm-popover-title">{(() => {
               const noun = editingAnnotation.payload.ask?.kind === "poll" ? "poll" : editingAnnotation.payload.ask?.kind === "question" ? "question" : "comment";
-              return editingAnnotation.payload.workflow?.status === "resolved"
+              const status = editingAnnotation.payload.workflow?.status === "resolved"
                 ? `${noun === "poll" ? "Closed" : "Resolved"} ${noun}`
                 : noun === "comment" ? "Thread" : `${noun[0].toUpperCase()}${noun.slice(1)}`;
+              const number = annotations.findIndex((item) => item.id === editingAnnotation.id) + 1;
+              return <><span className="tm-sr-only">{status}: </span>{[number > 0 ? `#${number}` : null, composerContext].filter(Boolean).join(" · ")}</>;
             })()}</h2>
             <div className="tm-thread-header-actions">
               <button type="button" aria-label="More thread actions" title="More thread actions"
@@ -2367,7 +2386,7 @@ function Overlay({
               <summary>
                 <ChevronDownIcon />
                 <span id="tm-popover-title">
-                  {editingAnnotation ? "Annotation context" : "Selected context"}
+                  <span className="tm-sr-only">Selected context: </span>{composerContext}
                 </span>
               </summary>
               <div className="tm-context-disclosure__content">

@@ -1,0 +1,183 @@
+// Composer and Thread (Figma "Composer" 64:10, "Thread" 64:54, "Comment row" 264:846, "Reaction").
+// Both are a 360px dark card (surface, 8px radius, 4px inset) with a mono context strip on top and a
+// raised inner panel (5% white, 12% hairline, 6px radius). Loaded after the base overlay styles.
+export const threadStyles = `
+  .tm-popover,
+  .tm-popover.tm-popover--thread {
+    width: min(360px, calc(100vw - 24px));
+    padding: 4px;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: var(--tm-radius-panel);
+    background: var(--tm-surface);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .22), 0 22px 60px rgba(0, 0, 0, .38);
+  }
+
+  /* Context strip: "#1 · Button · Start free" or the picked element, in mono. */
+  .tm-popover .tm-popover__header,
+  .tm-popover.tm-popover--thread .tm-popover__header--thread {
+    min-height: 24px;
+    margin: 0;
+    padding: 0 4px 0 8px;
+    align-items: center;
+    gap: 8px;
+  }
+  .tm-popover .tm-popover__header h2,
+  .tm-popover.tm-popover--thread .tm-popover__header--thread h2 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--tm-text-secondary);
+    font: 400 12px/16px var(--tm-font-mono);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tm-popover .tm-context-disclosure { flex: 1; min-width: 0; }
+  .tm-popover .tm-context-disclosure summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+    color: var(--tm-text-secondary);
+    font: 400 12px/16px var(--tm-font-mono);
+    cursor: pointer;
+  }
+  .tm-popover .tm-context-disclosure summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tm-popover .tm-popover__header > button,
+  .tm-popover .tm-thread-header-actions button {
+    width: 24px;
+    height: 24px;
+    min-height: 24px;
+    border-radius: var(--tm-radius-button);
+    color: var(--tm-text-secondary);
+  }
+  .tm-popover .tm-thread-header-actions { gap: 0; }
+  .tm-popover .tm-thread-header-actions button[aria-label="Reopen comment"] { color: var(--tm-action-primary); }
+  .tm-popover .tm-thread-header-actions .tm-tool-icon,
+  .tm-popover .tm-popover__header > button svg { width: 16px; height: 16px; }
+
+  /* The inner panel. */
+  .tm-popover .tm-form,
+  .tm-popover.tm-popover--thread .tm-popover__header--thread + .tm-form {
+    margin-top: 4px;
+    gap: 12px;
+    padding: 12px 10px 10px 12px;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: var(--tm-radius-button);
+    background: rgba(255, 255, 255, .05);
+  }
+  .tm-popover.tm-popover--thread .tm-form,
+  .tm-popover.tm-popover--thread .tm-popover__header--thread + .tm-form { gap: 0; padding: 0; }
+  .tm-popover.tm-popover--thread .tm-form > :not(.tm-thread):not(.tm-reply):not(.tm-form__footer) { margin: 12px; }
+  .tm-popover .tm-form__footer:empty { display: none; }
+
+  /* New comment field. */
+  .tm-popover .tm-field textarea {
+    min-height: 40px;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--tm-text-primary);
+    font: 400 14px/20px var(--tm-font);
+    box-shadow: none;
+  }
+  .tm-popover .tm-field textarea:focus,
+  .tm-popover .tm-field textarea:focus-visible { outline: none; box-shadow: none; }
+  .tm-popover .tm-field textarea::placeholder { color: var(--tm-text-secondary); }
+  .tm-popover .tm-form__actions { gap: 4px; }
+  .tm-popover .tm-submit {
+    min-height: 32px;
+    padding: 0 14px;
+    border: 1px solid rgba(20, 32, 28, .2);
+    border-radius: var(--tm-radius-button);
+    background: var(--tm-action-primary);
+    color: var(--tm-forest);
+    font: 600 13px/18px var(--tm-font);
+  }
+  .tm-popover .tm-submit:hover:not(:disabled) { background: var(--tm-action-primary-hover); }
+  .tm-popover .tm-submit:disabled { background: rgba(251, 250, 246, .1); color: var(--tm-text-secondary); border-color: transparent; }
+  .tm-popover .tm-cancel { min-height: 32px; padding: 0 10px; border-radius: var(--tm-radius-button); font: 600 13px/18px var(--tm-font); }
+
+  /* Thread messages: avatar, name and time, the text, then reactions. */
+  .tm-popover.tm-popover--thread .tm-thread { gap: 0; padding: 0; }
+  .tm-popover.tm-popover--thread .tm-thread-message {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+  .tm-popover.tm-popover--thread .tm-thread-message + .tm-thread-message,
+  .tm-popover.tm-popover--thread .tm-thread-message--root + * { border-top: 1px solid rgba(255, 255, 255, .12); }
+  .tm-popover.tm-popover--thread .tm-thread-message--root { padding-bottom: 12px; border-bottom: 0; }
+  .tm-popover .tm-thread-message__avatar {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    background: var(--tm-sage);
+    color: var(--tm-forest);
+    font: 500 11px/14px var(--tm-font);
+  }
+  .tm-popover.tm-popover--thread .tm-thread-message__meta { min-height: 18px; gap: 8px; }
+  .tm-popover.tm-popover--thread .tm-thread-message__meta strong { color: var(--tm-text-primary); font: 600 13px/18px var(--tm-font); }
+  .tm-popover.tm-popover--thread .tm-thread-message__meta time { color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font); }
+  .tm-popover.tm-popover--thread .tm-thread-message p { margin-top: 4px; color: var(--tm-text-primary); font: 400 14px/20px var(--tm-font); }
+
+  /* Reactions: compact chips; yours are Lime. */
+  .tm-popover.tm-popover--thread .tm-reactions { gap: 4px; margin-top: 6px; }
+  .tm-popover.tm-popover--thread .tm-reactions button {
+    min-height: 24px;
+    padding: 2px 8px;
+    gap: 4px;
+    border: 1px solid transparent;
+    border-radius: var(--tm-radius-button);
+    background: rgba(255, 255, 255, .07);
+    color: var(--tm-text-secondary);
+    font: 500 12px/16px var(--tm-font);
+  }
+  .tm-popover.tm-popover--thread .tm-reactions button[aria-pressed="true"] {
+    border-color: rgba(224, 243, 84, .45);
+    background: rgba(224, 243, 84, .12);
+    color: var(--tm-action-primary);
+  }
+  .tm-popover.tm-popover--thread .tm-reactions button:hover:not(:disabled) { background: rgba(255, 255, 255, .12); }
+  .tm-popover.tm-popover--thread .tm-reactions .tm-reaction-trigger { width: 24px; padding: 2px; }
+
+  /* Reply row along the bottom of the panel. */
+  .tm-popover.tm-popover--thread .tm-reply { padding: 8px 8px 8px 12px; border-top: 1px solid rgba(255, 255, 255, .12); }
+  .tm-popover.tm-popover--thread .tm-reply__row { display: block; }
+  .tm-popover.tm-popover--thread .tm-reply__row > .tm-thread-message__avatar { display: none; }
+  .tm-popover.tm-popover--thread .tm-reply__box {
+    min-height: 28px;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .tm-popover.tm-popover--thread .tm-reply__box textarea { padding: 4px 0; font: 400 14px/20px var(--tm-font); }
+  .tm-popover .tm-reply__send,
+  .tm-popover.tm-popover--thread .tm-reply__send {
+    width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    border: 1px solid rgba(20, 32, 28, .14);
+    border-radius: var(--tm-radius-button);
+    background: var(--tm-action-primary);
+    color: var(--tm-ground);
+  }
+  .tm-popover .tm-reply__send .tm-tool-icon { width: 16px; height: 16px; }
+  .tm-popover.tm-popover--thread .tm-reply__send:disabled { background: rgba(251, 250, 246, .1); color: var(--tm-text-secondary); border-color: transparent; }
+
+  /* Comment / Question / Poll uses the brand Segmented control. */
+  .tm-popover .tm-ask-switch { margin: 0; border: 0; padding: 2px; border-radius: var(--tm-radius-button); background: rgba(251, 250, 246, .06); }
+  .tm-popover .tm-ask-switch button { height: 26px; padding: 0 10px; border-radius: 4px; font: 500 11px/14px var(--tm-font); }
+  .tm-popover .tm-ask-switch button.is-active { background: rgba(251, 250, 246, .10); color: var(--tm-text-primary); }
+
+  /* Attachments sit in the panel as small rows, like the design's Screenshot chip. */
+  .tm-popover .tm-replay-attachment,
+  .tm-popover .tm-replay-open { border: 0; border-radius: var(--tm-radius-button); padding: 6px 8px; background: rgba(255, 255, 255, .07); }
+  .tm-popover .tm-replay-attachment strong,
+  .tm-popover .tm-replay-open strong { font: 500 11px/14px var(--tm-font); }
+  .tm-popover .tm-replay-attachment button { height: 26px; padding: 0 8px; background: rgba(251, 250, 246, .10); font: 600 11px/14px var(--tm-font); }
+`;
