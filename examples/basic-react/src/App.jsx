@@ -32,6 +32,13 @@ function TourButton() {
 const IGNORED_SELECTORS = [".analytics-internal", ".event-log"];
 const MAX_LOG_ENTRIES = 6;
 const PROJECT_KEY = "pk_threadmark_basic_react";
+const EXAMPLE_AI_TEXT = {
+  "unnamed-control": { category: "accessibility", title: "This control has no name", detail: "Screen readers announce it as just “button”." },
+  "missing-alt": { category: "accessibility", title: "Image has no description", detail: "Add alt text, or alt=\"\" if it's decoration." },
+  "heading-jump": { category: "layout", title: "Heading skips a level", detail: "It jumps past a level, which makes the outline hard to follow." },
+  "small-text": { category: "accessibility", title: "Text is very small", detail: "Under 12px is hard to read for many people." },
+  "horizontal-overflow": { category: "layout", title: "Runs off the side", detail: "This sticks out past the edge at this width." },
+};
 const EXAMPLE_DESTINATIONS = [
   { id: "github", kind: "github", name: "GitHub", connected: true, detail: "Connected to studio · 2 repositories", targetLabel: "Repository",
     targets: [{ id: "studio/marketing-site", label: "studio/marketing-site" }, { id: "studio/archive", label: "studio/archive" }], note: "Label: feedback" },
@@ -307,6 +314,19 @@ export function App() {
         notificationSettings={notificationSettings}
         onReviewerChange={(change) => { const next = { ...me, ...change }; setMe(next); writeJson("example:me", next); }}
         onNotificationSettingsChange={(settings) => { setNotificationSettings(settings); writeJson("example:notification-settings", settings); }}
+        // AI review stand-ins. A real app calls its model here; this example turns the built-in page checks into findings.
+        onAiReview={async ({ page, report }) => {
+          report({ checked: 0, total: page.findings.length });
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          report({ checked: page.findings.length });
+          return { checked: page.findings.length, findings: page.findings.map((finding, index) => ({ id: `example-${index}`, target: finding.target, ...EXAMPLE_AI_TEXT[finding.rule] })) };
+        }}
+        onAskAi={async ({ label, question }) => {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          return question
+            ? { points: [`(Example answer) Your model would answer “${question}” about ${label} here.`] }
+            : { points: [`(Example) Your model would look at ${label} here.`, "Connect one through onAskAi."], fix: "Pass onAskAi to <Threadmark> and call your AI provider." };
+        }}
         destinations={EXAMPLE_DESTINATIONS}
         onSendTo={async (feedback, { destinationId, targetId }) => {
           await new Promise((resolve) => setTimeout(resolve, 400));

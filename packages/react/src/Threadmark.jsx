@@ -206,6 +206,7 @@ function recordToAnnotation(record, reusablePayload = null) {
       ask: source.ask,
       tourStep: source.tourStep,
       links: source.links,
+      source: source.source,
       comment: source.comment,
       replies: source.replies,
       reactions: source.reactions,
@@ -510,6 +511,9 @@ export function Threadmark({
   destinations,
   onSendTo,
   onConnectDestination,
+  onAiReview,
+  onAskAi,
+  onAiDismiss,
   onNextStepDone,
   onNextStepsCopy,
   onNotificationOpen,
@@ -3508,6 +3512,25 @@ export function Threadmark({
     return link;
   };
 
+  // AI review (board 12): a finding is posted only when someone chooses to, as their own comment marked
+  // "From an AI review". Threadmark bundles no model; the host's onAiReview / onAskAi supply the words.
+  const postAiComment = async ({ element, comment }) => {
+    if (!element?.isConnected || !normalizedReviewer) throw new Error("That element isn’t on the page any more.");
+    const target = createTargetDescriptor(element, { route: activeRoute, ignoredSelectors });
+    let payload = createFeedbackPayload({
+      projectKey, environment: environment || "local", buildId, route: activeRoute, target, comment,
+      author: normalizedReviewer, lastEditedBy: normalizedReviewer, source: "ai",
+      workflow: { status: "open", assignee: null, mentions: [], history: [] },
+    });
+    const accepted = acceptAuthoritative(payload, [], await callbacks.onFeedbackCreate.current?.(payload, { evidence: [] }));
+    payload = accepted.payload;
+    setAnnotations((current) => [
+      ...current.filter((annotation) => annotation.id !== payload.id),
+      { id: payload.id, payload, runtime: { kind: "element", elements: [element], evidence: accepted.evidence || [] }, poll: emptyPoll(payload.ask) },
+    ]);
+    return payload.id;
+  };
+
   const changeReaction = useCallback(async (annotationId, messageId, emoji, active) => {
     const annotation = annotationsRef.current.find((item) => item.id === annotationId);
     if (!annotation || !normalizedReviewer || !callbacks.onReactionChange.current) return;
@@ -3724,6 +3747,7 @@ export function Threadmark({
         pin: editing?.payload.pin,
         pinHistory: editing?.payload.pinHistory,
         links: editing?.payload.links,
+        source: editing?.payload.source,
         workflow: withInlineMentions(editing?.payload.workflow, comment, reviewers, normalizedReviewer, buildId),
         ask: editing
           ? editing.payload.ask
@@ -4088,6 +4112,14 @@ export function Threadmark({
       destinations={Array.isArray(destinations) ? destinations.filter((item) => item && item.id && item.name) : []}
       onSendTo={callbacks.onSendTo.current ? sendToDestination : undefined}
       onConnectDestination={onConnectDestination}
+      onAiReview={onAiReview}
+      onAskAi={onAskAi}
+      onAiDismiss={onAiDismiss}
+      onPostAiComment={postAiComment}
+      aiRoute={activeRoute}
+      aiBuildId={buildId}
+      aiIgnoredSelectors={ignoredSelectors}
+      onAiNotice={showNotice}
       notice={notice}
       submitting={submitting}
       uploadProgress={uploadProgress}

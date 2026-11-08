@@ -42,11 +42,12 @@ import { WarningIcon as TriangleAlert } from "./icons.jsx";
 import { ReopenIcon as Undo2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { EditIcon, HideIcon, InboxIcon, IntegrationsIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { AiIcon, EditIcon, HideIcon, InboxIcon, IntegrationsIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
 import { ShortcutSheet } from "./surfaces/ShortcutSheet.jsx";
 import { YouSheet } from "./surfaces/YouSheet.jsx";
 import { ShareSheet } from "./surfaces/ShareSheet.jsx";
 import { DestinationMark, DestinationsSheet, SendSheet } from "./surfaces/SendSheet.jsx";
+import { AiPageReview, AskAiCard } from "./surfaces/AiReview.jsx";
 import { pageBrightness } from "./barPrefs.js";
 import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
@@ -805,6 +806,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
                 <span>{feedback.route}</span>
                 {feedback.workflow?.assignee && <span>Assigned to {feedback.workflow.assignee.displayName}</span>}
                 {feedback.links?.length > 0 && <CommentLinks links={feedback.links} plain />}
+                {feedback.source === "ai" && <span className="tm-from-ai">From an AI review</span>}
                 <span>{(feedback.replies || []).length} replies</span>
                 {needsRepair(annotation) && <span className="tm-comment-repair"><TriangleAlert size={12} /> Target needs repair</span>}
                 {feedback.evidence?.some((item) => item.quality === "unavailable") && <span>Screenshot unavailable</span>}
@@ -1570,6 +1572,7 @@ function ThreadMessage({
   onEdit,
   editor = null,
   links = null,
+  fromAi = false,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const author = message.author;
@@ -1597,6 +1600,7 @@ function ThreadMessage({
             </button>
           </div>
           <p>{message.comment}</p>
+          {fromAi && <span className="tm-from-ai"><AiIcon size={12} aria-hidden="true" focusable="false" />From an AI review</span>}
           <CommentLinks links={links} />
           <MessageReactions message={message} reviewer={currentReviewer} onChange={onReactionChange} />
           {/* Kept mounted while closed so the actions remain addressable; `hidden` removes them from view and the accessibility tree. */}
@@ -1868,6 +1872,14 @@ function Overlay({
   onResendInvite,
   onLinkAccessChange,
   destinations = [],
+  onAiReview,
+  onAskAi,
+  onAiDismiss,
+  onPostAiComment,
+  aiRoute = "/",
+  aiBuildId,
+  aiIgnoredSelectors = [],
+  onAiNotice,
   onTourSendToAi,
   aiConnection = null,
   onConnectAi,
@@ -1983,6 +1995,21 @@ function Overlay({
   const canEditYou = Boolean(onReviewerChange || onNotificationSettingsChange || onLeaveProject);
   const [shareOpen, setShareOpen] = useState(false);
   const [sendTarget, setSendTarget] = useState(null);
+  const [aiReviewOpen, setAiReviewOpen] = useState(false);
+  const [askAiElement, setAskAiElement] = useState(null);
+  const askAiTarget = onAskAi && onPostAiComment && !editingAnnotation && selections.length === 1 && !textSelection && !regionSelection
+    && !screenshotSelection && !interactionSelection && !videoSelection ? selections[0]?.element : null;
+  useEffect(() => {
+    if (!askAiTarget) return undefined;
+    const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setAskAiElement(askAiTarget);
+      }
+    };
+    addEventListener("keydown", onKey, true);
+    return () => removeEventListener("keydown", onKey, true);
+  }, [askAiTarget]);
   const [destinationsOpen, setDestinationsOpen] = useState(false);
   const sendDestination = sendTarget && destinations.find((destination) => destination.id === sendTarget.destinationId);
   const sendAnnotation = sendTarget && annotations.find((annotation) => annotation.id === sendTarget.annotationId);
@@ -2358,6 +2385,11 @@ function Overlay({
                     icon={<PollIcon {...iconProps} />} label="Ask a question" description="A short poll, scale or question for people on this page"
                     onClick={runToolbarItem(() => setSurveyBuilderOpen(true))} />
                 )}
+                {onAiReview && (
+                  <ToolbarMenuItem role="menuitemradio" aria-checked="false"
+                    icon={<AiIcon {...iconProps} />} label="Ask AI to review this page" description="It suggests; you decide what gets posted"
+                    onClick={runToolbarItem(() => setAiReviewOpen(true))} />
+                )}
                 <div className="tm-toolbar-menu__separator" role="separator" />
                 <ToolbarMenuItem role="menuitemradio" aria-checked="false"
                   icon={<TourIcon {...iconProps} />} label="Build a tour" description="Click elements to add tour steps"
@@ -2439,6 +2471,24 @@ function Overlay({
           onLinkAccessChange={onLinkAccessChange} onClose={() => setShareOpen(false)} />
       )}
 
+      {onAiReview && onPostAiComment && (
+        <AiPageReview open={aiReviewOpen} onOpenChange={setAiReviewOpen} route={aiRoute} buildId={aiBuildId}
+          ignoredSelectors={aiIgnoredSelectors} onAiReview={onAiReview} onAiDismiss={onAiDismiss}
+          onPost={onPostAiComment} onNotice={onAiNotice} />
+      )}
+      {askAiElement && onAskAi && (
+        <AskAiCard element={askAiElement} route={aiRoute} onAskAi={onAskAi}
+          onCopy={async (text) => { if (await onCopyText(text)) onAiNotice?.("Copied for your AI"); }}
+          onPost={async (text) => {
+            try {
+              await onPostAiComment({ element: askAiElement, comment: text });
+              setAskAiElement(null);
+              onRequestDismiss?.();
+              onAiNotice?.("Posted from AI");
+            } catch (error) { onAiNotice?.(error?.message ? `Couldn’t post: ${error.message}` : "Couldn’t post. Try again."); }
+          }}
+          onClose={() => setAskAiElement(null)} />
+      )}
       {sendDestination && sendAnnotation && onSendTo && (
         <SendSheet destination={sendDestination} annotation={sendAnnotation}
           targetName={targetName(sendAnnotation.payload.pin?.target || sendAnnotation.payload.target)}
@@ -2631,6 +2681,13 @@ function Overlay({
                 </span>
               </div>
             </details>
+            {/* 28a: point at one thing and ask AI about it instead of writing a comment yourself. */}
+            {onAskAi && onPostAiComment && captureKind === "element" && lastSelection?.element && (
+              <button type="button" className="tm-ask-ai" onClick={() => setAskAiElement(lastSelection.element)}
+                aria-keyshortcuts="Meta+K" title="Ask AI about this (⌘K)">
+                <AiIcon size={14} aria-hidden="true" focusable="false" /><span>Ask AI</span>
+              </button>
+            )}
             <button type="button" aria-label="Cancel comment" onClick={onRequestDismiss} disabled={submitting}><CloseIcon /></button>
           </div>
           )}
@@ -2681,6 +2738,7 @@ function Overlay({
                   }}
                   annotation
                   links={editingAnnotation.payload.links}
+                  fromAi={editingAnnotation.payload.source === "ai"}
                   onReactionChange={onReactionChange ? (messageId, emoji, active) => onReactionChange(editingAnnotation.id, messageId, emoji, active) : undefined}
                   currentReviewer={reviewer}
                   onReply={onBeginReply}

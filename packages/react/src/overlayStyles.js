@@ -3,20 +3,25 @@ import { barStyles } from "./surfaces/barStyles.js";
 import { threadStyles } from "./surfaces/threadStyles.js";
 import { panelStyles } from "./surfaces/panelStyles.js";
 import { surveyStyles } from "./surfaces/surveyStyles.js";
+import { aiStyles } from "./surfaces/aiStyles.js";
 import { composerExtrasStyles } from "./surfaces/composerExtrasStyles.js";
 
 export const overlayStyles = `
-  .tm-agent { position: fixed; bottom: 84px; right: 20px; pointer-events: auto; z-index: 2147483646; font: 13px/1.4 'Threadmark Geist', sans-serif; color: #14201c; }
-  .tm-agent button { font: inherit; cursor: pointer; border: 1px solid #e1ece9; border-radius: var(--tm-radius-button); padding: 8px 12px; background: #FBFAF6; color: #035d47; }
-  .tm-agent-trigger { display: flex; gap: 6px; align-items: center; margin-left: auto; }
-  .tm-agent-panel { width: min(320px, calc(100vw - 40px)); padding: 16px; margin-top: 8px; background: #FBFAF6; border: 1px solid #e1ece9; border-radius: var(--tm-radius-panel); box-shadow: 0 8px 32px #1A1E1B20; }
-  .tm-agent-panel header { display: flex; justify-content: space-between; align-items: center; }
-  .tm-agent-panel header button { padding: 4px; border: 0; }
-  .tm-agent-panel p { margin: 12px 0; }
-  .tm-agent-command { padding: 10px; background: #e1ece9; border-radius: var(--tm-radius-button); }
-  .tm-agent-scope { color: #5e6662; font-size: 12px; }
-  .tm-agent button.tm-agent-run { background: #035d47; color: #FBFAF6; margin-right: 8px; }
+  /* The older built-in page check (onPageReviewRequested), on the dark chrome like the rest of the overlay. */
+  .tm-agent { position: fixed; bottom: 84px; right: 20px; pointer-events: auto; z-index: 2147483646; font: 13px/1.4 var(--tm-font); color: var(--tm-text-primary); }
+  .tm-agent button { font: inherit; cursor: pointer; border: 1px solid rgba(251, 250, 246, .12); border-radius: var(--tm-radius-button); padding: 7px 12px; background: var(--tm-raised); color: var(--tm-text-primary); }
+  .tm-agent button:hover:not(:disabled) { background: rgba(251, 250, 246, .14); }
+  .tm-agent-trigger { display: flex; gap: 6px; align-items: center; margin-left: auto; background: var(--tm-ground) !important; box-shadow: 0 8px 24px rgba(14, 23, 20, .25); }
+  .tm-agent-trigger svg { width: 16px; height: 16px; color: var(--tm-lime); }
+  .tm-agent-panel { width: min(320px, calc(100vw - 40px)); padding: 14px 16px 16px; margin-top: 8px; background: var(--tm-ground); border: 1px solid rgba(251, 250, 246, .08); border-radius: var(--tm-radius-panel); box-shadow: 0 22px 60px rgba(0, 0, 0, .38); }
+  .tm-agent-panel header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+  .tm-agent-panel header button { padding: 4px; border: 0; background: none; color: var(--tm-text-secondary); }
+  .tm-agent-panel p { margin: 12px 0; color: var(--tm-text-secondary); }
+  .tm-agent-command { padding: 8px 10px; background: var(--tm-surface); border-radius: var(--tm-radius-button); font: 12px/16px var(--tm-font-mono); }
+  .tm-agent-scope { font-size: 12px; }
+  .tm-agent button.tm-agent-run { background: var(--tm-lime); border-color: transparent; color: var(--tm-ground); font-weight: 600; margin-right: 8px; }
   .tm-agent button:disabled { opacity: .6; cursor: wait; }
+  .tm-agent [role="status"] { color: var(--tm-text-primary); }
 
   .tm-presence-layer { position: fixed; inset: 0; pointer-events: none; z-index: 2147483645; }
   .tm-live-cursor { position: absolute; left: 0; top: 0; opacity: 0; pointer-events: none; transition: transform 100ms linear, opacity 180ms; }
@@ -2464,4 +2469,5 @@ ${composerExtrasStyles}
 ${threadStyles}
 ${panelStyles}
 ${surveyStyles}
+${aiStyles}
 `;

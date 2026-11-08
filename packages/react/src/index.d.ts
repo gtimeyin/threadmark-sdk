@@ -452,6 +452,8 @@ export interface ThreadmarkFeedback {
   device?: ThreadmarkDeviceInfo;
   /** What the host's `metadata` returned when the comment was posted, cleaned and at most 10 KB. */
   metadata?: ThreadmarkMetadata;
+  /** "ai" when it was posted from an AI review or Ask AI. The author is still the person who posted it. */
+  source?: "ai";
   /** Where this comment was sent with Send to…, such as a GitHub issue. */
   links?: ThreadmarkCommentLink[];
   comment: string;
@@ -682,6 +684,24 @@ export interface ThreadmarkProps {
   onTourSendToAi?: (tour: ThreadmarkTourFile, file: { fileName: string; contents: string }) => void | Promise<void>;
   /** Adds Connect next to an AI that isn't connected; open your own connection flow. */
   onConnectAi?: () => void;
+  /**
+   * Adds "Ask AI to review this page" to the tools menu. Threadmark bundles no model: call yours, using
+   * `page` (the built-in checks) and your own capture, and return findings. Call `report` to move the
+   * progress count and to hand over findings as they come, so Stop can keep them. Nothing is posted until
+   * a person chooses Post as comment or Post all.
+   */
+  onAiReview?: (request: {
+    route: string;
+    focus: readonly ("accessibility" | "copy" | "layout" | "design-system")[];
+    page: ThreadmarkPageReview;
+    signal: AbortSignal;
+    report: (progress: { checked?: number; total?: number; finding?: ThreadmarkAiFinding }) => void;
+  }) => Promise<{ findings: ThreadmarkAiFinding[]; summary?: string; checked?: number }>;
+  /** Adds "Ask AI" (⌘K) to the composer for one element. Return up to three points and an optional fix. */
+  onAskAi?: (request: { element: Element; label: string; route: string; question: string | null; history: readonly { question: string | null; points: string[]; fix?: string }[] }) =>
+    Promise<{ points: string[]; fix?: string }>;
+  /** A finding was dismissed, with why, so your AI can stop raising it. */
+  onAiDismiss?: (finding: { id: string; category: string; title: string }, reason: "not-a-problem" | "already-known" | "wrong") => void;
   /** Places a comment can be sent: issue trackers or channels the project has connected. */
   destinations?: readonly ThreadmarkDestination[];
   /**
@@ -817,4 +837,17 @@ export interface ThreadmarkDestination {
   note?: string;
   /** A small same-origin logo. Without it, a generic icon is shown. */
   iconUrl?: string;
+}
+
+export interface ThreadmarkAiFinding {
+  id?: string;
+  category?: "accessibility" | "copy" | "layout" | "design-system";
+  title: string;
+  detail?: string;
+  /** Which element: a target from `page.findings`, a `data-threadmark-id`, or a CSS selector. */
+  target?: ThreadmarkTargetDescriptor;
+  targetId?: string;
+  selector?: string;
+  /** Shown under the finding, such as "Button · Start free". Worked out from the element when left out. */
+  where?: string;
 }

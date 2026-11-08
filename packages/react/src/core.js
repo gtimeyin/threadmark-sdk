@@ -667,6 +667,7 @@ export function createFeedbackPayload({
   device,
   metadata,
   links,
+  source,
 }) {
   const payloadId = cleanString(id, 160)
     || globalThis.crypto?.randomUUID?.()
@@ -735,6 +736,8 @@ export function createFeedbackPayload({
     };
   }
   if (Array.isArray(reactions)) payload.reactions = normalizeReactions(reactions);
+  // "ai": posted from an AI review or Ask AI (board 12). Shown as "From an AI review"; the author is still the person who posted it.
+  if (source === "ai") payload.source = "ai";
   const normalizedLinks = normalizeLinks(links);
   if (normalizedLinks.length) payload.links = normalizedLinks;
   if (Array.isArray(replies)) {
