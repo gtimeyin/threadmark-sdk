@@ -128,4 +128,39 @@ export const barStyles = `
   @media (prefers-reduced-motion: reduce) {
     .tm-bar { animation: none; }
   }
+
+  /* Page pins (Figma "Pin", 62:35): a 28px Orange drop with a point at the bottom left, a 2px white
+     edge and a soft shadow. Active = ink edge; Grouped = Forest; Resolved = tint with a check;
+     Suggested / needs repair = white with a dashed Orange edge; Ghost = Stone. */
+  .tm-marker {
+    width: 28px;
+    height: 28px;
+    border: 2px solid #fff;
+    border-radius: 14px 14px 14px 3px;
+    background: var(--tm-orange);
+    color: #fff;
+    box-shadow: 0 12px 32px rgba(14, 23, 20, .24), 0 1px 3px rgba(14, 23, 20, .18);
+    font: 500 11px/14px var(--tm-font);
+    transform: translate(-4px, -50%);
+  }
+  .tm-marker::before { content: ""; position: absolute; inset: -8px; }
+  .tm-marker:hover { transform: translate(-4px, -50%) scale(1.06); }
+  .tm-marker--active { border-color: var(--tm-ink); }
+  .tm-marker--grouped { border-radius: 14px 14px 14px 3px; background: var(--tm-forest); }
+  .tm-marker--resolved { background: var(--tm-sage); color: var(--tm-forest); }
+  .tm-marker__check { width: 14px; height: 14px; }
+  .tm-marker--warning,
+  .tm-marker--suggested {
+    border: 1.5px dashed var(--tm-orange);
+    background: #fff;
+    color: var(--tm-orange);
+    box-shadow: 0 12px 32px rgba(14, 23, 20, .18);
+  }
+  .tm-marker--ghost {
+    opacity: 1;
+    border: 2px solid #fff;
+    background: var(--tm-stone);
+    color: #fff;
+    box-shadow: 0 12px 32px rgba(14, 23, 20, .18);
+  }
 `;

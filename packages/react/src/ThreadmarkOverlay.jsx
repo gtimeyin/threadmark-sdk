@@ -42,7 +42,7 @@ import { WarningIcon as TriangleAlert } from "./icons.jsx";
 import { ReopenIcon as Undo2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { TourIcon } from "./icons.jsx";
+import { ResolveIcon, TourIcon } from "./icons.jsx";
 import { BarHint, IdleBar } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
 import {
@@ -1301,7 +1301,7 @@ function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, compos
   );
 }
 
-const Marker = memo(function Marker({ annotation, number, rect, restoration, onEdit, markerPositions }) {
+const Marker = memo(function Marker({ annotation, number, rect, restoration, onEdit, markerPositions, active = false }) {
   const buttonRef = useRef(null), outlineRef = useRef(null);
   useLayoutEffect(() => {
     const update = () => {
@@ -1325,6 +1325,7 @@ const Marker = memo(function Marker({ annotation, number, rect, restoration, onE
   const needsRepair = restoration && restoration.status !== "resolved";
   const suggested = restoration?.status === "changed";
   const ghost = Boolean(restoration?.ghost);
+  const resolved = annotation.payload.workflow?.status === "resolved" && !needsRepair;
   const detail = suggested ? ": element changed, confirm its new location"
     : ghost ? ": element removed, shown at its last known position" : "";
   return (
@@ -1340,13 +1341,13 @@ const Marker = memo(function Marker({ annotation, number, rect, restoration, onE
       <button
         type="button"
         ref={buttonRef}
-        className={`tm-marker ${grouped ? "tm-marker--grouped" : ""} ${needsRepair ? "tm-marker--warning" : ""} ${suggested ? "tm-marker--suggested" : ""} ${ghost ? "tm-marker--ghost" : ""}`}
+        className={`tm-marker ${grouped ? "tm-marker--grouped" : ""} ${needsRepair ? "tm-marker--warning" : ""} ${suggested ? "tm-marker--suggested" : ""} ${ghost ? "tm-marker--ghost" : ""} ${resolved ? "tm-marker--resolved" : ""} ${active ? "tm-marker--active" : ""}`}
         style={{ left: rect.left + rect.width, top: rect.top + Math.min(18, rect.height / 2) }}
-        aria-label={`Edit annotation ${number}${needsRepair ? `, target needs repair${detail}` : ""}`}
+        aria-label={`Edit annotation ${number}${resolved ? ", resolved" : ""}${needsRepair ? `, target needs repair${detail}` : ""}`}
         title={suggested ? "Element changed · confirm location" : ghost ? "Element removed · last known position" : "Open annotation"}
         onClick={() => onEdit(annotation.id)}
       >
-        {number}
+        {resolved ? <ResolveIcon aria-hidden="true" focusable="false" className="tm-marker__check" /> : number}
       </button>
     </>
   );
@@ -1989,6 +1990,7 @@ function Overlay({
           restoration={annotationRestorations[annotation.id]}
           onEdit={onEditAnnotation}
           markerPositions={markerPositions}
+          active={editingAnnotation?.id === annotation.id}
         />
       ))}
 
