@@ -8,7 +8,7 @@ export const smallScreenStyles = `
   @media (hover: none) and (pointer: coarse) {
     .tm-bar .tm-ui-key, .tm-modebar .tm-ui-key, .tm-toolbar-menu kbd, .tm-ai-status .tm-ui-key,
     .tm-you__header .tm-ui-key, .tm-ui-button .tm-ui-key, .tm-send__go .tm-ui-key, .tm-send__cancel .tm-ui-key, .tm-ai-follow .tm-ui-key { display: none; }
-    .tm-bar button, .tm-modebar button { min-height: 44px; }
+    .tm-bar button, .tm-modebar button, .tm-bar .tm-bar__main, .tm-bar .tm-launcher { min-height: 44px; }
     .tm-bar__tools, .tm-bar__shrink, .tm-modebar .tm-toolbar-tools > button { min-width: 44px; }
     .tm-toolbar-menu [role^="menuitem"] { min-height: 48px; }
     .tm-comments-panel .tm-comments-actions button, .tm-comments-panel .tm-panel-tabs button { min-height: 44px; }

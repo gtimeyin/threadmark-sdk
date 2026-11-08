@@ -144,7 +144,7 @@ function TourSaveSheet({ tour, onSave, onSendToAi, aiConnection, onConnectAi, on
   };
   const primary = canSendToAi ? "ai" : onSave ? "save" : "copy";
   return (
-    <div className="tm-sheet-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="tm-sheet-layer" data-menu-open="true" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section ref={ref} className="tm-you tm-tour-save" role="dialog" aria-modal="true" aria-labelledby="tm-tour-save-title" tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === "Escape") { event.stopPropagation(); onClose(); }
@@ -162,16 +162,19 @@ function TourSaveSheet({ tour, onSave, onSendToAi, aiConnection, onConnectAi, on
           {aiConnection && (
             <p className={`tm-tour-save__ai${aiConnection.connected ? " is-connected" : ""}`}>
               <span className="tm-tour-save__dot" aria-hidden="true" />
-              <span>{aiConnection.connected ? `${aiConnection.name} is connected` : `${aiConnection.name} isn’t connected`}{aiConnection.detail ? ` · ${aiConnection.detail}` : ""}</span>
+              <span>{(() => {
+                const name = aiConnection.name.charAt(0).toUpperCase() + aiConnection.name.slice(1);
+                return `${name} ${aiConnection.connected ? "is connected" : "isn’t connected"}${aiConnection.detail ? ` · ${aiConnection.detail}` : ""}`;
+              })()}</span>
               {!aiConnection.connected && onConnectAi && <button type="button" onClick={() => { onClose(); onConnectAi(); }}>Connect</button>}
             </p>
           )}
           {problem && <p className="tm-tour-problems tm-tour-code-rule" role="alert">{problem}</p>}
           <footer className="tm-you__footer">
-            <button type="button" className="tm-tour-secondary" disabled={Boolean(busy)} onClick={() => run("copy")}>Copy file</button>
+            <button type="button" className="tm-tour-secondary" disabled={Boolean(busy)} onClick={() => run("copy")}><ClipboardCopy {...iconProps} />Copy file</button>
             <span className="tm-tour-row">
               {onSave && <button type="button" className={primary === "save" ? "tm-tour-primary" : "tm-tour-secondary"} disabled={Boolean(busy)} onClick={() => run("save")}>{busy === "save" ? "Saving…" : "Save to project"}</button>}
-              {canSendToAi && <button type="button" className="tm-tour-primary" disabled={Boolean(busy)} onClick={() => run("ai")}>{busy === "ai" ? "Sending…" : `Send to ${aiConnection.name}`}</button>}
+              {canSendToAi && <button type="button" className="tm-tour-primary" disabled={Boolean(busy)} onClick={() => run("ai")}>{busy === "ai" ? "Sending…" : `Send to ${aiConnection.name.charAt(0).toUpperCase() + aiConnection.name.slice(1)}`}</button>}
             </span>
           </footer>
         </div>
@@ -186,6 +189,12 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
   const [untagged, setUntagged] = useState(null);
   const [status, setStatus] = useState("");
   const [saveOpen, setSaveOpen] = useState(false);
+  const [undo, setUndo] = useState(null);
+  // After a change re-renders the list, put focus where the person is working instead of dropping it.
+  const focusLater = (selector) => requestAnimationFrame(() => {
+    const target = panelRef.current?.querySelector(selector);
+    (target || panelRef.current?.querySelector("h2"))?.focus?.({ preventScroll: true });
+  });
   const handledPick = useRef(pick?.nonce ?? null);
   const panelRef = useRef(null);
 
@@ -195,6 +204,7 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
   const marks = useStepMarks(tour, route);
 
   const commit = (nextTour, nextActive = nextTour.id) => {
+    setUndo(null);
     onChange(drafts.some((item) => item.id === activeId) ? drafts.map((item) => (item.id === activeId ? nextTour : item)) : [...drafts, nextTour], nextActive);
     setStatus("");
   };
@@ -221,6 +231,14 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
       setStatus(`More than one element on this page uses “${pick.stableId}”, so a tour can’t point at it. Give each one its own id.`);
       return;
     }
+    // Clicking something that's already a step opens that step instead of adding a duplicate.
+    const existing = tour?.steps.findIndex((item, index) => item.target === pick.stableId && (!stepPagesOf(tour)[index] || pathMatches(stepPagesOf(tour)[index], route)));
+    if (tour && existing >= 0) {
+      setTab("steps");
+      setOpenStepId(tour.steps[existing].id);
+      setStatus(`That’s already step ${existing + 1}.`);
+      return;
+    }
     const base = tour || createTour({ title: "New tour", path: route, takenIds: drafts.map((item) => item.id) });
     const next = addStep(base, { target: pick.stableId, title: pick.name ? pick.name.slice(0, 60) : undefined, page: route });
     const added = next.steps[next.steps.length - 1];
@@ -233,8 +251,20 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
 
   useEffect(() => {
     if (!openStepId) return;
-    panelRef.current?.querySelector(`[data-step-id="${CSS.escape(openStepId)}"] input`)?.focus();
+    panelRef.current?.querySelector(`[data-step-id="${CSS.escape(openStepId)}"] input`)?.focus({ preventScroll: true });
+    // Bring the step's element into view so its numbered mark is on screen.
+    const step = tour?.steps.find((item) => item.id === openStepId);
+    const found = step ? resolveStableTarget(step.target) : null;
+    if (found?.status === "resolved") {
+      const rect = found.element.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        found.element.scrollIntoView({ block: "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      }
+    }
   }, [openStepId]);
+
+  // Opening Tour mode puts focus in the panel.
+  useEffect(() => { panelRef.current?.querySelector("h2")?.focus({ preventScroll: true }); }, []);
 
   async function copy() {
     const ok = await onCopy(serializeTour(tour));
@@ -255,7 +285,7 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
       <aside ref={panelRef} id="tm-tour-panel" className="tm-comments-panel tm-tour-panel" aria-label="Tour">
         <div className="tm-comments-header tm-tour-header">
           <TourIcon {...iconProps} />
-          <h2>{tour?.title || "Tour"}</h2>
+          <h2 tabIndex={-1}>{tour?.title || "Tour"}</h2>
           {tour && <button type="button" className="tm-tour-rename" aria-label="Rename tour" title="Rename tour" onClick={() => setTab("who")}><EditIcon {...iconProps} /></button>}
           <div className="tm-comments-actions">
             <button type="button" aria-label="Back to review" title="Back to review (Esc)" onClick={onClose}><X {...iconProps} /></button>
@@ -316,9 +346,20 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
                               <Chat {...iconProps} /><span>{openComments || comments.length}</span>
                             </button>
                           )}
-                          <button type="button" aria-label={`Move step ${index + 1} up`} disabled={index === 0} onClick={() => commit(moveStep(tour, step.id, -1))}><ChevronUp {...iconProps} /></button>
-                          <button type="button" aria-label={`Move step ${index + 1} down`} disabled={index === tour.steps.length - 1} onClick={() => commit(moveStep(tour, step.id, 1))}><ChevronDown {...iconProps} /></button>
-                          <button type="button" aria-label={`Delete step ${index + 1}`} onClick={() => { commit(removeStep(tour, step.id)); if (open) setOpenStepId(null); }}><Trash {...iconProps} /></button>
+                          <button type="button" aria-label={`Move step ${index + 1} up`} disabled={index === 0}
+                            onClick={() => { commit(moveStep(tour, step.id, -1)); focusLater(`[data-step-id="${CSS.escape(step.id)}"] [aria-label^="Move step"][aria-label$="up"]:not(:disabled), [data-step-id="${CSS.escape(step.id)}"] .tm-tour-step-summary`); }}><ChevronUp {...iconProps} /></button>
+                          <button type="button" aria-label={`Move step ${index + 1} down`} disabled={index === tour.steps.length - 1}
+                            onClick={() => { commit(moveStep(tour, step.id, 1)); focusLater(`[data-step-id="${CSS.escape(step.id)}"] [aria-label^="Move step"][aria-label$="down"]:not(:disabled), [data-step-id="${CSS.escape(step.id)}"] .tm-tour-step-summary`); }}><ChevronDown {...iconProps} /></button>
+                          <button type="button" aria-label={`Delete step ${index + 1}`} onClick={() => {
+                            const removed = step;
+                            const before = tour;
+                            commit(removeStep(tour, step.id));
+                            if (open) setOpenStepId(null);
+                            // Deleting is instant, so offer it back (board 07's "Undo" pattern).
+                            setUndo({ label: `Deleted step ${index + 1}${removed.title ? `, “${removed.title}”` : ""}.`, tour: before });
+                            const nextStep = tour.steps[index + 1] || tour.steps[index - 1];
+                            focusLater(nextStep ? `[data-step-id="${CSS.escape(nextStep.id)}"] .tm-tour-step-summary` : ".tm-tour-undo button");
+                          }}><Trash {...iconProps} /></button>
                         </div>
                       </div>
                       {open && (
@@ -377,13 +418,13 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
               <p className="tm-tour-add"><AddIcon {...iconProps} />Click anything on the page to add a step</p>
               <div className="tm-tour-who">
                 <p className="tm-tour-section"><span><TargetingIcon {...iconProps} />Who and when</span>
-                  <button type="button" aria-label="Edit who and when" onClick={() => setTab("who")}>Edit</button></p>
+                  <button type="button" aria-label="Edit who and when" onClick={() => { setTab("who"); focusLater(".tm-tour-settings input"); }}>Edit</button></p>
                 <p className="tm-tour-who__text">{describeWhoAndWhen(tour)}</p>
               </div>
             </div>) : (
               <div className="tm-tour-fields tm-tour-settings">
                 <p className="tm-tour-section"><span><TargetingIcon {...iconProps} />Who and when</span>
-                  <button type="button" onClick={() => setTab("steps")}>Done</button></p>
+                  <button type="button" onClick={() => { setTab("steps"); focusLater('[aria-label="Edit who and when"]'); }}>Done</button></p>
                 <label><span>Tour name</span>
                   <input value={tour.title} maxLength={120} onChange={(event) => commit({ ...tour, title: event.target.value }, tour.id)} />
                 </label>
@@ -439,6 +480,10 @@ export function TourPanel({ drafts, activeId, onChange, pick, route, onPreview, 
               )}
               {hasCodeRule && (
                 <p className="tm-tour-problems tm-tour-code-rule">This tour has a <code>showTo.when</code> rule written in code, which a tour file can’t hold. Edit it in its file; saving from here would drop the rule.</p>
+              )}
+              {undo && (
+                <p className="tm-tour-status tm-tour-undo" role="status">{undo.label}
+                  <button type="button" onClick={() => { commit(undo.tour); setUndo(null); }}>Undo</button></p>
               )}
               {status && <p className="tm-tour-status" role="status">{status}</p>}
               <div className="tm-tour-row">

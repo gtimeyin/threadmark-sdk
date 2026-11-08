@@ -594,6 +594,7 @@ export function Threadmark({
   }), []);
   const [comment, setComment] = useState("");
   const [composerMode, setComposerMode] = useState("new");
+  const [editingReplyId, setEditingReplyId] = useState(null);
   // A new comment can instead ask a question (answered in replies) or run a poll (answered by votes).
   const [askKind, setAskKind] = useState("comment");
   const [pollOptions, setPollOptions] = useState(["", ""]);
@@ -1151,6 +1152,7 @@ export function Threadmark({
   }, [callbacks.onOpenChange, clearCapture, emitStatus, invalidateSubmission, safeCall]);
 
   const startReview = useCallback(() => {
+    getMountedTourPlayer()?.pause?.();
     returnFocusRef.current = document.activeElement;
     restoreFocusRef.current = false;
     clearCapture();
@@ -1265,10 +1267,12 @@ export function Threadmark({
     emitStatus("selected");
   }, [emitStatus, regionRef, selectionsRef, textRef]);
 
-  const showNotice = useCallback((message) => {
-    setNotice(message);
+  // A notice is words, or { message, action: { label, run } } for one follow-up such as Undo or Open.
+  // Notices with an action stay a little longer so there's time to use it.
+  const showNotice = useCallback((message, action = null) => {
+    setNotice(action ? { message, action: { label: action.label, run: () => { setNotice(""); action.run(); } } } : message);
     clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = setTimeout(() => setNotice(""), 2200);
+    noticeTimerRef.current = setTimeout(() => setNotice(""), action ? 6000 : 2200);
   }, []);
 
   const commentOnTourStep = useCallback(({ tourId, stepId, target }) => {
@@ -1321,7 +1325,7 @@ export function Threadmark({
         await Promise.all(existing.map((annotation) => callbacks.onFeedbackDelete.current(annotation.payload)));
       }
     } catch {
-      showNotice("Annotations weren’t cleared. Try again.");
+      showNotice("Comments weren’t cleared. Try again.");
       safeCall(callbacks.onError, {
         code: "feedback_delete_failed",
         message: "The feedback clear callback did not complete successfully.",
@@ -1345,7 +1349,7 @@ export function Threadmark({
       setMode("picking");
       emitStatus("selecting");
     }
-    showNotice("Annotations cleared");
+    showNotice("Comments cleared");
   }, [annotationsRef, callbacks.onError, callbacks.onFeedbackClear, callbacks.onFeedbackDelete, clearCapture, emitStatus, invalidateSubmission, modeRef, safeCall, showNotice]);
 
   const requestClearAll = useCallback(() => {
@@ -1409,20 +1413,25 @@ export function Threadmark({
     setPendingDelete(null);
   }, [comment, composerMode, editingIdRef, submitting]);
 
-  const beginEdit = useCallback(() => {
+  // Edits the original comment, or (board 07, 23a) one of your own replies when given its id.
+  const beginEdit = useCallback((replyId = null) => {
     const annotation = annotationsRef.current.find((item) => item.id === editingIdRef.current);
     if (!annotation || submitting || composerMode === "edit") return;
+    const reply = typeof replyId === "string" ? (annotation.payload.replies || []).find((item) => item.id === replyId) : null;
+    if (typeof replyId === "string" && (!reply || reply.author?.id !== normalizedReviewer?.id)) return;
     replyDraftRef.current = { comment, target: replyTarget };
+    setEditingReplyId(reply ? reply.id : null);
     setComposerMode("edit");
     setReplyTarget(null);
     setPendingDelete(null);
-    setComment(editDraftRef.current ?? annotation.payload.comment);
+    setComment(reply ? reply.comment : editDraftRef.current ?? annotation.payload.comment);
     editDraftRef.current = null;
-  }, [annotationsRef, comment, composerMode, editingIdRef, replyTarget, submitting]);
+  }, [annotationsRef, comment, composerMode, editingIdRef, normalizedReviewer?.id, replyTarget, submitting]);
 
   // Leaving an inline edit or a targeted reply returns to replying to the thread.
   const cancelReply = useCallback(() => {
     if (!editingIdRef.current || submitting) return;
+    setEditingReplyId(null);
     if (composerMode === "edit") {
       setComment(replyDraftRef.current?.comment || "");
       setReplyTarget(replyDraftRef.current?.target || null);
@@ -1453,7 +1462,7 @@ export function Threadmark({
       const url = new URL(window.location.origin + window.location.pathname);
       url.searchParams.set(ANNOTATION_QUERY_PARAM, id);
       await navigator.clipboard.writeText(url.toString());
-      showNotice("Annotation link copied");
+      showNotice("Link copied");
     } catch {
       showNotice("Couldn’t copy annotation link");
     }
@@ -1531,7 +1540,7 @@ export function Threadmark({
     try {
       await callbacks.onFeedbackDelete.current?.(annotation.payload);
     } catch {
-      showNotice("Annotation wasn’t removed. Try again.");
+      showNotice("Comment wasn’t deleted. Try again.");
       safeCall(callbacks.onError, {
         code: "feedback_delete_failed",
         message: "The feedback delete callback did not complete successfully.",
@@ -1551,7 +1560,7 @@ export function Threadmark({
       setMode("picking");
       emitStatus("selecting");
     }
-    showNotice("Annotation removed");
+    showNotice("Comment deleted");
     return true;
   }, [annotationsRef, callbacks.onError, callbacks.onFeedbackDelete, editingIdRef, emitStatus, modeRef, safeCall, showNotice]);
 
@@ -2363,9 +2372,15 @@ export function Threadmark({
       });
     };
     const onSubmit = (event) => appendEvent("submit", event);
-    const onNavigation = () => appendEvent("navigation", { target: document.documentElement, composedPath: () => [] }, {
-      route: sanitizeRoute(window.location.pathname || "/"),
-    });
+    // One move can fire popstate, hashchange and navigatesuccess together: record it once per address.
+    let lastHref = window.location.href;
+    const onNavigation = () => {
+      if (window.location.href === lastHref) return;
+      lastHref = window.location.href;
+      appendEvent("navigation", { target: document.documentElement, composedPath: () => [] }, {
+        route: sanitizeRoute(window.location.pathname || "/"),
+      });
+    };
     // The pointer path is what a voice + cursor recording replays, and what an agent reads to follow a tab video.
     const onPointer = (event) => {
       const recording = activeRecording();
@@ -3481,7 +3496,8 @@ export function Threadmark({
       if (generation !== submitGenerationRef.current) return;
       setAnnotations((items) => items.map((item) => mergeAccepted(item, current.id, accepted)));
       if (accepted.payload.id !== current.id) setEditingAnnotationId(accepted.payload.id);
-      setSubmitting(false); showNotice("Thread updated");
+      setSubmitting(false);
+      showNotice(action === "resolved" ? "Resolved" : action === "reopened" ? "Reopened" : action === "assigned" ? `Assigned to ${member?.displayName || "nobody"}` : "Thread updated");
     } catch {
       if (generation !== submitGenerationRef.current) return;
       setSubmitting(false); showNotice("Thread wasn’t updated. Try again.");
@@ -3508,7 +3524,7 @@ export function Threadmark({
       showNotice(`${link.label} created, but the link back wasn’t saved.`);
       return link;
     }
-    showNotice(`${link.label} created`);
+    showNotice(`${link.label} created`, link.url ? { label: "Open", run: () => window.open(link.url, "_blank", "noopener,noreferrer") } : null);
     return link;
   };
 
@@ -3666,6 +3682,31 @@ export function Threadmark({
         return;
       }
       if (repinningId) throw new Error("The original comment is no longer available.");
+      if (editing && composerMode === "edit" && editingReplyId) {
+        const updatedAt = new Date().toISOString();
+        let payload = createFeedbackPayload({
+          ...editing.payload,
+          now: editing.payload.createdAt,
+          updatedAt,
+          replies: (editing.payload.replies || []).map((reply) => reply.id === editingReplyId
+            ? { ...reply, comment, updatedAt, lastEditedBy: normalizedReviewer }
+            : reply),
+          lastEditedBy: normalizedReviewer,
+        });
+        const context = { evidence: editing.runtime?.evidence || [] };
+        const accepted = acceptAuthoritative(payload, context.evidence, await callbacks.onFeedbackCreate.current?.(payload, context));
+        if (submissionGeneration !== submitGenerationRef.current) return;
+        setAnnotations((current) => current.map((annotation) => mergeAccepted(annotation, editing.id, accepted)));
+        setEditingReplyId(null);
+        setComment(replyDraftRef.current?.comment || "");
+        setReplyTarget(replyDraftRef.current?.target || null);
+        replyDraftRef.current = null;
+        setComposerMode("reply");
+        setSubmitting(false);
+        showNotice("Reply updated");
+        emitStatus("selected");
+        return;
+      }
       if (editing && composerMode === "reply") {
         const createdAt = new Date().toISOString();
         const reply = {
@@ -3719,7 +3760,7 @@ export function Threadmark({
         || (currentVideo ? [currentVideo.evidence.metadata] : null)
         || (approvedSnapshot?.metadata ? [approvedSnapshot.metadata] : activeSnapshotSelection?.snapshot?.status === "failed" ? [activeSnapshotSelection.snapshot.metadata] : []);
       const draftReplay = replayDraftRef.current;
-      const replayAttachment = !editing && draftReplay?.status === "ready" && !draftReplay.removed ? draftReplay : null;
+      const replayAttachment = !editing && !currentVideo && !currentInteraction && draftReplay?.status === "ready" && !draftReplay.removed ? draftReplay : null;
       const device = editing
         ? editing.payload.device
         : deviceDetails === false ? undefined : readDeviceInfo(window, clientHintsRef.current);
@@ -3852,7 +3893,11 @@ export function Threadmark({
         emitStatus("selected");
         return;
       }
-      showNotice("Annotation added");
+      // Board 01, 2d: "Comment added · Undo".
+      {
+        const addedId = payload.id;
+        showNotice("Comment added", { label: "Undo", run: () => removeAnnotation(addedId) });
+      }
       clearCapture();
       setEditingAnnotationId(null);
       setComment("");
@@ -4020,7 +4065,12 @@ export function Threadmark({
         setHiddenPages(next);
         writeHiddenPages(next);
         closeReview();
-        showNotice(`Hidden on this page. Press ${/Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌘⇧F" : "Ctrl+Shift+F"} to bring it back.`);
+        const keys = /Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌘⇧F" : "Ctrl+Shift+F";
+        // Board 09, 29c: say which page, and offer Undo.
+        showNotice(`Hidden on ${activeRoute === "/" ? "Home" : activeRoute}. ${keys} brings it back.`, {
+          label: "Undo",
+          run: () => { setHiddenPages(next.filter((page) => page !== activeRoute)); writeHiddenPages(next.filter((page) => page !== activeRoute)); },
+        });
       }}
       shortcutsOpen={shortcutsOpen}
       onShortcutsOpenChange={setShortcutsOpen}
@@ -4056,7 +4106,14 @@ export function Threadmark({
       notifications={Array.isArray(notifications) ? normalizedNotifications : null}
       onOpenNotification={(notification) => {
         safeCall(callbacks.onNotificationOpen, notification);
-        if (notification.annotationId && projectAnnotations.some((item) => item.id === notification.annotationId)) openListedAnnotation(notification.annotationId);
+        if (notification.annotationId && projectAnnotations.some((item) => item.id === notification.annotationId)) {
+          openListedAnnotation(notification.annotationId);
+        } else if (notification.route && notification.route !== activeRoute) {
+          // The host's onNotificationOpen navigates; without one, at least say where it is.
+          if (!callbacks.onNotificationOpen.current) showNotice(`That’s on ${notification.route === "/" ? "Home" : notification.route}.`);
+        } else {
+          showNotice("That comment isn’t on this page any more.");
+        }
       }}
       onNotificationsSeen={(ids) => { if (ids.length) safeCall(callbacks.onNotificationsRead, ids); }}
       surveys={Array.isArray(surveys) ? normalizedSurveys.filter((survey) => survey.pages.some((page) => surveyPageMatches(page, activeRoute))) : null}
@@ -4091,6 +4148,7 @@ export function Threadmark({
       onBeginReply={beginReply}
       onCancelReply={cancelReply}
       onBeginEdit={beginEdit}
+      editingReplyId={composerMode === "edit" ? editingReplyId : null}
       onRequestDelete={requestDelete}
       onCancelDelete={() => setPendingDelete(null)}
       discardPending={discardPending}

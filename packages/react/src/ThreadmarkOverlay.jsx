@@ -572,11 +572,37 @@ function NextStepsTab({ nextSteps, canTick, onDone, onOpenSource }) {
 }
 
 // Inbox: replies, mentions and other things that need you, newest first (Figma "Inbox item").
-function InboxList({ notifications, onOpen }) {
+function deepActiveElement() {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+
+/** Puts focus back on whatever opened a sheet or card once it closes. */
+function useReturnFocus(open) {
+  const opener = useRef(null);
+  useEffect(() => {
+    if (open) { opener.current = deepActiveElement(); return; }
+    const element = opener.current;
+    opener.current = null;
+    if (element?.isConnected) element.focus?.({ preventScroll: true });
+  }, [Boolean(open)]);
+}
+
+/** "/" reads as a stray character on its own; call it Home. */
+export function routeLabel(route) {
+  return route === "/" ? "Home" : route;
+}
+
+function InboxList({ notifications, onOpen, onMarkAllRead }) {
   if (!notifications.length) {
     return <EmptyState icon={InboxIcon} title="Nothing new">Replies and mentions for you show up here.</EmptyState>;
   }
+  const unread = notifications.filter((item) => !item.read).length;
   return (
+    <>
+    <p className="tm-comments-count tm-inbox-head"><span>{unread ? `${unread} unread` : "All read"}</span>
+      {unread > 0 && onMarkAllRead && <button type="button" className="tm-inbox-markall" onClick={onMarkAllRead}>Mark all read</button>}</p>
     <ul className="tm-inbox" aria-label="Inbox">
       {notifications.map((item) => (
         <li key={item.id}>
@@ -589,12 +615,13 @@ function InboxList({ notifications, onOpen }) {
                 {!item.read && <span className="tm-inbox-item__dot"><span className="tm-sr-only">Unread</span></span>}
               </span>
               <span className="tm-inbox-item__text">{item.text}</span>
-              {item.route && <span className="tm-inbox-item__route">{item.route}</span>}
+              {item.route && <span className="tm-inbox-item__route">{routeLabel(item.route)}</span>}
             </span>
           </button>
         </li>
       ))}
     </ul>
+    </>
   );
 }
 
@@ -602,11 +629,9 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
   nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
   surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null }) {
   const [halfSheet, setHalfSheet] = useState(false);
+  const searchToggleRef = useRef(null);
+  // Items are marked read when opened (board 05, 17c), or all at once with Mark all read; never just by looking.
   const unreadNotifications = notifications ? notifications.filter((item) => !item.read) : [];
-  useEffect(() => {
-    if (hidden || tab !== "inbox" || !unreadNotifications.length) return;
-    onNotificationsSeen?.(unreadNotifications.map((item) => item.id));
-  }, [hidden, tab, unreadNotifications.map((item) => item.id).join("|")]);
   const [controls, setControls] = useState("collapsed");
   const [filterOpen, setFilterOpen] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState(false);
@@ -691,6 +716,12 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           event.stopPropagation();
           setFilterOpen(false);
           filterButtonRef.current?.focus();
+        } else if (event.key === "Escape" && controls === "search" && event.target.closest?.(".tm-comments-search")) {
+          // Esc closes the search first, not the whole panel; a typed query is kept until cleared.
+          event.preventDefault();
+          event.stopPropagation();
+          setControls("collapsed");
+          searchToggleRef.current?.focus();
         }
       }}>
       {/* Phones: a tall sheet you can drop to half height to see the page while you read (35d). */}
@@ -714,7 +745,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           </button>}
         </div>
         <div className="tm-comments-actions">
-          {tab === "comments" && <><button type="button" className={controls === "search" || query ? "is-active" : undefined}
+          {tab === "comments" && <><button ref={searchToggleRef} type="button" className={controls === "search" || query ? "is-active" : undefined}
             aria-label={controls === "search" ? "Hide search comments" : "Show search comments"}
             aria-controls="tm-comments-search-controls" aria-expanded={controls === "search"}
             onClick={() => setControls((current) => current === "search" ? "collapsed" : "search")}>
@@ -786,7 +817,9 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           <button type="button" aria-label="Close feedback panel" onClick={onClose}><X size={18} /></button>
         </div>
       </header>
-      {tab === "inbox" && notifications ? <InboxList notifications={notifications} onOpen={onOpenNotification} />
+      {tab === "inbox" && notifications ? <InboxList notifications={notifications}
+        onOpen={(item) => { if (!item.read) onNotificationsSeen?.([item.id]); onOpenNotification?.(item); }}
+        onMarkAllRead={onNotificationsSeen ? () => onNotificationsSeen(unreadNotifications.map((item) => item.id)) : null} />
         : tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
         : tab === "versions" ? <PageVersionList versions={pageVersions} onSelect={onSelectPageVersion} />
         : openSurveyId && surveys?.some((survey) => survey.id === openSurveyId) ? (() => {
@@ -799,7 +832,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
             }} />;
         })() : <>
       {surveys && surveys.length > 0 && !query && <SurveyList surveys={surveys} results={surveyResults} onOpen={onOpenSurvey} />}
-      {controls === "search" && <div id="tm-comments-search-controls" className="tm-comments-search">
+      {controls === "search" && <div id="tm-comments-search-controls" className="tm-comments-search" data-menu-open="true">
         <input ref={searchRef} aria-label="Search comments" placeholder="Search comments and replies…" value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>}
       <p className="tm-comments-count"><span>Comments</span><span role="status">{visible.length} of {annotations.length} threads</span></p>
@@ -820,7 +853,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
               <span className="tm-comment-target">#{number} · {targetName(feedback.pin?.target || feedback.target)}</span>
               <span className="tm-comment-meta">
                 <span>{feedback.workflow?.status === "resolved" ? "Resolved" : "Open"}</span>
-                <span>{feedback.route}</span>
+                <span>{routeLabel(feedback.route)}</span>
                 {feedback.workflow?.assignee && <span>Assigned to {feedback.workflow.assignee.displayName}</span>}
                 {feedback.links?.length > 0 && <CommentLinks links={feedback.links} plain />}
                 {feedback.source === "ai" && <span className="tm-from-ai">From an AI review</span>}
@@ -1199,8 +1232,10 @@ function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, compos
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      document.querySelector("[data-threadmark-root]")?.shadowRoot
-        ?.querySelector(".tm-markup-overlay button:not(:disabled)")?.focus();
+      // Focus "Use screenshot" (or the first drawing tool while it's still preparing), never Cancel.
+      const root = document.querySelector("[data-threadmark-root]")?.shadowRoot;
+      (root?.querySelector(".tm-markup-confirm:not(:disabled)")
+        || root?.querySelector(".tm-markup-overlay button:not(:disabled):not(.tm-markup-cancel)"))?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -1913,6 +1948,7 @@ function Overlay({
   onBeginReply,
   onCancelReply,
   onBeginEdit,
+  editingReplyId = null,
   onRequestDelete,
   onCancelDelete,
   discardPending,
@@ -2039,14 +2075,23 @@ function Overlay({
     return () => removeEventListener("keydown", onKey, true);
   }, [askAiTarget]);
   const [destinationsOpen, setDestinationsOpen] = useState(false);
+  useReturnFocus(youOpen);
+  useReturnFocus(shareOpen);
+  useReturnFocus(sendTarget);
+  useReturnFocus(destinationsOpen);
+  useReturnFocus(askAiElement);
   const sendDestination = sendTarget && destinations.find((destination) => destination.id === sendTarget.destinationId);
   const sendAnnotation = sendTarget && annotations.find((annotation) => annotation.id === sendTarget.annotationId);
   const canShare = Boolean(shareUrl || onInvite);
   // A dark host page gets a faint paper edge around the bar and panel (board 09, 32a/b).
   const [darkPage, setDarkPage] = useState(false);
   useEffect(() => {
-    try { setDarkPage(pageBrightness() < 0.35); } catch { setDarkPage(false); }
-  }, [mode]);
+    // Re-checked when review opens or closes, the page changes, or the tab comes back.
+    const check = () => { try { setDarkPage(pageBrightness() < 0.35); } catch { setDarkPage(false); } };
+    check();
+    document.addEventListener("visibilitychange", check);
+    return () => document.removeEventListener("visibilitychange", check);
+  }, [mode, aiRoute]);
   const [openSurveyId, setOpenSurveyId] = useState(null);
   const toolbarMenuRef = useRef(null);
   toolbarMenuRef.current = toolbarMenu;
@@ -2147,7 +2192,8 @@ function Overlay({
   useEffect(() => {
     if (!pendingDelete) return undefined;
     const frame = requestAnimationFrame(() => {
-      popoverRef.current?.querySelector(".tm-delete-final")?.focus();
+      // The safe choice gets focus, so a stray ↵ never deletes.
+      popoverRef.current?.querySelector(".tm-delete-confirm .tm-cancel")?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [pendingDelete?.id, pendingDelete?.kind]);
@@ -2772,8 +2818,8 @@ function Overlay({
                   onReply={onBeginReply}
                   onDelete={onRequestDelete}
                   onEdit={repinning ? undefined : onBeginEdit}
-                  editor={composerMode === "edit" && !repinning ? (
-                    <div className="tm-inline-edit">
+                  editor={composerMode === "edit" && !repinning && !editingReplyId ? (
+                    <div className="tm-inline-edit" data-menu-open="true">
                       <label className="tm-sr-only" htmlFor="tm-comment">Edit comment</label>
                       <MentionTextarea
                         reviewers={reviewers}
@@ -2781,6 +2827,12 @@ function Overlay({
                         value={comment}
                         onValueChange={setComment}
                         maxLength={6000}
+                        // Board 07, 23b: ⌘↵ saves, Esc puts it back as it was; the caret starts at the end.
+                        onFocus={(event) => { const end = event.target.value.length; event.target.setSelectionRange(end, end); }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!submitting) onCancelReply(); }
+                          else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+                        }}
                       />
                       <div className="tm-inline-edit__actions">
                         <button type="button" className="tm-cancel" onClick={onCancelReply} disabled={submitting}>Cancel</button>
@@ -2810,6 +2862,31 @@ function Overlay({
                     currentReviewer={reviewer}
                     onReply={onBeginReply}
                     onDelete={onRequestDelete}
+                    onEdit={!repinning && reply.author?.id && reply.author.id === reviewer?.id ? () => onBeginEdit(reply.id) : undefined}
+                    editor={composerMode === "edit" && !repinning && editingReplyId === reply.id ? (
+                    <div className="tm-inline-edit" data-menu-open="true">
+                      <label className="tm-sr-only" htmlFor="tm-comment">Edit comment</label>
+                      <MentionTextarea
+                        reviewers={reviewers}
+                        id="tm-comment"
+                        value={comment}
+                        onValueChange={setComment}
+                        maxLength={6000}
+                        // Board 07, 23b: ⌘↵ saves, Esc puts it back as it was; the caret starts at the end.
+                        onFocus={(event) => { const end = event.target.value.length; event.target.setSelectionRange(end, end); }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!submitting) onCancelReply(); }
+                          else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+                        }}
+                      />
+                      <div className="tm-inline-edit__actions">
+                        <button type="button" className="tm-cancel" onClick={onCancelReply} disabled={submitting}>Cancel</button>
+                        <button type="submit" className="tm-submit" disabled={submitting || !comment.trim()}>
+                          {submitting ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                    ) : null}
                   />
                 ))}
               </section>
@@ -2844,6 +2921,11 @@ function Overlay({
                     : askKind === "poll" ? "Ask the poll question…" : "Describe the change…"}
                 maxLength={6000}
                 aria-describedby={comment.length >= 5500 ? "tm-comment-limit" : undefined}
+                aria-keyshortcuts="Meta+Enter Control+Enter"
+                onKeyDown={(event) => {
+                  // ⌘↵ / Ctrl+↵ posts; a plain ↵ stays a new line in a new comment.
+                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+                }}
               />
               {comment.length >= 5500 && (
                 <small id="tm-comment-limit" className="tm-field__limit" aria-live="polite">
@@ -2889,7 +2971,8 @@ function Overlay({
               </button>
             )}
 
-            {!editingAnnotation && replayEnabled && replayDraft && (
+            {/* A video or interaction trace already shows what happened, so no second, different playback. */}
+            {!editingAnnotation && replayEnabled && replayDraft && !videoSelection && !interactionSelection && (
               <ReplayAttachment
                 draft={replayDraft}
                 onToggle={onToggleReplay}
@@ -2981,19 +3064,28 @@ function Overlay({
 
             <div className="tm-form__footer">
               {pendingDelete ? (
-                <div className="tm-delete-confirm" role="alert" key="delete-confirm">
+                <div className="tm-delete-confirm" role="alert" key="delete-confirm" data-menu-open="true"
+                  onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!deleting) onCancelDelete(); } }}>
                   <ClearIcon />
                   <div className="tm-delete-confirm__impact">
-                    <strong>{pendingDelete.kind === "annotation" ? "Delete this annotation?" : "Delete this reply?"}</strong>
-                    <span>
-                      {pendingDelete.kind === "annotation"
-                        ? `${1 + (editingAnnotation?.payload.replies?.length || 0)} comment${(editingAnnotation?.payload.replies?.length || 0) === 0 ? "" : "s"}${editingAnnotation?.payload.evidence?.length ? " and its screenshot" : ""} will be removed.`
-                        : `Only this reply will be removed. The annotation and ${Math.max(0, editingAnnotation?.payload.replies?.length || 0)} other comment${(editingAnnotation?.payload.replies?.length || 0) === 1 ? "" : "s"} stay.`}
-                    </span>
+                    {(() => {
+                      // Board 07, 23e: say who loses what, in plain words.
+                      const replies = editingAnnotation?.payload.replies || [];
+                      const names = [...new Set(replies.map((reply) => reply.author?.displayName).filter(Boolean))];
+                      const who = names.length > 2 ? `${names.slice(0, 2).join(", ")} and others` : names.join(" and ");
+                      return pendingDelete.kind === "annotation"
+                        ? <>
+                          <strong>{replies.length ? "Delete this thread?" : "Delete this comment?"}</strong>
+                          <span>{replies.length
+                            ? `It has ${replies.length} repl${replies.length === 1 ? "y" : "ies"}${who ? `, from ${who}` : ""}. Deleting it removes the whole thread for everyone.`
+                            : "Nobody has replied yet. This can’t be undone."}</span>
+                        </>
+                        : <><strong>Delete this reply?</strong><span>Only this reply goes. The rest of the thread stays.</span></>;
+                    })()}
                   </div>
-                  <button type="button" className="tm-cancel" onClick={onCancelDelete} disabled={deleting}>Cancel</button>
+                  <button type="button" className="tm-cancel" onClick={onCancelDelete} disabled={deleting}>Keep it</button>
                   <button type="button" className="tm-delete-final" onClick={onConfirmDelete} disabled={deleting}>
-                    {deleting ? "Deleting…" : pendingDelete.kind === "annotation" ? "Delete annotation" : "Delete reply"}
+                    {deleting ? "Deleting…" : pendingDelete.kind === "annotation" ? (editingAnnotation?.payload.replies?.length ? "Delete thread" : "Delete comment") : "Delete reply"}
                   </button>
                 </div>
               ) : discardPending ? (
@@ -3003,7 +3095,7 @@ function Overlay({
                     <strong>{videoSelection && !editingAnnotation ? "Discard this video?" : composerMode === "edit" ? "Discard your edits?" : composerMode === "reply" ? "Discard this reply?" : "Discard this comment?"}</strong>
                     <span>{videoSelection && !editingAnnotation
                       ? `The ${formatClock(videoSelection.video.durationMs)} recording${comment.trim() ? " and your comment haven’t" : " hasn’t"} been posted and will be lost.`
-                      : "What you typed hasn’t been posted and will be lost."}</span>
+                      : composerMode === "edit" ? "Your saved comment stays as it was." : "What you typed hasn’t been posted and will be lost."}</span>
                   </div>
                   <button type="button" className="tm-cancel" onClick={onKeepEditing}>Keep editing</button>
                   <button type="button" className="tm-delete-final" onClick={onBack}>Discard</button>
@@ -3055,7 +3147,13 @@ function Overlay({
         </>
       )}
 
-      {notice && <div className="tm-toast" role="status">{notice}</div>}
+      {notice && (
+        <div className="tm-toast" role="status">
+          <Check size={14} aria-hidden="true" />
+          <span>{typeof notice === "string" ? notice : notice.message}</span>
+          {notice.action && <button type="button" className="tm-toast__action" onClick={notice.action.run}>{notice.action.label}</button>}
+        </div>
+      )}
     </div>
   );
 }

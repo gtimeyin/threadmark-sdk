@@ -87,7 +87,8 @@ export const surveyCardStyles = `
 
 export const surveyPlayerStyles = `
   :host { all: initial; }
-  .tms-layer { position: fixed; z-index: 2147483000; pointer-events: none; }
+  /* Just under the review overlay (2147483000), so the panel and sheets stay on top while you review. */
+  .tms-layer { position: fixed; z-index: 2147482900; pointer-events: none; }
   .tms-layer > * { pointer-events: auto; }
   .tms-layer--corner { right: 20px; bottom: 20px; }
   .tms-layer--centre { inset: 0; display: grid; place-items: center; background: rgba(14, 23, 20, .28); pointer-events: auto; }

@@ -112,7 +112,7 @@ export function ShareSheet({
   const people = [...members].sort((a, b) => Number(Boolean(b.pending)) - Number(Boolean(a.pending)));
 
   return (
-    <div className="tm-sheet-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+    <div className="tm-sheet-layer" data-menu-open="true" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
       <section ref={ref} className="tm-you tm-share" role="dialog" aria-modal="true" aria-labelledby="tm-share-title" tabIndex={-1}
         onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose?.(); } }}>
         <header className="tm-you__header">

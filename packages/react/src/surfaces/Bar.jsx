@@ -2,7 +2,7 @@
 // When nobody is reviewing it is a small dark bar that says what is waiting on this page:
 // Nothing yet ("Leave feedback"), Waiting (new questions or comments), All caught up, or Offline.
 // In comment mode the same bar carries the hint ("Click anything, or select text  Esc") and the tools.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AddIcon, CommentIcon, ResolveIcon } from "../icons.jsx";
 import { Avatar, Key } from "../ui/primitives.jsx";
 import { notificationHeadline } from "../notifications.js";
@@ -88,7 +88,7 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
   const latest = online ? unread[0] : null;
   const base = barMood({ count, questions, seen, online });
   const { mood, primary, secondary } = latest
-    ? { mood: "reply", primary: notificationHeadline(latest), secondary: latest.route ? `on ${latest.route}` : unread.length > 1 ? `${unread.length} new` : "" }
+    ? { mood: "reply", primary: notificationHeadline(latest), secondary: latest.route ? `on ${latest.route === "/" ? "Home" : latest.route}` : unread.length > 1 ? `${unread.length} new` : "" }
     : base;
   const shortcut = openShortcutLabel();
   const label = latest
@@ -105,6 +105,13 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
     onOpen?.(count > 0, Boolean(latest));
   };
 
+  // Shrinking or restoring moves focus to the control that's now there, rather than dropping it.
+  const wasShrunk = useRef(shrunk);
+  useEffect(() => {
+    if (wasShrunk.current !== shrunk) launcherRef?.current?.focus?.({ preventScroll: true });
+    wasShrunk.current = shrunk;
+  }, [shrunk]);
+
   // Shrunk to a dot (board 09, 29b): the count stays so nothing new slips past.
   if (shrunk) {
     const waiting = latest ? unread.length : Math.max(0, count - seen);
@@ -114,7 +121,7 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
           aria-label={`Show the Threadmark bar${count ? `, ${plural(count, "comment")}` : ""}`} aria-keyshortcuts="Meta+. Control+."
           onClick={() => onShrink?.(false)}>
           <span className={`tm-bar__dot tm-bar__dot--${waiting ? "waiting" : "quiet"}`} aria-hidden="true" />
-          {count > 0 && <span className="tm-bar__primary">{waiting || count}</span>}
+          {(waiting > 0 || count > 0) && <span className="tm-bar__primary">{waiting || count}</span>}
         </button>
       </div>
     );

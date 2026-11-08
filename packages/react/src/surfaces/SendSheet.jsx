@@ -17,7 +17,7 @@ export function DestinationMark({ destination, size = 16 }) {
 export function sendSummary(annotation, targetName) {
   const payload = annotation?.payload || {};
   const who = payload.author?.displayName || "Someone";
-  const where = [payload.route, targetName].filter(Boolean).join(" · ");
+  const where = [payload.route === "/" ? "Home" : payload.route, targetName].filter(Boolean).join(" · ");
   const words = String(payload.comment || "").trim();
   const extras = [payload.evidence?.some?.((item) => item.kind === "screenshot") || payload.captureKind === "screenshot" ? "Screenshot attached" : null, "link back to the comment"].filter(Boolean);
   return [`${who} on ${where}`, words ? `“${words}”` : null, extras.join(" · ")].filter(Boolean).join("\n");
@@ -61,7 +61,7 @@ export function SendSheet({ destination, annotation, targetName, onSend, onClose
   };
 
   return (
-    <div className="tm-sheet-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+    <div className="tm-sheet-layer" data-menu-open="true" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
       <section ref={ref} className="tm-you tm-send" role="dialog" aria-modal="true" aria-labelledby="tm-send-title" tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === "Escape") { event.stopPropagation(); onClose?.(); }
@@ -126,7 +126,7 @@ export function SendSheet({ destination, annotation, targetName, onSend, onClose
 export function DestinationsSheet({ destinations, onConnect, onClose }) {
   const ref = useSheetFocus();
   return (
-    <div className="tm-sheet-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+    <div className="tm-sheet-layer" data-menu-open="true" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
       <section ref={ref} className="tm-you tm-send tm-send--list" role="dialog" aria-modal="true" aria-labelledby="tm-dest-title" tabIndex={-1}
         onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose?.(); } }}>
         <header className="tm-you__header">

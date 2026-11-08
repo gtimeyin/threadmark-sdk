@@ -52,7 +52,7 @@ export function YouSheet({
   };
 
   return (
-    <div className="tm-sheet-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+    <div className="tm-sheet-layer" data-menu-open="true" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
       <section ref={ref} className="tm-you" role="dialog" aria-modal="true" aria-labelledby="tm-you-title" tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === "Escape") { event.stopPropagation(); onClose?.(); }
@@ -114,7 +114,7 @@ export function YouSheet({
             {error && <p className="tm-ui-field__hint is-error" role="alert">{error}</p>}
             <footer className="tm-you__footer">
               {onLeaveProject ? <Button variant="outline-dark" size="sm" onClick={() => setConfirmLeave(true)}>Leave {projectName || "project"}</Button> : <span />}
-              <Button variant="primary" size="sm" kbd="↵" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+              <Button variant="primary" size="sm" kbd="⌘↵" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
             </footer>
           </div>
         )}

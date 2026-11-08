@@ -124,7 +124,8 @@ export const videoStyles = `
 
   .tm-video-recorder {
     position: fixed;
-    z-index: 46;
+    /* Above the blur picker (47), so Draw, Stop and Discard stay usable while choosing what to blur. */
+    z-index: 50;
     left: 50%;
     bottom: 24px;
     min-width: min(520px, calc(100vw - 24px));
@@ -637,6 +638,9 @@ export const videoStyles = `
   .tm-blur-card strong { font-size: 12px; line-height: 16px; }
   .tm-blur-card span { color: var(--tm-text-muted); font-size: 10px; line-height: 14px; }
   .tm-video-icon-button.is-active { background: var(--tm-mint); color: var(--tm-ground); }
+  /* Done is an action on the dark chrome: Lime, like every other one. */
+  .tm-blur-card .tm-video-start { border-radius: var(--tm-radius-button); background: var(--tm-lime); color: var(--tm-ground); }
+  .tm-blur-card .tm-video-start:hover:not(:disabled) { background: var(--tm-action-primary-hover, #d2e53f); }
   .tm-draw-layer {
     position: fixed;
     inset: 0;

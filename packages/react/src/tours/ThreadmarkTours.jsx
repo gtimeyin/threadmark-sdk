@@ -317,6 +317,7 @@ export function ThreadmarkTours({
       reset: (tourId) => latest.current.api.reset(tourId),
       preview: (tourData, options) => latest.current.api.preview(tourData, options),
       stopPreview: () => latest.current.api.stopPreview(),
+      pause: () => latest.current.api.pause(),
     };
     setActive(instance);
     setMount({ host, root });
@@ -360,6 +361,10 @@ export function ThreadmarkTours({
     },
     stopPreview() {
       if (latest.current.run?.preview) finish("paused");
+    },
+    // Opening review pauses a visitor's tour so it doesn't sit on top of the page being commented on.
+    pause() {
+      if (latest.current.run && !latest.current.run.preview) finish("paused");
     },
     reset(tourId) {
       store.remove(tourId, latest.current.userId);
@@ -693,7 +698,8 @@ export function ThreadmarkTours({
         title: step.title,
         body: step.body,
         hint: step.next === "click" && targetStatus === "resolved"
-          ? `Use ${target.name ? `“${target.name}”` : "the highlighted element"} to continue.`
+          // A live label can carry a counter ("Approve release · 0"); quote only the words.
+          ? `Use ${target.name && target.name.replace(/[\s·:|•-]*\d+$/, "").trim() ? `“${target.name.replace(/[\s·:|•-]*\d+$/, "").trim()}”` : "the highlighted element"} to continue.`
           : null,
         secondary: null,
         actions: (

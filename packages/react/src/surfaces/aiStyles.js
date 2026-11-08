@@ -21,7 +21,8 @@ export const aiStyles = `
     padding: 8px 10px 8px 12px; border-radius: var(--tm-radius-panel); background: var(--tm-ground); color: var(--tm-text-primary);
     box-shadow: 0 12px 30px rgba(0, 0, 0, .3), 0 0 0 1px rgba(251, 250, 246, .08); font: 400 13px/18px var(--tm-font); white-space: nowrap; pointer-events: auto; }
   /* 27c: while AI reads the page, its status takes the bar's place. */
-  .tm-root:has(.tm-ai-status) .tm-modebar { visibility: hidden; }
+  .tm-root:has(.tm-ai-status) .tm-modebar, .tm-root:has(.tm-ai-status) .tm-bar { visibility: hidden; }
+  .tm-ai-panel__header h2:focus { outline: none; }
   .tm-ai-setup .tm-send__go { flex: none; white-space: nowrap; }
   .tm-ai-status svg { width: 14px; height: 14px; color: var(--tm-lime); }
   .tm-ai-status strong { font-weight: 600; }

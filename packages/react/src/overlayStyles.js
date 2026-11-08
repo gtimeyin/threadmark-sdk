@@ -382,6 +382,9 @@ export const overlayStyles = `
   .tm-tour-code-rule { padding-left: 10px; }
   .tm-tour-code-rule code { font-family: var(--tm-font-mono); font-size: 11px; }
   .tm-tour-status { margin: 0; font-size: 12px; line-height: 1.45; color: var(--tm-lime); }
+  .tm-tour-undo { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--tm-text-secondary); }
+  .tm-tour-undo button { padding: 0; border: 0; background: none; color: var(--tm-lime); font: 600 12px/16px var(--tm-font); cursor: pointer; }
+  .tm-tour-header h2:focus { outline: none; }
   .tm-tour-file { margin: 0; color: var(--tm-text-secondary); }
   .tm-tour-mark { position: fixed; z-index: 30; border: 2px solid var(--tm-lime); border-radius: var(--tm-radius-button); box-shadow: 0 0 0 1px rgba(14, 23, 20, .5); pointer-events: none; }
   .tm-tour-mark span { position: absolute; top: -11px; left: -11px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--tm-lime); color: var(--tm-ground); font: 600 11px/1 var(--tm-font); box-shadow: 0 2px 6px rgba(14, 23, 20, .3); }
@@ -481,7 +484,7 @@ export const overlayStyles = `
   /* Inline @mention suggestions float above the field being typed in. */
   .tm-reply__box, .tm-inline-edit, .tm-field { position: relative; }
   .tm-inline-edit { overflow: visible; }
-  .tm-mention-list { position: absolute; z-index: 4; left: 8px; bottom: calc(100% + 6px); min-width: 180px; margin: 0; padding: 4px; list-style: none; border: 1px solid rgba(255,255,255,.1); border-radius: var(--tm-radius-panel); background: var(--tm-ground); box-shadow: 0 12px 32px rgba(0,0,0,.4); animation: tm-state-in var(--tm-motion-fast) var(--tm-ease-standard) both; }
+  .tm-mention-list { position: relative; z-index: 4; margin-top: 6px !important; max-height: 200px; overflow: auto; min-width: 180px; margin: 0; padding: 4px; list-style: none; border: 1px solid rgba(255,255,255,.1); border-radius: var(--tm-radius-panel); background: var(--tm-ground); box-shadow: 0 12px 32px rgba(0,0,0,.4); animation: tm-state-in var(--tm-motion-fast) var(--tm-ease-standard) both; }
   .tm-mention-list li { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border-radius: var(--tm-radius-button); color: var(--tm-text-primary); font-size: 12px; cursor: pointer; }
   .tm-mention-list li[aria-selected="true"], .tm-mention-list li:hover { background: rgba(224, 243, 84,.16); }
   .tm-mention-list__avatar { width: 20px; height: 20px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--tm-deep-sage); color: var(--tm-text-primary); font-size: 8px; font-weight: 700; }
@@ -2383,21 +2386,28 @@ export const overlayStyles = `
     animation: tm-toast-in var(--tm-motion-surface) var(--tm-ease-emphasized) both;
   }
 
+  /* Toast (Figma "Toast"): 8px radius on the dark chrome, a check, the words, and an optional Lime action. */
   .tm-toast {
     position: fixed;
     z-index: 50;
     left: 50%;
     bottom: 84px;
     transform: translateX(-50%);
-    border-radius: 999px;
-    padding: 11px 16px;
-    background: var(--tm-ink);
-    color: #fff;
-    box-shadow: 0 10px 30px rgba(0,0,0,.24);
-    font-size: 13px;
-    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: calc(100vw - 24px);
+    border-radius: var(--tm-radius-panel);
+    padding: 9px 12px;
+    background: var(--tm-ground);
+    color: var(--tm-text-primary);
+    box-shadow: 0 10px 30px rgba(0,0,0,.28), 0 0 0 1px rgba(251, 250, 246, .08);
+    font: 500 13px/18px var(--tm-font);
     animation: tm-toast-in var(--tm-motion-surface) var(--tm-ease-emphasized) both;
   }
+  .tm-toast > svg { flex: none; width: 14px; height: 14px; color: var(--tm-lime); }
+  .tm-toast__action { flex: none; margin-left: 4px; padding: 2px 4px; border: 0; border-radius: 4px; background: none; color: var(--tm-lime); font: 600 13px/18px var(--tm-font); cursor: pointer; }
+  .tm-toast__action:hover { text-decoration: underline; }
 
   @keyframes tm-scrim-in {
     from { opacity: 0; }

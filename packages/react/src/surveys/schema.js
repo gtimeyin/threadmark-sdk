@@ -26,7 +26,7 @@ export class SurveyValidationError extends Error {
 export function createSurveyDraft(route = "/") {
   return {
     id: `survey-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    question: { kind: "poll", text: "", options: [{ id: "a", label: "" }, { id: "b", label: "" }], multiple: false, scale: { points: 5, display: "numbers", low: "", high: "" } },
+    question: { kind: "poll", text: "", options: [{ id: "a", label: "" }, { id: "b", label: "" }], multiple: false, scale: { points: 5, display: "numbers", low: "Not at all", high: "Very" } },
     followUp: { enabled: false, text: "What nearly stopped you?" },
     placement: { kind: "page", position: "corner", target: null },
     pages: [route],

@@ -76,8 +76,12 @@ export const panelStyles = `
     font: 600 11px/14px var(--tm-font);
   }
 
-  .tm-comments-panel .tm-comments-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-  .tm-comments-panel .tm-comments-actions button {
+  .tm-comments-panel .tm-comments-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; padding-left: 12px; }
+  .tm-comments-panel .tm-comments-filter-menu button { width: 100%; height: auto; }
+  .tm-inbox-head { display: flex; align-items: center; justify-content: space-between; }
+  .tm-inbox-markall { padding: 0; border: 0; background: none; color: var(--tm-lime); font: 500 12px/16px var(--tm-font); cursor: pointer; }
+  .tm-inbox-markall:hover { text-decoration: underline; }
+  .tm-comments-panel .tm-comments-actions > button, .tm-comments-panel .tm-comments-actions > * > button:not([role="menuitemcheckbox"]):not([role="menuitem"]):not([role="menuitemradio"]) {
     width: 28px;
     height: 28px;
     min-height: 28px;
@@ -210,6 +214,9 @@ export const panelStyles = `
      Narrower screens: the panel stops above the bar so both stay usable. */
   @media (min-width: 1100px) {
     .tm-root:has(.tm-comments-panel:not([hidden])) .tm-modebar.tm-bar--at-bottom-center:not([style*="left"]) { right: 396px; }
+    /* A bar placed on the right moves out from under the open panel. */
+    .tm-root:has(.tm-comments-panel:not([hidden])) .tm-modebar.tm-bar--at-top-right,
+    .tm-root:has(.tm-comments-panel:not([hidden])) .tm-modebar.tm-bar--at-bottom-right { right: 412px; }
   }
   @media (max-width: 1099px) {
     .tm-comments-panel { bottom: 76px; }

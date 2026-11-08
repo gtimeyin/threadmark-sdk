@@ -293,7 +293,7 @@ export const barStyles = `
   .tm-tour-save .tm-tool-icon { width: 14px; height: 14px; flex: none; }
   .tm-tour-save__file { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--tm-text-secondary); }
   .tm-tour-save__file code { color: var(--tm-text-primary); font: 400 12px/16px var(--tm-font-mono); }
-  .tm-tour-save__code { max-height: 220px; margin: 0; padding: 10px 12px; overflow: auto; border: 1px solid rgba(251, 250, 246, .08); border-radius: var(--tm-radius-button); background: var(--tm-surface); color: var(--tm-text-primary); font: 400 12px/18px var(--tm-font-mono); white-space: pre; }
+  .tm-tour-save__code { max-height: 220px; margin: 0; padding: 10px 12px; overflow: auto; border: 1px solid rgba(251, 250, 246, .08); border-radius: var(--tm-radius-button); background: var(--tm-surface); color: var(--tm-text-primary); font: 400 12px/18px var(--tm-font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
   .tm-tour-save__tip { display: flex; gap: 8px; margin: 0; padding: 8px 10px; border-radius: var(--tm-radius-button); background: var(--tm-surface); color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font); }
   .tm-tour-save__tip code { color: var(--tm-text-primary); font-family: var(--tm-font-mono); }
   .tm-tour-save__ai { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font); }

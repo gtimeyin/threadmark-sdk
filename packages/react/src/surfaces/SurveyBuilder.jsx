@@ -59,6 +59,11 @@ export function SurveyBuilder({ route = "/", onPublish, onClose }) {
     const stepProblems = problems.filter((problem) => fields.includes(problem.field));
     if (stepProblems.length) {
       setShownProblems((current) => [...new Set([...current, ...stepProblems.map((problem) => problem.field)])]);
+      // Take people to what needs fixing rather than leaving focus on Next.
+      requestAnimationFrame(() => {
+        const card = firstFieldRef.current?.closest?.(".tm-survey-builder") || firstFieldRef.current?.getRootNode?.();
+        (card?.querySelector?.('[aria-invalid="true"], .is-error input, .tm-ui-field__hint.is-error') || firstFieldRef.current)?.focus?.();
+      });
       return;
     }
     setStep((current) => Math.min(STEPS.length - 1, current + 1));

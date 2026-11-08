@@ -93,7 +93,7 @@ function SourceRow({ icon, label, on, disabled, devices, deviceId, fallbackDevic
             </span>
           ) : <small>{deviceLabel(devices, deviceId, fallbackDevice)}</small>}
       </span>
-      <button id={switchId} type="button" role="switch" aria-checked={on} disabled={disabled}
+      <button id={switchId} type="button" role="switch" aria-label={label} aria-checked={on} disabled={disabled}
         className={`tm-video-switch${on ? " is-on" : ""}`} onClick={onToggle}>
         <span aria-hidden="true" />
       </button>
@@ -115,14 +115,27 @@ export function VideoSetupPanel({ setup, maxDurationMs, blurredCount = 0, onBlur
     ? "Your browser will ask to share this tab. Everything visible in it is recorded."
     : `Your ${setup.camera && setup.microphone ? "voice and camera" : setup.camera ? "camera" : "voice"} and cursor play back over the page.`;
 
+  // Start gets focus once it can be used (it's disabled while the browser asks for the camera and mic).
   useEffect(() => {
-    panelRef.current?.querySelector(".tm-video-start")?.focus();
-  }, []);
+    if (busy) return;
+    const panel = panelRef.current;
+    if (!panel || panel.contains(panel.getRootNode().activeElement)) return;
+    panel.querySelector(".tm-video-start:not(:disabled)")?.focus();
+  }, [busy]);
 
   return (
     <section
       ref={panelRef}
       className="tm-video-setup"
+      onKeyDown={(event) => {
+        // Keep Tab inside the card.
+        if (event.key !== "Tab") return;
+        const focusable = [...event.currentTarget.querySelectorAll("button:not(:disabled), select:not(:disabled)")];
+        if (!focusable.length) return;
+        const active = event.currentTarget.getRootNode().activeElement;
+        if (event.shiftKey && active === focusable[0]) { event.preventDefault(); focusable.at(-1).focus(); }
+        else if (!event.shiftKey && active === focusable.at(-1)) { event.preventDefault(); focusable[0].focus(); }
+      }}
       role="dialog"
       aria-modal="false"
       aria-labelledby={headingId}
@@ -219,6 +232,12 @@ export function VideoSetupPanel({ setup, maxDurationMs, blurredCount = 0, onBlur
 export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestart, onDiscard, onStop }) {
   const [pendingAction, setPendingAction] = useState(null);
   const confirmRef = useRef(null);
+  const openerRef = useRef(null);
+  const ask = (action) => (event) => { openerRef.current = event.currentTarget; setPendingAction(action); };
+  const keep = () => {
+    setPendingAction(null);
+    requestAnimationFrame(() => openerRef.current?.isConnected && openerRef.current.focus());
+  };
   const announcement = state.finishing
     ? "Saving recording"
     : state.paused ? "Recording paused" : `Recording ${state.mode === "tab" ? "this tab" : "voice and cursor"}`;
@@ -227,17 +246,31 @@ export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestar
     if (pendingAction) confirmRef.current?.focus();
   }, [pendingAction]);
 
+  // Esc leaves Draw the same way it leaves Blur.
+  useEffect(() => {
+    if (tool !== "draw" || !onTool) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onTool(null);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [tool, onTool]);
+
   if (pendingAction) {
     const restarting = pendingAction === "restart";
     return (
-      <section className="tm-video-recorder is-confirming" aria-label="Video recorder" role="alert">
+      <section className="tm-video-recorder is-confirming" aria-label="Video recorder" role="alert"
+        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); keep(); } }}>
         <div className="tm-video-recorder__copy">
           <strong>{restarting ? "Restart from the beginning?" : "Discard this recording?"}</strong>
           <span>{formatClock(state.elapsedMs)} of video{state.eventCount ? ` and ${state.eventCount} step${state.eventCount === 1 ? "" : "s"}` : ""} will be lost.</span>
         </div>
-        <button type="button" className="tm-cancel" onClick={() => setPendingAction(null)}>Keep recording</button>
+        {/* The safe choice gets focus, so a stray ↵ never throws the footage away. */}
+        <button ref={confirmRef} type="button" className="tm-cancel" onClick={keep}>Keep recording</button>
         <button
-          ref={confirmRef}
           type="button"
           className="tm-video-danger"
           onClick={() => {
@@ -309,7 +342,7 @@ export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestar
         aria-label="Restart recording"
         title="Restart"
         disabled={state.finishing}
-        onClick={() => setPendingAction("restart")}
+        onClick={ask("restart")}
       >
         <RotateCcw {...iconProps} />
       </button>
@@ -319,7 +352,7 @@ export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestar
         aria-label="Discard recording"
         title="Discard"
         disabled={state.finishing}
-        onClick={() => setPendingAction("discard")}
+        onClick={ask("discard")}
       >
         <Trash2 {...iconProps} />
       </button>

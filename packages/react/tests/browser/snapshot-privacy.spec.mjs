@@ -441,7 +441,7 @@ test("replies to a previous comment and confirms reply or annotation deletion wi
     };
   })).toEqual({
     heading: "Delete this reply?",
-    impact: "Only this reply will be removed. The annotation and 1 other comment stay.",
+    impact: "Only this reply goes. The rest of the thread stays.",
     finalAction: "Delete reply",
     standardToolbarVisible: false,
   });
@@ -460,7 +460,7 @@ test("replies to a previous comment and confirms reply or annotation deletion wi
       impact: bar?.querySelector("span")?.textContent,
       finalAction: bar?.querySelector(".tm-delete-final")?.textContent.trim(),
     };
-  })).toEqual({ impact: "1 comment and its screenshot will be removed.", finalAction: "Delete annotation" });
+  })).toEqual({ impact: "Nobody has replied yet. This can’t be undone.", finalAction: "Delete comment" });
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-delete-final").click();
   });

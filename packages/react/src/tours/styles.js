@@ -53,7 +53,8 @@ export const tourStyles = `
 .tmt-link--note svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linejoin: round; }
 .tmt-link:hover { color: var(--t); }
 .tmt-title { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; outline: none; }
-.tmt-title:focus-visible { outline: 2px solid var(--a); outline-offset: 3px; border-radius: 4px; }
+/* The title takes focus on each step so screen readers start there; it isn't a control, so no ring. */
+.tmt-title:focus, .tmt-title:focus-visible { outline: none; }
 .tmt-body { margin: 0; color: color-mix(in srgb, var(--t) 80%, var(--s)); font-size: 15px; line-height: 1.45; }
 .tmt-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .tmt-actions { display: flex; gap: 8px; margin-left: auto; }

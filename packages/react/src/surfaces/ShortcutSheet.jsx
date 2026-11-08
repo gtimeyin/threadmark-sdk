@@ -42,7 +42,7 @@ export function ShortcutSheet({ videoEnabled = false, onClose }) {
     </section>
   );
   return (
-    <div className="tm-sheet-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+    <div className="tm-sheet-layer" data-menu-open="true" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
       <section ref={ref} className="tm-shortcuts" role="dialog" aria-modal="true" aria-labelledby="tm-shortcuts-title" tabIndex={-1}
         onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose?.(); } }}>
         <header>

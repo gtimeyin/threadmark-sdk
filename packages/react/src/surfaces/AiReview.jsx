@@ -71,6 +71,11 @@ export function findingComment(finding) {
   return [finding.title.replace(/[.!]?$/, "."), finding.detail].filter(Boolean).join(" ");
 }
 
+/** "accessibility, copy and layout" */
+function listWords(words) {
+  return words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words[0] || "";
+}
+
 function timeAgo(at) {
   const seconds = Math.round((Date.now() - at) / 1000);
   return seconds < 45 ? "just now" : seconds < 3600 ? `${Math.round(seconds / 60)}m ago` : `${Math.round(seconds / 3600)}h ago`;
@@ -80,7 +85,7 @@ function Sheet({ className = "", labelledBy, onClose, onSubmit, children }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.focus(); }, []);
   return (
-    <div className="tm-sheet-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="tm-sheet-layer" data-menu-open="true" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section ref={ref} className={`tm-you tm-ai-sheet ${className}`} role="dialog" aria-modal="true" aria-labelledby={labelledBy} tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === "Escape") { event.stopPropagation(); onClose(); }
@@ -195,7 +200,7 @@ function DismissMenu({ onPick, onClose }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.querySelector("button")?.focus(); }, []);
   return (
-    <div ref={ref} className="tm-menu tm-ai-dismiss" role="menu" aria-label="Why dismiss it?"
+    <div ref={ref} className="tm-menu tm-ai-dismiss" data-menu-open="true" role="menu" aria-label="Why dismiss it?"
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }}>
       <p className="tm-ai-eyebrow">Why dismiss it?</p>
       {DISMISS_REASONS.map((reason) => <button key={reason.id} type="button" role="menuitem" onClick={() => onPick(reason.id)}>{reason.label}</button>)}
@@ -208,6 +213,13 @@ function ReviewResults({ result, route, activeId, onActivate, onPost, onPostAll,
   const [dismissing, setDismissing] = useState(null);
   const [busy, setBusy] = useState(null);
   const listRef = useRef(null);
+  const headingRef = useRef(null);
+  // Focus starts on the panel's heading, and comes back to it after a finding is posted or dismissed.
+  useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, []);
+  const settle = () => requestAnimationFrame(() => {
+    const next = listRef.current?.querySelector(".tm-ai-actions .tm-share__button:not(:disabled)");
+    (next || headingRef.current)?.focus({ preventScroll: true });
+  });
   const drafts = result.findings.filter((finding) => finding.status === "draft");
   const visible = result.findings.filter((finding) => finding.status !== "dismissed");
   useEffect(() => {
@@ -215,14 +227,14 @@ function ReviewResults({ result, route, activeId, onActivate, onPost, onPostAll,
   }, [activeId]);
   const post = async (finding) => {
     setBusy(finding.id);
-    try { await onPost(finding); } finally { setBusy(null); }
+    try { await onPost(finding); } finally { setBusy(null); settle(); }
   };
   return (
     <aside className="tm-comments-panel tm-ai-panel" aria-label="AI review">
       <header className="tm-ai-panel__header">
         <button type="button" aria-label="Back" onClick={onClose}><ArrowLeftIcon size={16} aria-hidden="true" focusable="false" /></button>
         <AiIcon size={14} className="tm-ai-panel__icon" aria-hidden="true" focusable="false" />
-        <h2>AI review</h2>
+        <h2 ref={headingRef} tabIndex={-1}>AI review</h2>
         <span>{route} · {result.stopped ? "stopped" : timeAgo(result.at)}</span>
         <button type="button" aria-label="Close AI review" onClick={onClose}><CloseIcon size={16} aria-hidden="true" focusable="false" /></button>
       </header>
@@ -237,14 +249,16 @@ function ReviewResults({ result, route, activeId, onActivate, onPost, onPostAll,
           <div className="tm-ai-empty">
             <AiIcon size={20} aria-hidden="true" focusable="false" />
             <strong>Nothing stood out</strong>
-            <p>{result.checked ? `${result.checked} elements checked` : "The page was checked"} for {result.focusLabel}. Change the page and look again any time.</p>
+            <p>{result.checked ? `${result.checked} elements checked` : "The page was checked"} for {result.focusLabel}. Change the page and review again any time.</p>
             <button type="button" className="tm-share__button" onClick={onAgain}>Review again</button>
           </div>
         ) : (
           <>
             {result.stopped ? (visible.length > 0 && <p className="tm-ai-eyebrow tm-ai-pad">Found before it stopped</p>) : (
               <div className="tm-ai-summary">
-                <p>{result.summary || `${visible.length} thing${visible.length === 1 ? "" : "s"} worth a look.`}</p>
+                <p>{drafts.length === visible.length
+                  ? result.summary || `${visible.length} thing${visible.length === 1 ? "" : "s"} worth a look.`
+                  : drafts.length ? `${drafts.length} left to look at.` : "All done. Everything is posted or dismissed."}</p>
                 <small>{result.checked ? `${result.checked} elements checked · ` : ""}{result.focusLabel}</small>
               </div>
             )}
@@ -267,7 +281,9 @@ function ReviewResults({ result, route, activeId, onActivate, onPost, onPostAll,
                           <button type="button" className="tm-ai-link" aria-haspopup="menu" aria-expanded={dismissing === finding.id}
                             onClick={() => setDismissing(dismissing === finding.id ? null : finding.id)}>Dismiss</button>
                           {dismissing === finding.id && (
-                            <DismissMenu onClose={() => setDismissing(null)} onPick={(reason) => { setDismissing(null); onDismiss(finding, reason); }} />
+                            <DismissMenu
+                              onClose={() => { setDismissing(null); requestAnimationFrame(() => listRef.current?.querySelector(`[data-finding="${CSS.escape(finding.id)}"] .tm-ai-link`)?.focus()); }}
+                              onPick={(reason) => { setDismissing(null); onDismiss(finding, reason); settle(); }} />
                           )}
                         </div>
                       )}
@@ -309,7 +325,7 @@ export function AiPageReview({ open, onOpenChange, route, buildId, ignoredSelect
   useEffect(() => { controller.current?.abort(); controller.current = null; setPhase(null); setResult(null); }, [route]);
 
   const close = () => { controller.current?.abort(); controller.current = null; setPhase(null); setResult(null); onOpenChange(false); };
-  const focusLabel = focus.map((id) => CATEGORY_LABELS[id].toLowerCase()).join(", ");
+  const focusLabel = listWords(focus.map((id) => CATEGORY_LABELS[id].toLowerCase()));
   const options = { ignoredSelectors };
 
   const checkedRef = useRef(0);
@@ -424,7 +440,13 @@ export function AskAiCard({ element, route, onAskAi, onPost, onCopy, onClose }) 
       setState("ready");
     }
   };
-  useEffect(() => { ask(); }, []);
+  // Ask once when the card opens (React's development mode runs effects twice).
+  const askedRef = useRef(false);
+  useEffect(() => {
+    if (askedRef.current) return;
+    askedRef.current = true;
+    ask();
+  }, []);
   useLayoutEffect(() => {
     const place = () => {
       const rect = element.getBoundingClientRect();
@@ -444,7 +466,7 @@ export function AskAiCard({ element, route, onAskAi, onPost, onCopy, onClose }) 
   const prompt = latest ? `On ${route}, ${label}:\n${latest.points.map((point) => `- ${point}`).join("\n")}${latest.fix ? `\nSuggested fix: ${latest.fix}` : ""}` : "";
 
   return (
-    <section ref={ref} className="tm-ai-card" role="dialog" aria-label={`AI on ${label}`} tabIndex={-1} style={position || { visibility: "hidden" }}
+    <section ref={ref} className="tm-ai-card" data-menu-open="true" role="dialog" aria-label={`AI on ${label}`} tabIndex={-1} style={position || { visibility: "hidden" }}
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }}>
       <header>
         <AiIcon size={14} aria-hidden="true" focusable="false" />
