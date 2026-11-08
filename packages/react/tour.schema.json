@@ -14,7 +14,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "path": { "type": "string", "pattern": "^/[^\\s?#]*\\*?$", "description": "Page the tour starts on. End with * to match a prefix." },
+        "path": { "type": "string", "pattern": "^/(?![/\\\\])[^\\s?#\\\\\\u0000-\\u001f\\u007f]*\\*?$", "description": "Page the tour starts on. End with * to match a prefix." },
         "device": { "enum": ["any", "desktop", "phone"], "default": "any" },
         "traits": {
           "type": "object",
@@ -74,7 +74,7 @@
       "required": ["id", "title"],
       "properties": {
         "id": { "$ref": "#/$defs/stableId" },
-        "page": { "type": "string", "pattern": "^/[^\\s?#]*$" },
+        "page": { "type": "string", "pattern": "^/(?![/\\\\])[^\\s?#\\\\\\u0000-\\u001f\\u007f]*$" },
         "target": { "$ref": "#/$defs/stableId", "description": "A threadmarkTarget() id. Optional only for modal steps." },
         "title": { "$ref": "#/$defs/title" },
         "body": { "$ref": "#/$defs/body" },

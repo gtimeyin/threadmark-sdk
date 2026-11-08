@@ -132,7 +132,10 @@ test("the tours entry never reaches review, capture, or icon code", async () => 
   }
   for (const [href, code] of files) {
     assert.ok(!href.endsWith("/dist/index.js"), "tours entry must not import the review entry");
-    assert.doesNotMatch(code, /data-threadmark-root|getDisplayMedia|getUserMedia|domToBlob|innerHTML|dangerouslySetInnerHTML|fetch\(|XMLHttpRequest|sendBeacon/, `${href} contains review, capture, HTML-injection, or network code`);
+    assert.doesNotMatch(code, /data-threadmark-root|getDisplayMedia|getUserMedia|domToBlob/, `${href} contains review or capture code`);
+    assert.doesNotMatch(code, /innerHTML|outerHTML|insertAdjacentHTML|dangerouslySetInnerHTML|document\.write|createContextualFragment/, `${href} can inject HTML`);
+    assert.doesNotMatch(code, /\beval\(|new Function\(|\bimport\(/, `${href} evaluates or loads code at runtime`);
+    assert.doesNotMatch(code, /fetch\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|new Image\(|\.src\s*=|window\.open\(|location\.(?:href|assign|replace)/, `${href} makes network requests or navigates on its own`);
   }
 });
 
@@ -213,6 +216,16 @@ test("the built package exposes exactly the documented runtime API", async () =>
   assert.deepEqual(Object.keys(sdk).sort(), expectedExports.sort());
   for (const exportName of expectedExports) {
     assert.notEqual(sdk[exportName], undefined, exportName);
+  }
+});
+
+test("tours keep a narrow client boundary, so Server Components can tag elements and validate tours", async () => {
+  const { files } = await collectBuiltModuleGraph(resolvePackagePath("./dist/tours.js"));
+  const clientModules = [...files].filter(([, code]) => code.startsWith('"use client";')).map(([href]) => href.split("/").pop());
+  assert.equal(clientModules.length, 1, `expected only the player chunk to be a client module; got ${clientModules.join(", ")}`);
+  assert.match(clientModules[0], /^ThreadmarkTours-/);
+  for (const entry of ["./dist/tours.js", "./dist/cli.js", "./dist/vite.js"]) {
+    assert.doesNotMatch(await readFile(resolvePackagePath(entry), "utf8"), /^"use client";/, entry);
   }
 });
 

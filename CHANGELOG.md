@@ -4,6 +4,19 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+### Security
+
+- Tour steps' `page` and `showTo.path` must be paths on the same site. Protocol-relative values such as `//other.site`, backslashes, and control characters now fail validation (in `validateTour` and `tour.schema.json`), so a tour file can't hand the host's router an off-site address.
+- Tour `theme` values that could load a resource or break out of a CSS value, such as `url()`, `image-set()`, CSS escapes, or comments, are now ignored.
+
+### Fixed
+
+- `threadmark-react/tours` works in Next.js App Router Server Components: `threadmarkTarget()`, `validateTour()`, and `defineTour()` are no longer marked `"use client"`. Only the player chunk is, so `<ThreadmarkTours>` still renders from Client Components. The CLI and Vite plugin bundles no longer carry the directive either.
+
+### Tests
+
+- The tour player is tested under a strict Content Security Policy (no inline styles or scripts, no connections), including the `styleNonce` fallback for browsers without constructable stylesheets. The tours bundle guard now also forbids HTML injection, runtime code loading, and every network or navigation API.
+
 ## [0.1.0-beta.13] — 2026-10-29
 
 ### Performance
