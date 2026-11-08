@@ -145,6 +145,8 @@ export const panelStyles = `
     color: var(--tm-ground);
     font: 500 9px/12px var(--tm-font);
   }
+  .tm-comments-panel .tm-comment-avatar { overflow: hidden; }
+  .tm-comments-panel .tm-comment-avatar img { width: 100%; height: 100%; object-fit: cover; }
   .tm-comments-panel .tm-comment-author strong { color: var(--tm-text-primary); font: 600 13px/18px var(--tm-font); }
   .tm-comments-panel .tm-comment-author time { color: var(--tm-text-secondary); font: 500 11px/14px var(--tm-font); }
   .tm-comments-panel .tm-comment-copy,
@@ -204,7 +206,7 @@ export const panelStyles = `
   /* Wide screens: the panel runs full height and the bar centres in the space that is left.
      Narrower screens: the panel stops above the bar so both stay usable. */
   @media (min-width: 1100px) {
-    .tm-root:has(.tm-comments-panel:not([hidden])) .tm-modebar:not([style*="left"]) { right: 396px; }
+    .tm-root:has(.tm-comments-panel:not([hidden])) .tm-modebar.tm-bar--at-bottom-center:not([style*="left"]) { right: 396px; }
   }
   @media (max-width: 1099px) {
     .tm-comments-panel { bottom: 76px; }

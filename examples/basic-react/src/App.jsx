@@ -32,6 +32,8 @@ function TourButton() {
 const IGNORED_SELECTORS = [".analytics-internal", ".event-log"];
 const MAX_LOG_ENTRIES = 6;
 const PROJECT_KEY = "pk_threadmark_basic_react";
+const EXAMPLE_FACES = ["maya", "jo", "ade", "kemi", "sam", "ojie", "kai", "tobi"].map((id) => ({ id, name: id[0].toUpperCase() + id.slice(1), url: `/faces/${id}.jpg` }));
+
 const REVIEWER = {
   id: "user_emily_r",
   displayName: "Emily R.",
@@ -109,6 +111,16 @@ function FeedbackLog({ entries, onClear }) {
 export function App() {
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [annotations, setAnnotations] = useState([]);
+  // Your face, name and notification settings: host-owned too. Faces are served from public/faces.
+  const [me, setMe] = useState(() => readJson("example:me", REVIEWER));
+  const [notificationSettings, setNotificationSettings] = useState(() => readJson("example:notification-settings", { myPages: false, digest: "daily" }));
+  // People with access and the share link: host-owned. A real app would call its server here.
+  const [members, setMembers] = useState(() => readJson("example:members", [
+    { id: "example-sam", displayName: "Sam Okafor", email: "sam@studio.co", avatarUrl: "/faces/sam.jpg", role: "comment" },
+    { id: "example-karin", displayName: "Karin", role: "view", guest: true, note: "link expires in 7 days" },
+  ]));
+  useEffect(() => writeJson("example:members", members), [members]);
+  const [linkAccess, setLinkAccess] = useState("comment");
   // Surveys and their answers are host-owned too; this example keeps them in localStorage.
   const [surveys, setSurveys] = useState(() => readJson("example:surveys", []));
   const [surveyAnswers, setSurveyAnswers] = useState(() => readJson("example:survey-answers", []));
@@ -283,7 +295,19 @@ export function App() {
           return result;
         }}
         projectKey={PROJECT_KEY}
-        reviewer={REVIEWER}
+        reviewer={me}
+        faces={EXAMPLE_FACES}
+        projectName="Parcel"
+        notificationSettings={notificationSettings}
+        onReviewerChange={(change) => { const next = { ...me, ...change }; setMe(next); writeJson("example:me", next); }}
+        onNotificationSettingsChange={(settings) => { setNotificationSettings(settings); writeJson("example:notification-settings", settings); }}
+        shareUrl={`${window.location.origin}/r/parcel`}
+        linkAccess={linkAccess}
+        onLinkAccessChange={setLinkAccess}
+        members={[{ ...me, role: "owner", you: true }, ...members]}
+        onInvite={({ entries, role }) => setMembers((list) => [...entries.map((entry) => ({ id: `invite-${entry}`, displayName: entry.includes("@") ? undefined : entry, email: entry.includes("@") ? entry : undefined, role, pending: true })), ...list])}
+        onMemberChange={(id, change) => setMembers((list) => change.remove ? list.filter((member) => member.id !== id) : list.map((member) => member.id === id ? { ...member, role: change.role } : member))}
+        onResendInvite={() => {}}
         reviewers={[REVIEWER, { id: "example-sam", displayName: "Sam Okafor" }]}
         enabled
         environment="local"

@@ -57,7 +57,7 @@ export function barMood({ count, questions, seen, online }) {
 }
 
 /** The idle bar. `onOpen` opens the review (and the panel when there is something to read). */
-export function IdleBar({ annotations = [], notifications = null, route, launcherRef, onOpen, onOpenTools, position }) {
+export function IdleBar({ annotations = [], notifications = null, route, launcherRef, onOpen, onOpenTools, position = "bottom-center", shrunk = false, onShrink }) {
   const online = useOnline();
   const count = annotations.length;
   const questions = annotations.filter((annotation) => annotation?.payload?.ask && !annotation?.payload?.resolvedAt && annotation?.runtime?.status !== "resolved").length;
@@ -84,8 +84,23 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
     onOpen?.(count > 0, Boolean(latest));
   };
 
+  // Shrunk to a dot (board 09, 29b): the count stays so nothing new slips past.
+  if (shrunk) {
+    const waiting = latest ? unread.length : Math.max(0, count - seen);
+    return (
+      <div className={`tm-bar tm-bar--shrunk tm-bar--at-${position}`} role="group" aria-label="Threadmark">
+        <button ref={launcherRef} type="button" className="tm-launcher tm-bar__main"
+          aria-label={`Show the Threadmark bar${count ? `, ${plural(count, "comment")}` : ""}`} aria-keyshortcuts="Meta+. Control+."
+          onClick={() => onShrink?.(false)}>
+          <span className={`tm-bar__dot tm-bar__dot--${waiting ? "waiting" : "quiet"}`} aria-hidden="true" />
+          {count > 0 && <span className="tm-bar__primary">{waiting || count}</span>}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className={`tm-bar tm-bar--idle tm-bar--${mood}`} role="group" aria-label="Threadmark" style={position}>
+    <div className={`tm-bar tm-bar--idle tm-bar--${mood} tm-bar--at-${position}`} role="group" aria-label="Threadmark">
       {(count > 0 || latest) && (
         <>
           <button type="button" className="tm-bar__tools" aria-label="Comment on the page" title="Comment on the page (C)" onClick={onOpenTools}>
@@ -104,6 +119,11 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
         {secondary && <span className="tm-bar__secondary">{secondary}</span>}
         <Key className="tm-bar__key">{shortcut}</Key>
       </button>
+      {onShrink && (
+        <button type="button" className="tm-bar__shrink" aria-label="Shrink to a dot" title="Shrink to a dot (⌘.)" onClick={() => onShrink(true)}>
+          <span aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

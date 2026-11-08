@@ -55,7 +55,9 @@ export function shortcutAction(event) {
   if (typing) return null;
 
   if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === "f") return "toggle";
+  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && key === ".") return "shrink";
   if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  if (key === "?") return "shortcuts";
   if (event.shiftKey) return key === "c" ? "copy" : null;
 
   return {

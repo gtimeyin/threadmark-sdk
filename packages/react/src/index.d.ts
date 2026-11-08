@@ -383,6 +383,8 @@ export interface ThreadmarkReviewer {
   displayName: string;
   /** Public or same-origin avatar URL. Never include signed URLs or credentials. */
   avatarUrl?: string;
+  /** Shown read-only in Your settings. */
+  email?: string;
 }
 
 export interface ThreadmarkAnnotationRecord {
@@ -635,6 +637,32 @@ export interface ThreadmarkProps {
   onSurveyPublish?: (survey: import("./surveys.js").ThreadmarkSurvey) => void | Promise<void>;
   /** End a live survey from its results. */
   onSurveyEnd?: (surveyId: string) => void;
+  /** Faces people can pick in Your settings. Your initial is always offered too. Threadmark ships no images. */
+  faces?: readonly ThreadmarkFace[];
+  /** The reviewer's notification choices, shown in Your settings. */
+  notificationSettings?: ThreadmarkNotificationSettings;
+  /** Shown in Your settings and Share, such as "Leave Parcel". */
+  projectName?: string;
+  /** Save a new name or face. Passing this shows the face picker and name field in Your settings. */
+  onReviewerChange?: (change: { displayName: string; avatarUrl: string | null }) => void | Promise<void>;
+  /** Save notification choices. Mentions and replies are always on. */
+  onNotificationSettingsChange?: (settings: ThreadmarkNotificationSettings) => void | Promise<void>;
+  /** Adds Leave project, with a confirm step. */
+  onLeaveProject?: () => void | Promise<void>;
+  /** The review link shown in Share with Copy link. */
+  shareUrl?: string;
+  /** What anyone with the link can do. */
+  linkAccess?: ThreadmarkLinkAccess;
+  /** People with access, shown in Share. */
+  members?: readonly ThreadmarkMember[];
+  /** Invite people by name or email. Passing this (or `shareUrl`) adds Share to the panel and the More menu. */
+  onInvite?: (invite: { entries: string[]; role: ThreadmarkMemberRole }) => void | Promise<void>;
+  /** Change someone's access, or remove it. Passing this makes each person's access editable. */
+  onMemberChange?: (memberId: string, change: { role: ThreadmarkMemberRole } | { remove: true }) => void | Promise<void>;
+  /** Send a pending invite again. */
+  onResendInvite?: (memberId: string) => void | Promise<void>;
+  /** Change what anyone with the link can do. */
+  onLinkAccessChange?: (access: ThreadmarkLinkAccess) => void | Promise<void>;
   /**
    * Tours to edit in Tour mode (the same files you pass to <ThreadmarkTours>). Tour mode keeps
    * edits as drafts in the overlay; nothing is written anywhere until onTourSave or Copy file.
@@ -709,3 +737,33 @@ export declare function createFeedbackPayload(options: {
 
 export declare const THREADMARK_TARGET_ATTRIBUTE: "data-threadmark-id";
 export declare const DEFAULT_ALLOWED_HOSTS: readonly string[];
+
+export interface ThreadmarkFace {
+  id?: string;
+  name?: string;
+  url: string;
+}
+
+export interface ThreadmarkNotificationSettings {
+  mentionsAndReplies?: true;
+  myPages?: boolean;
+  digest?: "off" | "daily" | "weekly";
+}
+
+export type ThreadmarkMemberRole = "edit" | "comment" | "view";
+export type ThreadmarkLinkAccess = "comment" | "view" | "off";
+
+export interface ThreadmarkMember {
+  id: string;
+  displayName?: string;
+  email?: string;
+  avatarUrl?: string | null;
+  role: ThreadmarkMemberRole | "owner";
+  /** This is the person looking at the sheet. */
+  you?: boolean;
+  /** Invited, not joined yet. Shows Resend. */
+  pending?: boolean;
+  guest?: boolean;
+  /** A short line under the name, such as "link expires in 7 days". */
+  note?: string;
+}

@@ -42,7 +42,11 @@ import { WarningIcon as TriangleAlert } from "./icons.jsx";
 import { ReopenIcon as Undo2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { InboxIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { EditIcon, HideIcon, InboxIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { ShortcutSheet } from "./surfaces/ShortcutSheet.jsx";
+import { YouSheet } from "./surfaces/YouSheet.jsx";
+import { ShareSheet } from "./surfaces/ShareSheet.jsx";
+import { pageBrightness } from "./barPrefs.js";
 import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
 import { Avatar, EmptyState } from "./ui/primitives.jsx";
@@ -584,7 +588,7 @@ function InboxList({ notifications, onOpen }) {
 
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
   nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
-  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd }) {
+  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null }) {
   const unreadNotifications = notifications ? notifications.filter((item) => !item.read) : [];
   useEffect(() => {
     if (hidden || tab !== "inbox" || !unreadNotifications.length) return;
@@ -754,6 +758,12 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
             disabled={!nextSteps?.steps.some((step) => !step.completed)} onClick={onCopyNextSteps}>
             <Bot size={17} />
           </button>}
+          {onOpenShare && <button type="button" className="tm-comments-share" aria-label="Share" title="Share" onClick={onOpenShare}>
+            <ShareIcon size={16} aria-hidden="true" focusable="false" />
+          </button>}
+          {onOpenYou && <button type="button" className="tm-comments-you" aria-label="Your settings" title="Your settings" onClick={onOpenYou}>
+            <Avatar name={reviewer?.displayName} src={reviewer?.avatarUrl} size={20} />
+          </button>}
           <button type="button" aria-label="Close feedback panel" onClick={onClose}><X size={18} /></button>
         </div>
       </header>
@@ -779,7 +789,10 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           const number = model.numbers.get(annotation.id);
           return <>
             <button className="tm-comment-card" type="button" aria-label={`Open comment ${number}: ${feedback.comment}`} onClick={() => onOpen(annotation.id)}>
-              <span className="tm-comment-author"><span className="tm-comment-avatar">{reviewerInitials(feedback.author)}</span>
+              <span className="tm-comment-author"><span className="tm-comment-avatar">{(() => {
+                const face = feedback.author?.id && feedback.author.id === reviewer?.id ? reviewer?.avatarUrl : feedback.author?.avatarUrl;
+                return face ? <img src={face} alt="" /> : reviewerInitials(feedback.author);
+              })()}</span>
                 <strong>{feedback.author?.displayName || "Unknown reviewer"}{reviewer?.id && feedback.author?.id === reviewer.id ? " · You" : ""}</strong>
                 <time dateTime={feedback.createdAt}>{formatMessageTime(feedback.createdAt)}</time>
               </span>
@@ -1549,7 +1562,8 @@ function ThreadMessage({
       onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false); }}
       onKeyDown={(event) => { if (event.key === "Escape" && menuOpen) { event.stopPropagation(); setMenuOpen(false); } }}
     >
-      <ReviewerAvatar reviewer={author} />
+      {/* Your current face shows on everything you've written, old comments too (board 08, 27c). */}
+      <ReviewerAvatar reviewer={isCurrentReviewer && currentReviewer?.avatarUrl ? { ...author, avatarUrl: currentReviewer.avatarUrl } : author} />
       <div className="tm-thread-message__body">
         {editor || <>
           <div className="tm-thread-message__meta">
@@ -1771,6 +1785,14 @@ function Overlay({
   carryingVersionId,
   reviewer,
   toolbarPosition,
+  toolbarDragging = false,
+  barPosition = "bottom-center",
+  barShrunk = false,
+  barHidden = false,
+  onBarShrink,
+  onBarHide,
+  shortcutsOpen = false,
+  onShortcutsOpenChange,
   comment,
   setComment,
   composerMode,
@@ -1809,6 +1831,20 @@ function Overlay({
   onSurveyPublish = null,
   onSurveyEnd = null,
   surveyRoute = "/",
+  faces = [],
+  reviewerEmail = null,
+  notificationSettings,
+  projectName = null,
+  onReviewerChange,
+  onNotificationSettingsChange,
+  onLeaveProject,
+  shareUrl = null,
+  linkAccess = null,
+  members = [],
+  onInvite,
+  onMemberChange,
+  onResendInvite,
+  onLinkAccessChange,
   nextStepsOpen = false,
   onShowNextSteps = () => {},
   canTickNextSteps = false,
@@ -1915,6 +1951,15 @@ function Overlay({
   const [toolbarMenu, setToolbarMenu] = useState(null);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [surveyBuilderOpen, setSurveyBuilderOpen] = useState(false);
+  const [youOpen, setYouOpen] = useState(false);
+  const canEditYou = Boolean(onReviewerChange || onNotificationSettingsChange || onLeaveProject);
+  const [shareOpen, setShareOpen] = useState(false);
+  const canShare = Boolean(shareUrl || onInvite);
+  // A dark host page gets a faint paper edge around the bar and panel (board 09, 32a/b).
+  const [darkPage, setDarkPage] = useState(false);
+  useEffect(() => {
+    try { setDarkPage(pageBrightness() < 0.35); } catch { setDarkPage(false); }
+  }, [mode]);
   const [openSurveyId, setOpenSurveyId] = useState(null);
   const toolbarMenuRef = useRef(null);
   toolbarMenuRef.current = toolbarMenu;
@@ -2051,9 +2096,12 @@ function Overlay({
     : [contextKind(primaryTarget), targetName(primaryTarget)].filter(Boolean).join(" · ");
 
   return (
-    <div className="tm-root">
-      {mode === "idle" && (
+    <div className={`tm-root${darkPage ? " tm-root--dark-page" : ""}`}>
+      {mode === "idle" && !barHidden && (
         <IdleBar
+          position={barPosition}
+          shrunk={barShrunk}
+          onShrink={onBarShrink}
           annotations={annotations}
           route={typeof window === "undefined" ? "/" : window.location.pathname}
           launcherRef={launcherRef}
@@ -2201,7 +2249,7 @@ function Overlay({
           )}
 
           <div
-            className="tm-modebar"
+            className={`tm-modebar tm-bar--at-${barPosition}`}
             role="toolbar"
             aria-label="Threadmark annotation tools"
             style={toolbarPosition ? {
@@ -2290,6 +2338,16 @@ function Overlay({
                   shortcut="P" keyshortcuts="P" onClick={runToolbarItem(onPause)} />
                 <ToolbarMenuItem icon={<EyeIcon hidden={markersHidden} />} label="Hide comment pins" checked={markersHidden}
                   disabled={!annotations.length} shortcut="H" keyshortcuts="H" onClick={runToolbarItem(onVisibility)} />
+                {onBarShrink && <ToolbarMenuItem icon={<span className="tm-menu-dot" aria-hidden="true" />} label="Shrink to a dot"
+                  shortcut="⌘." keyshortcuts="Meta+." onClick={runToolbarItem(() => { onBarShrink(true); onExit(); })} />}
+                {onBarHide && <ToolbarMenuItem icon={<HideIcon {...iconProps} />} label="Hide on this page"
+                  onClick={runToolbarItem(onBarHide)} />}
+                {canShare && <ToolbarMenuItem icon={<ShareIcon {...iconProps} />} label="Share"
+                  onClick={runToolbarItem(() => setShareOpen(true))} />}
+                {canEditYou && <ToolbarMenuItem icon={<EditIcon {...iconProps} />} label="Your settings"
+                  onClick={runToolbarItem(() => setYouOpen(true))} />}
+                {onShortcutsOpenChange && <ToolbarMenuItem icon={<InfoIcon {...iconProps} />} label="Keyboard shortcuts"
+                  shortcut="?" keyshortcuts="Shift+?" onClick={runToolbarItem(() => onShortcutsOpenChange(true))} />}
                 <div className="tm-toolbar-menu__separator" role="separator" />
                 <ToolbarMenuItem icon={<CopyIcon />} label="Copy as Markdown" disabled={!annotations.length}
                   shortcut="⇧C" keyshortcuts="Shift+C" onClick={runToolbarItem(onCopy)} />
@@ -2325,6 +2383,26 @@ function Overlay({
             <ToolButton icon={<CloseIcon />} label="Close annotations (Esc)" onClick={onExit} />
           </div>
         </>
+      )}
+
+      {toolbarDragging && (
+        <div className="tm-bar-spots" aria-hidden="true">
+          {["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"].map((spot) => <span key={spot} className={`tm-bar-spot tm-bar--at-${spot}`} />)}
+        </div>
+      )}
+
+      {shortcutsOpen && <ShortcutSheet videoEnabled={videoEnabled} onClose={() => onShortcutsOpenChange?.(false)} />}
+
+      {youOpen && canEditYou && (
+        <YouSheet reviewer={reviewer ? { ...reviewer, email: reviewerEmail } : null} faces={faces} notificationSettings={notificationSettings}
+          projectName={projectName} onReviewerChange={onReviewerChange} onNotificationSettingsChange={onNotificationSettingsChange}
+          onLeaveProject={onLeaveProject} onClose={() => setYouOpen(false)} />
+      )}
+
+      {shareOpen && canShare && (
+        <ShareSheet projectName={projectName} shareUrl={shareUrl} linkAccess={linkAccess} members={members}
+          onInvite={onInvite} onMemberChange={onMemberChange} onResendInvite={onResendInvite}
+          onLinkAccessChange={onLinkAccessChange} onClose={() => setShareOpen(false)} />
       )}
 
       {mode === "tour" && (
@@ -2368,7 +2446,8 @@ function Overlay({
           nextSteps={nextSteps} canTickNextSteps={canTickNextSteps} onNextStepDone={onNextStepDone}
           onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps}
           notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen}
-          surveys={surveys} surveyResults={surveyResults} openSurveyId={openSurveyId} onOpenSurvey={setOpenSurveyId} onSurveyEnd={onSurveyEnd} />
+          surveys={surveys} surveyResults={surveyResults} openSurveyId={openSurveyId} onOpenSurvey={setOpenSurveyId} onSurveyEnd={onSurveyEnd}
+          onOpenYou={canEditYou ? () => setYouOpen(true) : null} onOpenShare={canShare ? () => setShareOpen(true) : null} />
       )}
 
       {replayViewer && (

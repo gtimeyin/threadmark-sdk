@@ -1,4 +1,5 @@
 import { normalizeNotifications } from "./notifications.js";
+import { nearestBarPosition, readBarPrefs, readHiddenPages, writeBarPrefs, writeHiddenPages } from "./barPrefs.js";
 import { normalizeSurveys, surveyPageMatches } from "./surveys/schema.js";
 import { normalizeReactions } from "./reactions.js";
 import { createAnnotationHydrator } from "./annotationHydration.js";
@@ -484,6 +485,9 @@ export function Threadmark({
   notifications,
   surveys,
   surveyResults,
+  faces,
+  notificationSettings,
+  projectName,
   videoRecording,
   sessionReplay,
   deviceDetails = true,
@@ -507,6 +511,16 @@ export function Threadmark({
   onNotificationsRead,
   onSurveyPublish,
   onSurveyEnd,
+  onReviewerChange,
+  onNotificationSettingsChange,
+  onLeaveProject,
+  shareUrl,
+  linkAccess,
+  members,
+  onInvite,
+  onMemberChange,
+  onResendInvite,
+  onLinkAccessChange,
   tours,
   onTourSave,
   onError,
@@ -557,6 +571,15 @@ export function Threadmark({
   const [paused, setPaused] = useState(false);
   const [editingAnnotationId, setEditingAnnotationId] = useState(null);
   const [toolbarPosition, setToolbarPosition] = useState(null);
+  const [toolbarDragging, setToolbarDragging] = useState(false);
+  const [barPrefs, setBarPrefs] = useState(() => (typeof window === "undefined" ? { position: "bottom-center", shrunk: false } : readBarPrefs()));
+  const [hiddenPages, setHiddenPages] = useState(() => (typeof window === "undefined" ? [] : readHiddenPages()));
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const updateBarPrefs = useCallback((change) => setBarPrefs((current) => {
+    const next = { ...current, ...change };
+    writeBarPrefs(next);
+    return next;
+  }), []);
   const [comment, setComment] = useState("");
   const [composerMode, setComposerMode] = useState("new");
   // A new comment can instead ask a question (answered in replies) or run a poll (answered by votes).
@@ -1568,10 +1591,13 @@ export function Threadmark({
     if (!bounds) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    setToolbarDragging(true);
     toolbarDragRef.current = {
       pointerId: event.pointerId,
       offsetX: event.clientX - bounds.left,
       offsetY: event.clientY - bounds.top,
+      startX: event.clientX,
+      startY: event.clientY,
       width: bounds.width,
       height: bounds.height,
     };
@@ -1591,8 +1617,14 @@ export function Threadmark({
     const drag = toolbarDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     toolbarDragRef.current = null;
+    setToolbarDragging(false);
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* Capture may already be released. */ }
-  }, []);
+    // It snaps to the nearest of six places and remembers it (board 09, 29a). A tap without moving keeps it put.
+    const moved = Math.abs(event.clientX - (drag.startX ?? event.clientX)) + Math.abs(event.clientY - (drag.startY ?? event.clientY)) > 4;
+    if (!moved) return;
+    updateBarPrefs({ position: nearestBarPosition(event.clientX, event.clientY, window.innerWidth, window.innerHeight) });
+    setToolbarPosition(null);
+  }, [updateBarPrefs]);
 
   useEffect(() => {
     if (!toolbarPosition) return undefined;
@@ -2376,8 +2408,31 @@ export function Threadmark({
       if (mode === "video-recording") return;
       if (action === "toggle") {
         event.preventDefault();
+        // A bar hidden on this page comes back with the same keys (board 09, 29c).
+        if (hiddenPages.includes(activeRoute)) {
+          const next = hiddenPages.filter((page) => page !== activeRoute);
+          setHiddenPages(next);
+          writeHiddenPages(next);
+        }
         if (mode === "idle") startReview();
         else closeReview();
+        return;
+      }
+      if (action === "shrink") {
+        event.preventDefault();
+        updateBarPrefs({ shrunk: !barPrefs.shrunk });
+        if (!barPrefs.shrunk && mode !== "idle" && mode !== "video-recording") closeReview();
+        return;
+      }
+      if (action === "shortcuts") {
+        if (mode === "video-recording" || mode === "recording") return;
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+        return;
+      }
+      if (action === "escape" && shortcutsOpen) {
+        event.preventDefault();
+        setShortcutsOpen(false);
         return;
       }
       // An open @mention list or menu handles its own Escape.
@@ -2424,6 +2479,11 @@ export function Threadmark({
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [
+    hiddenPages,
+    activeRoute,
+    barPrefs.shrunk,
+    updateBarPrefs,
+    shortcutsOpen,
     portalRoot,
     mode,
     submitting,
@@ -3887,6 +3947,20 @@ export function Threadmark({
       carryingVersionId={carryingVersionId}
       reviewer={normalizedReviewer}
       toolbarPosition={toolbarPosition}
+      toolbarDragging={toolbarDragging}
+      barPosition={barPrefs.position}
+      barShrunk={barPrefs.shrunk}
+      barHidden={hiddenPages.includes(activeRoute)}
+      onBarShrink={(shrunk) => updateBarPrefs({ shrunk })}
+      onBarHide={() => {
+        const next = [...new Set([...hiddenPages, activeRoute])];
+        setHiddenPages(next);
+        writeHiddenPages(next);
+        closeReview();
+        showNotice(`Hidden on this page. Press ${/Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌘⇧F" : "Ctrl+Shift+F"} to bring it back.`);
+      }}
+      shortcutsOpen={shortcutsOpen}
+      onShortcutsOpenChange={setShortcutsOpen}
       comment={comment}
       setComment={setComment}
       composerMode={composerMode}
@@ -3930,6 +4004,20 @@ export function Threadmark({
       } : null}
       onSurveyEnd={onSurveyEnd ? (survey) => safeCall(callbacks.onSurveyEnd, survey.id) : null}
       surveyRoute={activeRoute}
+      faces={Array.isArray(faces) ? faces.filter((face) => face && typeof face.url === "string") : []}
+      reviewerEmail={typeof reviewer?.email === "string" ? reviewer.email : null}
+      notificationSettings={notificationSettings}
+      projectName={typeof projectName === "string" ? projectName : null}
+      onReviewerChange={onReviewerChange}
+      onNotificationSettingsChange={onNotificationSettingsChange}
+      onLeaveProject={onLeaveProject}
+      shareUrl={typeof shareUrl === "string" && shareUrl ? shareUrl : null}
+      linkAccess={["comment", "view", "off"].includes(linkAccess) ? linkAccess : null}
+      members={Array.isArray(members) ? members.filter((member) => member && member.id != null && (member.displayName || member.email)) : []}
+      onInvite={onInvite}
+      onMemberChange={onMemberChange}
+      onResendInvite={onResendInvite}
+      onLinkAccessChange={onLinkAccessChange}
       nextStepsOpen={nextStepsOpen}
       onShowNextSteps={setNextStepsOpen}
       canTickNextSteps={Boolean(shownNextSteps?.canEdit && callbacks.onNextStepDone.current)}
