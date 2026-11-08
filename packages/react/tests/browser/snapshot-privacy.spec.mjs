@@ -235,8 +235,8 @@ test("Feedback uses readable glass in both tabs and a solid high-contrast fallba
     background: "rgba(251, 250, 246, 0.74)",
     blur: "blur(10px) saturate(1.2)",
     opacity: "1",
-    headingColor: "rgb(26, 30, 27)",
-    metadataColor: "rgb(26, 30, 27)",
+    headingColor: "rgb(20, 32, 28)",
+    metadataColor: "rgb(20, 32, 28)",
     withinViewport: true,
   };
   expect(await glassStyle()).toEqual(expectedGlass);
@@ -1190,7 +1190,7 @@ test("pencil tools change pen style, undo, clear, and cancel without creating fe
 
   await page.evaluate(() => {
     const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
-    shadow.querySelector('button[aria-label="Coral pen"]').click();
+    shadow.querySelector('button[aria-label="Orange pen"]').click();
     shadow.querySelector('button[aria-label="Bold pen thickness"]').click();
   });
   const drawingSurface = await page.evaluate(() => {
@@ -1209,7 +1209,7 @@ test("pencil tools change pen style, undo, clear, and cancel without creating fe
   await expect.poll(() => page.evaluate(() => {
     const line = document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-markup-canvas polyline");
     return line ? { stroke: line.getAttribute("stroke"), width: Number(line.getAttribute("stroke-width")) } : null;
-  })).toEqual({ stroke: "#e5483c", width: expect.any(Number) });
+  })).toEqual({ stroke: "#f15722", width: expect.any(Number) });
 
   await page.evaluate(() => {
     const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];

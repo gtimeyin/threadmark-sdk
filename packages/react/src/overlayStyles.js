@@ -1,3 +1,5 @@
+import { primitiveStyles } from "./ui/primitiveStyles.js";
+
 export const overlayStyles = `
   .tm-agent { position: fixed; bottom: 84px; right: 20px; pointer-events: auto; z-index: 2147483646; font: 13px/1.4 'Threadmark Geist', sans-serif; color: #14201c; }
   .tm-agent button { font: inherit; cursor: pointer; border: 1px solid #e1ece9; border-radius: var(--tm-radius-button); padding: 8px 12px; background: #FBFAF6; color: #035d47; }
@@ -2422,4 +2424,5 @@ export const overlayStyles = `
       text-overflow: ellipsis;
     }
   }
+${primitiveStyles}
 `;
