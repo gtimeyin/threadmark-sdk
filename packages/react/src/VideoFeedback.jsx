@@ -15,6 +15,7 @@ import { DeleteIcon as Trash2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { HideIcon as VideoOff } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
+import { CameraIcon, ErrorIcon, InfoIcon } from "./icons.jsx";
 import {
   activeEventIndex,
   formatClock,
@@ -71,21 +72,36 @@ function LiveVideo({ stream, className }) {
   return <video ref={ref} className={className} autoPlay muted playsInline aria-hidden="true" />;
 }
 
-function DeviceSelect({ label, devices, value, disabled, onChange }) {
-  if (devices.length < 2) return null;
+function deviceLabel(devices, id, fallback) {
+  return (devices.find((device) => device.deviceId === id) || devices[0])?.label || fallback;
+}
+
+/** One source row (Figma "Record a video", board 02): icon, name, device, and a switch. */
+function SourceRow({ icon, label, on, disabled, devices, deviceId, fallbackDevice, problem, onToggle, onDevice }) {
+  const switchId = useId();
   return (
-    <label className="tm-video-setup__device">
-      <span className="tm-sr-only">{label}</span>
-      <select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
-        {devices.map((device) => (
-          <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
-        ))}
-      </select>
-    </label>
+    <div className={`tm-video-source${problem ? " has-problem" : ""}`}>
+      <span className="tm-video-source__icon" aria-hidden="true">{icon}</span>
+      <span className="tm-video-source__text">
+        <label htmlFor={switchId}>{label}</label>
+        {problem ? <small className="is-problem">{problem}</small>
+          : devices.length > 1 ? (
+            <span className="tm-video-source__select">
+              <select aria-label={`${label} device`} value={deviceId} disabled={disabled || !on} onChange={(event) => onDevice(event.target.value)}>
+                {devices.map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label}</option>)}
+              </select>
+            </span>
+          ) : <small>{deviceLabel(devices, deviceId, fallbackDevice)}</small>}
+      </span>
+      <button id={switchId} type="button" role="switch" aria-checked={on} disabled={disabled}
+        className={`tm-video-switch${on ? " is-on" : ""}`} onClick={onToggle}>
+        <span aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
-/** In-page setup card: capture mode, camera and microphone, then Start recording. */
+/** In-page setup card: what to record, microphone and camera, then Start recording (board 02, 13a and 16a-b). */
 export function VideoSetupPanel({ setup, maxDurationMs, blurredCount = 0, onBlur, onChange, onStart, onCancel }) {
   const headingId = useId();
   const statusId = useId();
@@ -94,9 +110,10 @@ export function VideoSetupPanel({ setup, maxDurationMs, blurredCount = 0, onBlur
   const hasCameraPreview = setup.camera && setup.previewStream?.getVideoTracks?.().length > 0;
   const nothingToRecord = setup.mode === "voice" && !setup.camera && !setup.microphone;
   const limit = formatClock(maxDurationMs);
+  const minutes = maxDurationMs >= 60000 && maxDurationMs % 60000 === 0 ? `${maxDurationMs / 60000} minute${maxDurationMs === 60000 ? "" : "s"}` : limit;
   const hint = setup.mode === "tab"
-    ? `Your browser will ask to share this tab. Everything visible in it is recorded, up to ${limit}.`
-    : `Records your ${setup.camera ? "voice and camera" : "voice"} with the cursor path, replayed over the page. Up to ${limit}.`;
+    ? "Your browser will ask to share this tab. Everything visible in it is recorded."
+    : `Your ${setup.camera && setup.microphone ? "voice and camera" : setup.camera ? "camera" : "voice"} and cursor play back over the page.`;
 
   useEffect(() => {
     panelRef.current?.querySelector(".tm-video-start")?.focus();
@@ -112,9 +129,10 @@ export function VideoSetupPanel({ setup, maxDurationMs, blurredCount = 0, onBlur
       aria-describedby={statusId}
     >
       <header className="tm-video-setup__header">
-        <strong id={headingId}>Record video feedback</strong>
-        <button type="button" className="tm-video-icon-button" aria-label="Close video recorder" onClick={onCancel}>
-          <X {...iconProps} />
+        <span className="tm-video-setup__dot" aria-hidden="true" />
+        <strong id={headingId}>Record a video</strong>
+        <button type="button" className="tm-video-setup__esc" aria-label="Close video recorder" title="Back to Comment (Esc)" onClick={onCancel}>
+          <kbd className="tm-ui-key">Esc</kbd>
         </button>
       </header>
 
@@ -143,76 +161,51 @@ export function VideoSetupPanel({ setup, maxDurationMs, blurredCount = 0, onBlur
         </button>
       </div>
 
-      <div className="tm-video-setup__preview">
-        {hasCameraPreview
-          ? <LiveVideo stream={setup.previewStream} className="tm-video-setup__camera" />
-          : (
-            <span className="tm-video-setup__camera tm-video-setup__camera--off" aria-hidden="true">
-              <VideoOff {...iconProps} />
-            </span>
-          )}
-        <div className="tm-video-setup__sources">
-          <div className="tm-video-setup__source">
-            <button
-              type="button"
-              className={`tm-video-toggle${setup.camera ? " is-on" : ""}`}
-              aria-pressed={setup.camera}
-              disabled={busy}
-              onClick={() => onChange({ camera: !setup.camera })}
-            >
-              {setup.camera ? <Video {...iconProps} /> : <VideoOff {...iconProps} />}
-              {setup.camera ? "Camera on" : "Camera off"}
-            </button>
-            <DeviceSelect
-              label="Camera"
-              devices={setup.devices.cameras}
-              value={setup.cameraDeviceId}
-              disabled={busy || !setup.camera}
-              onChange={(cameraDeviceId) => onChange({ cameraDeviceId })}
-            />
-          </div>
-          <div className="tm-video-setup__source">
-            <button
-              type="button"
-              className={`tm-video-toggle${setup.microphone ? " is-on" : ""}`}
-              aria-pressed={setup.microphone}
-              disabled={busy}
-              onClick={() => onChange({ microphone: !setup.microphone })}
-            >
-              {setup.microphone ? <Mic {...iconProps} /> : <MicOff {...iconProps} />}
-              {setup.microphone ? "Microphone on" : "Microphone off"}
-            </button>
-            <DeviceSelect
-              label="Microphone"
-              devices={setup.devices.microphones}
-              value={setup.microphoneDeviceId}
-              disabled={busy || !setup.microphone}
-              onChange={(microphoneDeviceId) => onChange({ microphoneDeviceId })}
-            />
-          </div>
-        </div>
+      <div className="tm-video-setup__sources">
+        <SourceRow
+          icon={<Mic {...iconProps} />}
+          label="Microphone"
+          on={setup.microphone}
+          disabled={busy}
+          devices={setup.devices.microphones}
+          deviceId={setup.microphoneDeviceId}
+          fallbackDevice="Default microphone"
+          onToggle={() => onChange({ microphone: !setup.microphone })}
+          onDevice={(microphoneDeviceId) => onChange({ microphoneDeviceId })}
+        />
+        <SourceRow
+          icon={hasCameraPreview ? <LiveVideo stream={setup.previewStream} className="tm-video-setup__camera" /> : <CameraIcon {...iconProps} />}
+          label="Camera"
+          on={setup.camera}
+          disabled={busy}
+          devices={setup.devices.cameras}
+          deviceId={setup.cameraDeviceId}
+          fallbackDevice="Default camera"
+          onToggle={() => onChange({ camera: !setup.camera })}
+          onDevice={(cameraDeviceId) => onChange({ cameraDeviceId })}
+        />
       </div>
 
-      <p id={statusId} className={`tm-video-setup__hint${setup.error ? " is-error" : ""}`} aria-live="polite">
-        {setup.error || (setup.status === "requesting" ? "Waiting for camera and microphone access…" : hint)}
-      </p>
-
-      <footer className="tm-video-setup__actions">
-        <button type="button" className="tm-cancel" aria-keyshortcuts="Escape" onClick={onCancel}>Back to Comment</button>
-        {onBlur && setup.mode === "tab" && (
-          <button type="button" className="tm-cancel tm-video-setup__blur" disabled={busy} onClick={onBlur}>
-            <EyeOff {...iconProps} />
+      <div id={statusId} className={`tm-video-setup__hint${setup.error ? " is-error" : ""}`} aria-live="polite">
+        {setup.error ? <ErrorIcon {...iconProps} /> : <InfoIcon {...iconProps} />}
+        <p>{setup.error || (setup.status === "requesting" ? "Waiting for camera and microphone access…" : hint)}</p>
+        {onBlur && setup.mode === "tab" && !setup.error && (
+          <button type="button" className="tm-video-setup__blur" disabled={busy} onClick={onBlur}>
             {blurredCount ? `${blurredCount} blurred` : "Blur parts of the page"}
           </button>
         )}
+      </div>
+
+      <footer className="tm-video-setup__actions">
+        <span className="tm-video-setup__limit">Up to {minutes}</span>
         <button
           type="button"
           className="tm-video-start"
           disabled={busy || nothingToRecord}
           onClick={onStart}
         >
-          <Circle {...iconProps} />
-          {setup.status === "starting" ? "Starting…" : "Start recording"}
+          {setup.status === "starting" ? "Starting…" : setup.mode === "voice" && !setup.microphone ? "Record without voice" : "Start recording"}
+          <kbd className="tm-ui-key" aria-hidden="true">↵</kbd>
         </button>
       </footer>
     </section>

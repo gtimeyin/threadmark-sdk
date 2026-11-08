@@ -217,8 +217,8 @@ test("a declined tab share falls back to voice + cursor, which replays over the 
   await expect(page.locator(".tm-video-setup__hint")).toHaveText(/Tab sharing was declined/);
   await expect(page.getByRole("radio", { name: "Voice + cursor" })).toHaveAttribute("aria-checked", "true");
 
-  await page.getByRole("button", { name: "Camera on" }).click();
-  await expect(page.getByRole("button", { name: "Camera off" })).toBeVisible();
+  await page.getByRole("switch", { name: "Camera" }).click();
+  await expect(page.getByRole("switch", { name: "Camera" })).toHaveAttribute("aria-checked", "false");
   await expect(page.locator(".tm-video-start")).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.__mediaRequests.at(-1))).toEqual({ kind: "user", video: false, audio: true });
 
@@ -292,7 +292,7 @@ test("a running recording ignores Escape and needs a second step to discard or r
 test("dismissing an unposted video asks first, and the duration limit stops the recording", async ({ page }) => {
   await mountFixture(page, "videomax=5000");
   await openVideoSetup(page);
-  await expect(page.locator(".tm-video-setup__hint")).toContainText("up to 0:05");
+  await expect(page.locator(".tm-video-setup__limit")).toHaveText("Up to 0:05");
   await page.locator(".tm-video-start").click();
   await expect(page.locator(".tm-video-recorder__limit")).toHaveText("/ 0:05");
   await expect(page.locator(".tm-popover")).toBeVisible({ timeout: 10_000 });
