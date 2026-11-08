@@ -50,7 +50,7 @@ test("declares a side-effect-free React package with external peer dependencies"
   assert.match(packageJson.peerDependencies?.["react-dom"] || "", /19/);
   assert.equal(packageJson.dependencies?.react, undefined);
   assert.equal(packageJson.dependencies?.["react-dom"], undefined);
-  assert.equal(packageJson.dependencies?.["@solar-icons/react"], "2.3.3");
+  assert.equal(packageJson.dependencies?.["@solar-icons/react"], undefined);
   assert.equal(packageJson.dependencies?.["lucide-react"], undefined);
 });
 
@@ -236,12 +236,13 @@ test("the browser bundle preserves its client boundary and external React import
   const graph = await collectBuiltModuleGraph(resolvePackagePath("./dist/index.js"));
   assert.ok(graph.bareImports.has("react"));
   assert.ok(graph.bareImports.has("react-dom"));
-  assert.ok([...graph.bareImports].some(name => name.startsWith("@solar-icons/react/linear/")));
+  assert.ok(![...graph.bareImports].some(name => name.startsWith("@solar-icons/")));
 });
 
-test("the review chrome uses Solar Linear components instead of authored icon paths", async () => {
+test("the review chrome draws Threadmark brand icons instead of authored icon paths", async () => {
   const source = await readThreadmarkSource();
-  assert.match(source, /from "@solar-icons\/react\/linear\//);
+  assert.match(source, /from "\.\/icons\.jsx"/);
+  assert.doesNotMatch(source, /@solar-icons/);
   assert.doesNotMatch(source, /<(?:path|circle|rect|line|polygon)\b/);
 });
 
@@ -259,13 +260,16 @@ test("screenshot markup stays in context instead of opening a modal editor", asy
   assert.doesNotMatch(styles, /\.tm-markup-(?:shell|editor)\b/);
 });
 
-test("action buttons preserve the Figma component token contract", async () => {
+test("action buttons follow the brand token contract (Lime action, 6px buttons, Orange focus)", async () => {
   const styles = await readFile(resolvePackagePath("./src/overlayStyles.js"), "utf8");
 
-  assert.match(styles, /--tm-action-primary:\s*#5cc49a/);
-  assert.match(styles, /--tm-action-primary-hover:\s*#74d0aa/);
+  assert.match(styles, /--tm-action-primary:\s*#e0f354/);
+  assert.match(styles, /--tm-action-primary-hover:\s*#e8f67a/);
+  assert.match(styles, /--tm-focus:\s*#f15722/);
+  assert.match(styles, /--tm-radius-button:\s*6px/);
+  assert.match(styles, /--tm-radius-popover:\s*16px/);
   assert.match(styles, /--tm-size-action:\s*36px/);
-  assert.match(styles, /--tm-radius-9:\s*9px/);
+  assert.match(styles, /--tm-radius-9:\s*6px/);
   assert.match(styles, /\.tm-submit\s*\{[^}]*background:\s*var\(--tm-action-primary\)/s);
   assert.match(styles, /font-size:\s*13px;[^}]*font-weight:\s*600;[^}]*line-height:\s*18px/s);
 });
@@ -305,7 +309,7 @@ test("interaction capture stays in-page and exposes a privacy-safe replay trace"
   assert.match(declarations, /ThreadmarkInteractionCapture/);
 });
 
-test("video feedback keeps media access in one module and its UI on Solar Linear icons", async () => {
+test("video feedback keeps media access in one module and its UI on brand icons", async () => {
   const [source, videoUi, media, declarations] = await Promise.all([
     readThreadmarkSource(),
     readFile(resolvePackagePath("./src/VideoFeedback.jsx"), "utf8"),
@@ -317,7 +321,7 @@ test("video feedback keeps media access in one module and its UI on Solar Linear
   assert.match(media, /getDisplayMedia\(preferred\)/);
   assert.match(media, /preferCurrentTab: true/);
   assert.match(source, /label="Record a video"/);
-  assert.match(videoUi, /from "@solar-icons\/react\/linear\//);
+  assert.match(videoUi, /from "\.\/icons\.jsx"/);
   assert.doesNotMatch(videoUi, /<(?:svg|path|circle|rect|line|polygon)\b/);
   assert.match(declarations, /videoRecording\?: boolean \| ThreadmarkVideoRecordingOptions/);
   assert.match(declarations, /ThreadmarkVideoCapture/);

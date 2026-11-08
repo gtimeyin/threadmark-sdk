@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CursorIcon as MousePointer2 } from '@solar-icons/react/linear/cursor';
+import { SelectIcon as MousePointer2 } from "./icons.jsx";
 const colors = ['#0B4F3A', '#6550A1', '#216BA5', '#9A5B16', '#AC3863'];
 const colorFor = id => colors[Array.from(id).reduce((n, ch) => n + ch.charCodeAt(0), 0) % colors.length];
 

@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { SoundwaveIcon as AudioLines } from "@solar-icons/react/linear/soundwave";
-import { RecordCircleIcon as Circle } from "@solar-icons/react/linear/record-circle";
-import { EyeClosedIcon as EyeOff } from "@solar-icons/react/linear/eye-closed";
-import { MicrophoneIcon as Mic } from "@solar-icons/react/linear/microphone";
-import { VolumeCrossIcon as MicOff } from "@solar-icons/react/linear/volume-cross";
-import { MonitorIcon as Monitor } from "@solar-icons/react/linear/monitor";
-import { CursorIcon as MousePointer2 } from "@solar-icons/react/linear/cursor";
-import { PauseIcon as Pause } from "@solar-icons/react/linear/pause";
-import { PenIcon as PenLine } from "@solar-icons/react/linear/pen";
-import { PlayIcon as Play } from "@solar-icons/react/linear/play";
-import { RestartIcon as RotateCcw } from "@solar-icons/react/linear/restart";
-import { StopIcon as Square } from "@solar-icons/react/linear/stop";
-import { TrashBinTrashIcon as Trash2 } from "@solar-icons/react/linear/trash-bin-trash";
-import { VideocameraIcon as Video } from "@solar-icons/react/linear/videocamera";
-import { VideocameraOffIcon as VideoOff } from "@solar-icons/react/linear/videocamera-off";
-import { CloseIcon as X } from "@solar-icons/react/linear/close";
+import { TranscriptIcon as AudioLines } from "./icons.jsx";
+import { RecordIcon as Circle } from "./icons.jsx";
+import { HideIcon as EyeOff } from "./icons.jsx";
+import { MicrophoneIcon as Mic } from "./icons.jsx";
+import { HideIcon as MicOff } from "./icons.jsx";
+import { DesktopIcon as Monitor } from "./icons.jsx";
+import { SelectIcon as MousePointer2 } from "./icons.jsx";
+import { PauseIcon as Pause } from "./icons.jsx";
+import { SketchIcon as PenLine } from "./icons.jsx";
+import { PlayIcon as Play } from "./icons.jsx";
+import { RefreshIcon as RotateCcw } from "./icons.jsx";
+import { StopIcon as Square } from "./icons.jsx";
+import { DeleteIcon as Trash2 } from "./icons.jsx";
+import { VideoIcon as Video } from "./icons.jsx";
+import { HideIcon as VideoOff } from "./icons.jsx";
+import { CloseIcon as X } from "./icons.jsx";
 import {
   activeEventIndex,
   formatClock,
@@ -553,7 +553,7 @@ export function BlurPicker({ shadowHost, chosen, onToggle, onDone }) {
   );
 }
 
-const STROKE_COLOR = "#e5483c";
+const STROKE_COLOR = "#f15722";
 
 /** Sizes a full-viewport canvas for the screen's pixel ratio and returns its 2D context in CSS pixels. */
 function viewportContext(canvas) {

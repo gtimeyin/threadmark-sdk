@@ -13,12 +13,12 @@ export const THEME_PROPERTIES = {
 };
 
 export const DEFAULT_THEME = Object.freeze({
-  accent: "#1a1e1b",
+  accent: "#14201c",
   accentText: "#ffffff",
   surface: "#ffffff",
-  text: "#1a1e1b",
-  muted: "#5f625b",
-  border: "#deddd7",
+  text: "#14201c",
+  muted: "#5e6662",
+  border: "#e9e8e3",
 });
 
 // Theme values are colours, lengths and font names. Anything that could load a resource (url(),

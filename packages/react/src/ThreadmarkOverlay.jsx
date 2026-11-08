@@ -1,48 +1,48 @@
-import { SmileCircleIcon } from "@solar-icons/react/linear/smile-circle";
+import { ReactIcon as SmileCircleIcon } from "./icons.jsx";
 import { REACTIONS } from "./reactions.js";
 import { VirtualCommentList } from "./VirtualCommentList.jsx";
 import { Suspense, lazy, memo, useLayoutEffect, useSyncExternalStore, useMemo, useCallback, useEffect, useRef, useState } from "react";
-import { VideoFramePlayHorizontalIcon as MonitorPlay } from "@solar-icons/react/linear/video-frame-play-horizontal";
-import { BotIcon as Bot } from "@solar-icons/react/linear/bot";
-import { ChecklistIcon as ListChecks } from "@solar-icons/react/linear/checklist";
-import { LoaderIcon as LoaderCircle } from "@solar-icons/react/linear/loader";
-import { ChartIcon as ChartNoAxesColumn } from "@solar-icons/react/linear/chart";
-import { QuestionCircleIcon as CircleHelp } from "@solar-icons/react/linear/question-circle";
-import { AddIcon as PlusIcon } from "@solar-icons/react/linear/add";
-import { CopyCheckIcon as CopyCheck } from "@solar-icons/react/linear/copy-check";
-import { AltArrowDownIcon as ChevronDown } from "@solar-icons/react/linear/alt-arrow-down";
-import { CheckIcon as Check } from "@solar-icons/react/linear/check";
-import { ArrowUpIcon as ArrowUp } from "@solar-icons/react/linear/arrow-up";
-import { CheckCircleIcon as CircleCheck } from "@solar-icons/react/linear/check-circle";
-import { MenuDotsIcon as Ellipsis } from "@solar-icons/react/linear/menu-dots";
-import { LinkIcon as Link2 } from "@solar-icons/react/linear/link";
-import { MapPointIcon as MapPinPen } from "@solar-icons/react/linear/map-point";
-import { CopyAddIcon as CopyPlus } from "@solar-icons/react/linear/copy-add";
-import { GitDiffIcon as GitCompare } from "@solar-icons/react/linear/git-diff";
-import { CursorSquareIcon as MousePointerClick } from "@solar-icons/react/linear/cursor-square";
-import { CursorIcon as Cursor } from "@solar-icons/react/linear/cursor";
-import { EyeIcon as Eye } from "@solar-icons/react/linear/eye";
-import { EyeClosedIcon as EyeOff } from "@solar-icons/react/linear/eye-closed";
-import { GripVerticalIcon as GripVertical } from "@solar-icons/react/linear/grip-vertical";
-import { GitBranchIcon as GitBranch } from "@solar-icons/react/linear/git-branch";
-import { HistoryIcon as History } from "@solar-icons/react/linear/history";
-import { ArrowToTopRightIcon as ExternalLink } from "@solar-icons/react/linear/arrow-to-top-right";
-import { ChatSquareIcon as MessageSquare } from "@solar-icons/react/linear/chat-square";
-import { DialogIcon as MessagesSquare } from "@solar-icons/react/linear/dialog";
-import { PauseIcon as Pause } from "@solar-icons/react/linear/pause";
-import { Pen2Icon as Pencil } from "@solar-icons/react/linear/pen-2";
-import { PlayIcon as Play } from "@solar-icons/react/linear/play";
-import { RestartIcon as RotateCcw } from "@solar-icons/react/linear/restart";
-import { MagnifierIcon as Search } from "@solar-icons/react/linear/magnifier";
-import { ShieldCheckIcon as ShieldCheck } from "@solar-icons/react/linear/shield-check";
-import { StopIcon as Square } from "@solar-icons/react/linear/stop";
-import { FilterIcon as Filter } from "@solar-icons/react/linear/filter";
-import { TrashBinTrashIcon as Trash2 } from "@solar-icons/react/linear/trash-bin-trash";
-import { DangerTriangleIcon as TriangleAlert } from "@solar-icons/react/linear/danger-triangle";
-import { UndoLeftIcon as Undo2 } from "@solar-icons/react/linear/undo-left";
-import { VideocameraIcon as Video } from "@solar-icons/react/linear/videocamera";
-import { CloseIcon as X } from "@solar-icons/react/linear/close";
-import { MapArrowRightIcon as TourIcon } from "@solar-icons/react/linear/map-arrow-right";
+import { ReplayIcon as MonitorPlay } from "./icons.jsx";
+import { AgentIcon as Bot } from "./icons.jsx";
+import { NextStepsIcon as ListChecks } from "./icons.jsx";
+import { SpinnerIcon as LoaderCircle } from "./icons.jsx";
+import { ResultsIcon as ChartNoAxesColumn } from "./icons.jsx";
+import { QuestionIcon as CircleHelp } from "./icons.jsx";
+import { AddIcon as PlusIcon } from "./icons.jsx";
+import { CopyIcon as CopyCheck } from "./icons.jsx";
+import { ChevronDownIcon as ChevronDown } from "./icons.jsx";
+import { CheckIcon as Check } from "./icons.jsx";
+import { ArrowUpIcon as ArrowUp } from "./icons.jsx";
+import { ResolveIcon as CircleCheck } from "./icons.jsx";
+import { MoreIcon as Ellipsis } from "./icons.jsx";
+import { LinkIcon as Link2 } from "./icons.jsx";
+import { RepinIcon as MapPinPen } from "./icons.jsx";
+import { CopyIcon as CopyPlus } from "./icons.jsx";
+import { BeforeAndAfterIcon as GitCompare } from "./icons.jsx";
+import { SelectIcon as MousePointerClick } from "./icons.jsx";
+import { SelectIcon as Cursor } from "./icons.jsx";
+import { PreviewIcon as Eye } from "./icons.jsx";
+import { HideIcon as EyeOff } from "./icons.jsx";
+import { DragIcon as GripVertical } from "./icons.jsx";
+import { BranchIcon as GitBranch } from "./icons.jsx";
+import { HistoryIcon as History } from "./icons.jsx";
+import { ExternalIcon as ExternalLink } from "./icons.jsx";
+import { CommentIcon as MessageSquare } from "./icons.jsx";
+import { ThreadsIcon as MessagesSquare } from "./icons.jsx";
+import { PauseIcon as Pause } from "./icons.jsx";
+import { EditIcon as Pencil } from "./icons.jsx";
+import { PlayIcon as Play } from "./icons.jsx";
+import { RefreshIcon as RotateCcw } from "./icons.jsx";
+import { SearchIcon as Search } from "./icons.jsx";
+import { PrivateAreaIcon as ShieldCheck } from "./icons.jsx";
+import { StopIcon as Square } from "./icons.jsx";
+import { FilterIcon as Filter } from "./icons.jsx";
+import { DeleteIcon as Trash2 } from "./icons.jsx";
+import { WarningIcon as TriangleAlert } from "./icons.jsx";
+import { ReopenIcon as Undo2 } from "./icons.jsx";
+import { VideoIcon as Video } from "./icons.jsx";
+import { CloseIcon as X } from "./icons.jsx";
+import { TourIcon } from "./icons.jsx";
 import { computePopoverPosition } from "./popover.js";
 import {
   addMarkupStroke,
@@ -751,7 +751,6 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
         {annotations.length > 0 && <button type="button" onClick={() => { setQuery(""); setReviewerId(""); setFilter("all"); setStatus("all"); setPage(""); setBuild(""); }}>Clear filters</button>}
       </div>}
       </>}
-      <p className="tm-icon-credit"><a href="https://www.figma.com/community/file/1166831539721848736" target="_blank" rel="noreferrer">Solar icons by 480 Design</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a></p>
     </aside>
   );
 }
@@ -775,7 +774,7 @@ function SnapshotPreview({ selection, readOnly = false, onRetry }) {
               : <img src={snapshot.previewUrl} alt="Preview of the selected page region" />}
             {snapshot.metadata.capture?.pin && <span aria-label="Original pin location" style={{ position: "absolute",
               left: `${snapshot.metadata.capture.pin.x * 100}%`, top: `${snapshot.metadata.capture.pin.y * 100}%`,
-              width: 14, height: 14, borderRadius: "50%", background: "#e5483c", border: "2px solid white", transform: "translate(-50%, -50%)" }} />}
+              width: 14, height: 14, borderRadius: "50%", background: "#f15722", border: "2px solid white", transform: "translate(-50%, -50%)" }} />}
           </div>
         </>
       )}
@@ -993,9 +992,9 @@ function PageVersionList({ versions, onSelect }) {
 }
 
 const MARKUP_COLORS = [
-  { value: "#e5483c", label: "Coral" },
+  { value: "#f15722", label: "Orange" },
   { value: "#f2c94c", label: "Yellow" },
-  { value: "#5cc49a", label: "Green" },
+  { value: "#e0f354", label: "Green" },
   { value: "#4c8dff", label: "Blue" },
   { value: "#ffffff", label: "White" },
 ];

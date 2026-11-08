@@ -3,12 +3,12 @@
 export const tourStyles = `
 :host { all: initial; font-family: inherit; }
 .tmt {
-  --a: var(--tm-tour-accent, #1a1e1b);
+  --a: var(--tm-tour-accent, #14201c);
   --at: var(--tm-tour-accent-text, #fff);
   --s: var(--tm-tour-surface, #fff);
-  --t: var(--tm-tour-text, #1a1e1b);
-  --m: var(--tm-tour-muted, #5f625b);
-  --b: var(--tm-tour-border, #deddd7);
+  --t: var(--tm-tour-text, #14201c);
+  --m: var(--tm-tour-muted, #5e6662);
+  --b: var(--tm-tour-border, #e9e8e3);
   --r: var(--tm-tour-radius, 12px);
   font: 14px/1.45 var(--tm-tour-font, inherit);
   color: var(--t);
@@ -16,17 +16,17 @@ export const tourStyles = `
 }
 .tmt *, .tmt *::before, .tmt *::after { box-sizing: border-box; }
 .tmt-spot {
-  position: fixed; z-index: 2147483000; pointer-events: none; border-radius: 10px;
-  box-shadow: 0 0 0 3px var(--a), 0 0 0 9999px rgba(17, 21, 19, .45);
+  position: fixed; z-index: 2147483000; pointer-events: none; border-radius: var(--tm-radius-button);
+  box-shadow: 0 0 0 3px var(--a), 0 0 0 9999px rgba(14, 23, 20, .45);
   transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease;
 }
 .tmt-spot[data-style="tooltip"] { box-shadow: 0 0 0 3px var(--a); }
-.tmt-backdrop { position: fixed; inset: 0; z-index: 2147483000; background: rgba(17, 21, 19, .45); }
+.tmt-backdrop { position: fixed; inset: 0; z-index: 2147483000; background: rgba(14, 23, 20, .45); }
 .tmt-card {
   position: fixed; z-index: 2147483001; width: min(340px, calc(100vw - 24px));
   display: flex; flex-direction: column; gap: 10px; padding: 16px;
   background: var(--s); color: var(--t); border: 1px solid var(--b); border-radius: var(--r);
-  box-shadow: 0 16px 40px rgba(17, 21, 19, .22);
+  box-shadow: 0 16px 40px rgba(14, 23, 20, .22);
   animation: tmt-in .18s ease-out;
 }
 .tmt-card[data-mode="center"] { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100vw - 24px)); }
@@ -48,7 +48,7 @@ export const tourStyles = `
 .tmt-actions { display: flex; gap: 8px; margin-left: auto; }
 .tmt button, .tmt textarea { font: inherit; color: inherit; }
 .tmt-btn {
-  min-height: 36px; padding: 0 14px; border-radius: 9px; cursor: pointer;
+  min-height: 36px; padding: 0 14px; border-radius: var(--tm-radius-button); cursor: pointer;
   border: 1px solid var(--b); background: transparent; font-weight: 500;
 }
 .tmt-btn[data-primary] { border-color: var(--a); background: var(--a); color: var(--at); font-weight: 600; }
@@ -56,11 +56,11 @@ export const tourStyles = `
 .tmt button:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
 .tmt-hint { margin: 0; font-size: 13px; font-weight: 500; color: var(--t); }
 .tmt-note { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--b); }
-.tmt-note textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--b); border-radius: 8px; background: var(--s); resize: vertical; }
+.tmt-note textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--b); border-radius: var(--tm-radius-button); background: var(--s); resize: vertical; }
 .tmt-bar {
   position: fixed; z-index: 2147483001; left: 16px; bottom: 16px; max-width: calc(100vw - 32px);
   display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px;
-  background: var(--t); color: var(--s); border-radius: var(--r); box-shadow: 0 12px 30px rgba(17, 21, 19, .3);
+  background: var(--t); color: var(--s); border-radius: var(--r); box-shadow: 0 12px 30px rgba(14, 23, 20, .3);
 }
 .tmt-bar .tmt-btn { border-color: transparent; background: var(--s); color: var(--t); }
 .tmt-spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: tmt-spin .8s linear infinite; }

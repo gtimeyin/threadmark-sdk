@@ -886,7 +886,7 @@ Use **Your backend** to persist SDK callbacks in your own infrastructure, or exp
 
 ## Icon credits
 
-Solar Linear icons by [480 Design](https://www.figma.com/community/file/1166831539721848736), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), via `@solar-icons/react` (MIT). Icon sizing and colors follow Threadmark’s interface. The open-pin logo is a separate Threadmark brand asset.
+Icons are Threadmark’s own brand set (24px grid, 1.5px stroke), generated into `src/icons.jsx` by `scripts/build-icons.mjs`. The open-pin logo is a separate Threadmark brand asset.
 
 ### Capture environment
 

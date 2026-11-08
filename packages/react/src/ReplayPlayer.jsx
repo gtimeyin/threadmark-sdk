@@ -1,7 +1,7 @@
 import { useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
-import { PauseIcon as Pause } from "@solar-icons/react/linear/pause";
-import { PlayIcon as Play } from "@solar-icons/react/linear/play";
-import { CloseIcon as X } from "@solar-icons/react/linear/close";
+import { PauseIcon as Pause } from "./icons.jsx";
+import { PlayIcon as Play } from "./icons.jsx";
+import { CloseIcon as X } from "./icons.jsx";
 import { buildReplayTimeline, graphqlLabel, isFailedRequest } from "./replayTimeline.js";
 
 import replayerStyles from 'rrweb/dist/style.css?inline';

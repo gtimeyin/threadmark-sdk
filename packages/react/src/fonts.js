@@ -8,7 +8,6 @@ import geist500 from "@fontsource/geist/files/geist-latin-500-normal.woff2?inlin
 import geist600 from "@fontsource/geist/files/geist-latin-600-normal.woff2?inline";
 import geist700 from "@fontsource/geist/files/geist-latin-700-normal.woff2?inline";
 import geistMono400 from "@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2?inline";
-import bricolage600 from "@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-600-normal.woff2?inline";
 
 const FACES = [
   ["Threadmark Geist", geist400, "400"],
@@ -16,7 +15,6 @@ const FACES = [
   ["Threadmark Geist", geist600, "600"],
   ["Threadmark Geist", geist700, "700"],
   ["Threadmark Geist Mono", geistMono400, "400"],
-  ["Threadmark Bricolage", bricolage600, "600"],
 ];
 
 let registered = false;

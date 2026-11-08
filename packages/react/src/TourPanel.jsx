@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { AltArrowDownIcon as ChevronDown } from "@solar-icons/react/linear/alt-arrow-down";
-import { AltArrowUpIcon as ChevronUp } from "@solar-icons/react/linear/alt-arrow-up";
-import { ChatSquareIcon as Chat } from "@solar-icons/react/linear/chat-square";
-import { ClipboardCopyIcon as ClipboardCopy } from "@solar-icons/react/linear/clipboard-copy";
-import { CloseIcon as X } from "@solar-icons/react/linear/close";
-import { DisketteIcon as Diskette } from "@solar-icons/react/linear/diskette";
-import { PlayIcon as Play } from "@solar-icons/react/linear/play";
-import { TrashBinTrashIcon as Trash } from "@solar-icons/react/linear/trash-bin-trash";
+import { ChevronDownIcon as ChevronDown } from "./icons.jsx";
+import { ChevronUpIcon as ChevronUp } from "./icons.jsx";
+import { CommentIcon as Chat } from "./icons.jsx";
+import { CopyIcon as ClipboardCopy } from "./icons.jsx";
+import { CloseIcon as X } from "./icons.jsx";
+import { TourFileIcon as Diskette } from "./icons.jsx";
+import { PlayIcon as Play } from "./icons.jsx";
+import { DeleteIcon as Trash } from "./icons.jsx";
 
 import { resolveStableTarget } from "./resolveStableTarget.js";
 import {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { BotIcon as Bot } from '@solar-icons/react/linear/bot';
-import { CloseIcon as X } from '@solar-icons/react/linear/close';
+import { AgentIcon as Bot } from "./icons.jsx";
+import { CloseIcon as X } from "./icons.jsx";
 import { collectPageReview } from './pageReview.js';
 import { restoreTargetDescriptor } from './target.js';
 import { captureRegionSnapshot } from './snapshot.js';

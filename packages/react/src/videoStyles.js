@@ -7,7 +7,7 @@ export const videoStyles = `
     display: inline-grid;
     place-items: center;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     padding: 0;
     background: transparent;
     color: var(--tm-text-soft);
@@ -36,7 +36,7 @@ export const videoStyles = `
     display: grid;
     gap: 12px;
     border: 1px solid rgba(255,255,255,.12);
-    border-radius: 14px;
+    border-radius: var(--tm-radius-panel);
     padding: 12px;
     background: rgba(26,31,28,.97);
     color: var(--tm-text-primary);
@@ -57,7 +57,7 @@ export const videoStyles = `
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 4px;
-    border-radius: 10px;
+    border-radius: var(--tm-radius-button);
     padding: 3px;
     background: var(--tm-ground);
   }
@@ -68,7 +68,7 @@ export const videoStyles = `
     justify-content: center;
     gap: 7px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     background: transparent;
     color: var(--tm-text-secondary);
     cursor: pointer;
@@ -107,7 +107,7 @@ export const videoStyles = `
     align-items: center;
     gap: 7px;
     border: 1px solid var(--tm-line);
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     padding: 0 10px;
     background: transparent;
     color: var(--tm-text-secondary);
@@ -123,7 +123,7 @@ export const videoStyles = `
     width: 100%;
     height: 28px;
     border: 1px solid var(--tm-line);
-    border-radius: 7px;
+    border-radius: var(--tm-radius-button);
     padding: 0 8px;
     background: var(--tm-ground);
     color: var(--tm-text-soft);
@@ -158,7 +158,7 @@ export const videoStyles = `
     transition: background-color var(--tm-motion-fast) ease, transform var(--tm-motion-fast) var(--tm-ease-standard);
   }
   .tm-video-start:hover:not(:disabled),
-  .tm-video-danger:hover { background: #ffa090; }
+  .tm-video-danger:hover { background: #ff8f66; }
   .tm-video-start:active:not(:disabled),
   .tm-video-danger:active { transform: scale(.97); }
   .tm-video-start:disabled { cursor: not-allowed; opacity: .5; }
@@ -249,9 +249,9 @@ export const videoStyles = `
     top: -18px;
     width: 36px;
     height: 36px;
-    border: 2px solid rgba(229,72,60,.55);
+    border: 2px solid rgba(241, 87, 34,.55);
     border-radius: 50%;
-    background: rgba(229,72,60,.14);
+    background: rgba(241, 87, 34,.14);
     opacity: 0;
     will-change: transform;
   }
@@ -331,7 +331,7 @@ export const videoStyles = `
   .tm-video-preview {
     overflow: hidden;
     border: 1px solid var(--tm-line);
-    border-radius: 11px;
+    border-radius: var(--tm-radius-panel);
     background: var(--tm-raised);
     animation: tm-state-in var(--tm-motion-standard) var(--tm-ease-standard) both;
   }
@@ -353,7 +353,7 @@ export const videoStyles = `
     align-items: center;
     gap: 6px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     padding: 0 10px;
     background: rgba(255,255,255,.08);
     color: var(--tm-text-primary);
@@ -388,7 +388,7 @@ export const videoStyles = `
     align-items: center;
     gap: 7px;
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--tm-radius-button);
     padding: 3px 6px;
     background: transparent;
     color: inherit;
@@ -414,7 +414,7 @@ export const videoStyles = `
     align-items: center;
     gap: 9px;
     border: 1px solid var(--tm-line);
-    border-radius: 11px;
+    border-radius: var(--tm-radius-panel);
     padding: 9px 10px;
     background: var(--tm-raised);
     color: var(--tm-text-primary);
@@ -433,7 +433,7 @@ export const videoStyles = `
   .tm-replay-attachment button {
     height: 28px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     padding: 0 9px;
     background: rgba(255,255,255,.08);
     color: var(--tm-text-primary);
@@ -455,7 +455,7 @@ export const videoStyles = `
     text-align: left;
     transition: background-color var(--tm-motion-fast) ease, border-color var(--tm-motion-fast) ease;
   }
-  .tm-replay-open:hover:not(:disabled) { border-color: var(--tm-line-strong); background: #2b322d; }
+  .tm-replay-open:hover:not(:disabled) { border-color: var(--tm-line-strong); background: #24332d; }
   .tm-replay-open:disabled { cursor: default; opacity: .6; }
   .tm-replay-open:focus-visible,
   .tm-replay-attachment button:focus-visible,
@@ -477,7 +477,7 @@ export const videoStyles = `
   .tm-replay-dialog__scrim {
     position: absolute;
     inset: 0;
-    background: rgba(17, 21, 19, .58);
+    background: rgba(14, 23, 20, .58);
     animation: tm-scrim-in var(--tm-motion-standard) ease both;
   }
   .tm-replay-dialog__panel {
@@ -488,7 +488,7 @@ export const videoStyles = `
     grid-template-rows: auto minmax(0, 1fr);
     overflow: hidden;
     border: 1px solid rgba(255,255,255,.12);
-    border-radius: 16px;
+    border-radius: var(--tm-radius-popover);
     background: var(--tm-surface);
     color: var(--tm-text-primary);
     box-shadow: 0 30px 80px rgba(0,0,0,.4);
@@ -556,7 +556,7 @@ export const videoStyles = `
     min-width: 38px;
     height: 28px;
     border: 1px solid var(--tm-line);
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     background: transparent;
     color: var(--tm-text-primary);
     cursor: pointer;
@@ -579,7 +579,7 @@ export const videoStyles = `
     flex: 1;
     height: 30px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     background: transparent;
     color: var(--tm-text-secondary);
     cursor: pointer;
@@ -606,7 +606,7 @@ export const videoStyles = `
     grid-template-columns: 38px minmax(0, 1fr);
     gap: 8px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     padding: 7px 8px;
     background: transparent;
     color: var(--tm-text-soft);
@@ -672,13 +672,13 @@ export const videoStyles = `
     gap: 2px;
     margin-bottom: 8px;
     border: 1px solid var(--tm-line);
-    border-radius: 9px;
+    border-radius: var(--tm-radius-button);
     padding: 2px;
   }
   .tm-ask-switch button {
     height: 24px;
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--tm-radius-button);
     padding: 0 9px;
     background: transparent;
     color: var(--tm-text-secondary);
@@ -695,7 +695,7 @@ export const videoStyles = `
     min-width: 0;
     height: 30px;
     border: 1px solid var(--tm-line);
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     padding: 0 9px;
     background: var(--tm-raised);
     color: var(--tm-text-primary);
@@ -709,7 +709,7 @@ export const videoStyles = `
     gap: 5px;
     height: 30px;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     padding: 0 8px;
     background: transparent;
     color: var(--tm-text-secondary);
@@ -734,7 +734,7 @@ export const videoStyles = `
     gap: 6px;
     margin: 2px 0 4px 38px;
     border: 1px solid var(--tm-line);
-    border-radius: 11px;
+    border-radius: var(--tm-radius-panel);
     padding: 9px;
     background: var(--tm-raised);
     animation: tm-state-in var(--tm-motion-standard) var(--tm-ease-standard) both;
@@ -753,7 +753,7 @@ export const videoStyles = `
     min-height: 32px;
     overflow: hidden;
     border: 1px solid var(--tm-line);
-    border-radius: 8px;
+    border-radius: var(--tm-radius-button);
     padding: 0 9px;
     background: transparent;
     color: var(--tm-text-primary);
