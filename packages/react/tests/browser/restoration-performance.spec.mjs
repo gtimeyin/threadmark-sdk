@@ -112,9 +112,9 @@ test('mutation bursts debounce, ignored trees stay quiet, immediate rechecks kee
 
 test('React hydration resolves once and fresh host arrays do not restart it', async ({ page }) => {
   await page.evaluate(() => restorationFixture.mount());
-  await expect(page.getByRole('button', { name: /Review page/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ })).toBeVisible();
   expect(await page.evaluate(() => window.__restoreCount)).toBe(0);
-  await page.getByRole('button', { name: /Review page/ }).click();
+  await page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ }).click();
   await expect.poll(() => page.evaluate(() => Object.keys(window.__assessCounts).length)).toBe(60);
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => Object.values(window.__assessCounts))).toEqual(Array(60).fill(1));

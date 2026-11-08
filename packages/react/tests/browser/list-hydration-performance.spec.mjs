@@ -18,11 +18,11 @@ async function load(page, count) {
   await page.route('http://localhost/**', route => route.fulfill({ contentType: 'text/html', body: '<body></body>' }));
   await page.goto('http://localhost/'); await page.addScriptTag({ content: bundle });
   await page.evaluate(count => window.setupListBenchmark(count), count);
-  await expect(page.getByRole('button', { name: `Review page, ${count} comments` })).toBeVisible();
+  await expect(page.getByRole('button', { name: new RegExp(`^(Open feedback|Review page), ${count} comments`) })).toBeVisible();
 }
 async function openList(page) {
-  await page.getByRole('button', { name: /Review page/ }).click();
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  // The bar opens straight into the conversation when there is feedback on the page.
+  await page.getByRole('button', { name: /^Open feedback/ }).click();
   await expect(page.getByRole('complementary', { name: 'Feedback' })).toBeVisible();
 }
 for (const count of [60, 200, 1000]) test(`${count} comments: bounded list DOM and incremental host hydration`, async ({ page }) => {

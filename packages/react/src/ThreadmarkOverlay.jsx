@@ -43,6 +43,7 @@ import { ReopenIcon as Undo2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
 import { TourIcon } from "./icons.jsx";
+import { BarHint, IdleBar } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
 import {
   addMarkupStroke,
@@ -1970,11 +1971,13 @@ function Overlay({
   return (
     <div className="tm-root">
       {mode === "idle" && (
-        <button ref={launcherRef} type="button" className="tm-launcher" onClick={onStart}
-          aria-label={annotations.length ? `Review page, ${annotations.length} comment${annotations.length === 1 ? "" : "s"}` : undefined}>
-          Review page
-          {annotations.length > 0 && <span className="tm-launcher__count" aria-hidden="true">{annotations.length > 99 ? "99+" : annotations.length}</span>}
-        </button>
+        <IdleBar
+          annotations={annotations}
+          route={typeof window === "undefined" ? "/" : window.location.pathname}
+          launcherRef={launcherRef}
+          onOpen={(hasComments) => { onStart(); if (hasComments && !allCommentsOpen) onToggleAllComments(); }}
+          onOpenTools={() => { onStart(); setToolbarMenu("tools"); }}
+        />
       )}
 
       {!["idle", "video-recording", "tour", "tour-preview"].includes(mode) && !markersHidden && !replayingVideo && annotations.map((annotation, index) => (
@@ -2108,13 +2111,7 @@ function Overlay({
               <span>{Math.round(drawRect.width)} × {Math.round(drawRect.height)}</span>
             </div>
           )}
-          {!toolbarMenu && <div className="tm-gesture-hint" aria-hidden="true">
-            {selectedCount >= 2
-              ? `${selectedCount} elements selected`
-              : drawRect
-                ? "Release to annotate this selection"
-                : repinning ? "Click a new element · Escape to cancel repinning" : "Click · select text · drag an area"}
-          </div>}
+
           <div
             className="tm-modebar"
             role="toolbar"
@@ -2124,6 +2121,7 @@ function Overlay({
               top: toolbarPosition.top,
               right: "auto",
               bottom: "auto",
+              margin: 0,
             } : undefined}
           >
             <button
@@ -2138,6 +2136,13 @@ function Overlay({
             >
               <GripIcon />
             </button>
+            <BarHint>
+              {selectedCount >= 2
+                ? `${selectedCount} elements selected`
+                : drawRect
+                  ? "Release to comment on this area"
+                  : repinning ? "Click the new spot for this comment" : "Click anything, or select text"}
+            </BarHint>
             <div className="tm-toolbar-divider" />
             <div className="tm-tool-group tm-toolbar-tools">
               <button ref={toolsTriggerRef} type="button" className={`tm-tool-switch${toolbarMenu === "tools" ? " is-open" : ""}`}

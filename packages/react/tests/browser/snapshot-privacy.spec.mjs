@@ -522,9 +522,12 @@ test("modifier selection creates one ordered multi-target annotation without hos
 
 test("dragging empty space captures one region and keeps its approved evidence beside the comment", async ({ page }) => {
   await mountPickingFixture(page);
+  // Keep the drag clear of the bar, which sits at the bottom centre of the page.
+  await page.locator("#region-space").evaluate((node) => node.scrollIntoView({ block: "center" }));
   const bounds = await page.locator("#region-space").boundingBox();
   const startY = bounds.y + 5;
-  const endY = Math.min(bounds.y + bounds.height - 5, 392);
+  // Stay above the bar, which sits at the bottom centre of the page.
+  const endY = Math.min(bounds.y + bounds.height - 5, 320);
   await page.mouse.move(bounds.x + 32, startY);
   await page.mouse.down();
   await page.mouse.move(bounds.x + 208, endY, { steps: 8 });
@@ -1090,7 +1093,7 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
   await expect(page.getByRole("complementary", { name: "Feedback", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close feedback panel", exact: true }).click();
   await page.getByRole("button", { name: "Close annotations (Esc)", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Review page", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Leave feedback", exact: true })).toBeVisible();
 });
 
 test("pencil markup stays aligned to the selected crop and submits one approved Blob sidecar", async ({ page }) => {

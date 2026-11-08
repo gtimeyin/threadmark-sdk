@@ -40,10 +40,10 @@ async function load(page, source, count) {
   await page.route('http://localhost/**', route => route.fulfill({ contentType: 'text/html', body: '<body></body>' }));
   await page.goto('http://localhost/'); await page.addScriptTag({ content: source });
   await page.evaluate(count => window.setupIdleScroll(count), count);
-  await expect(page.getByRole('button', { name: `Review page, ${count} comments` })).toBeVisible();
+  await expect(page.getByRole('button', { name: new RegExp(`^(Open feedback|Review page), ${count} comments`) })).toBeVisible();
 }
 async function open(page, count) {
-  await page.getByRole('button', { name: /Review page/ }).click();
+  await page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ }).click();
   await expect(page.locator('.tm-marker')).toHaveCount(count);
   await page.waitForTimeout(100);
 }
@@ -95,16 +95,18 @@ test('closing cancels queued work; reopening refreshes changed and removed targe
   await load(page, current, 60); await open(page, 60);
   await page.evaluate(() => window.burstMutations());
   await page.getByRole('button', { name: 'Close annotations (Esc)', exact: true }).click();
-  await expect(page.getByRole('button', { name: /Review page/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ })).toBeVisible();
   await page.waitForTimeout(50);
   await page.evaluate(() => { window.resetPerformanceCounters(); document.getElementById('target-1').remove(); document.getElementById('target-2').textContent = 'Portfolio account 2 updated'; window.burstMutations(); });
   await page.waitForTimeout(350);
   expect(await page.evaluate(() => window.__performanceCounters.assess)).toBe(0);
   expect(await page.evaluate(() => window.__performanceCounters.mutationCallbacks)).toBe(0);
-  await page.getByRole('button', { name: /Review page/ }).click();
+  await page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ }).click();
   await expect(page.locator('.tm-marker--warning')).toHaveCount(2);
   await expect(page.locator('.tm-marker--suggested')).toHaveCount(1);
   expect(await page.evaluate(() => window.__performanceCounters.assess)).toBe(60);
+  // The bar opened the Feedback panel; close it to reach the pins.
+  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
   // A thread remains anchored while scrolling, and only its overlay subscribes to geometry.
   await page.locator('.tm-marker').nth(3).click();
   await expect(page.getByRole('button', { name: 'Cancel comment', exact: true })).toBeVisible();

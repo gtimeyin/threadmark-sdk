@@ -201,6 +201,8 @@ test("records the tab with camera and voice, tracks the cursor, and restores the
   await page.reload({ waitUntil: "load" });
   await expect.poll(() => page.evaluate(() => window.__threadmarkHydrated)).toBe(true);
   await page.locator(".tm-launcher").click();
+  // The bar opens the Feedback panel when there are comments; close it to reach the pin.
+  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
   await page.locator(".tm-marker").first().click();
   await expect(page.locator(".tm-video-preview video")).toHaveCount(1);
   await expect(page.locator(".tm-video-events li")).toHaveCount(saved.video.events.length);

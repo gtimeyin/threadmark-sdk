@@ -24,7 +24,7 @@ test('page scanning bounds findings and excludes protected content and labelled 
 });
 test('requested review posts saved agent discussions, attaches evidence and skips duplicate reruns', async ({ page }) => {
   await open(page);
-  await page.getByRole('button', { name: 'Review page', exact: true }).click();
+  await page.getByRole('button', { name: 'Leave feedback', exact: true }).click();
   await page.getByRole('button', { name: 'Ask Threadmark' }).click();
   await page.getByRole('button', { name: 'Review this page', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Added 3 comments.' })).toBeVisible({ timeout: 30000 });
@@ -40,7 +40,7 @@ test('requested review posts saved agent discussions, attaches evidence and skip
 test('stop prevents a pending local review from posting and retains a safe retry', async ({ page }) => {
   await open(page);
   await page.evaluate(() => { window.pauseReview = true; });
-  await page.getByRole('button', { name: 'Review page', exact: true }).click();
+  await page.getByRole('button', { name: 'Leave feedback', exact: true }).click();
   await page.getByRole('button', { name: 'Ask Threadmark' }).click();
   await page.getByRole('button', { name: 'Review this page', exact: true }).click();
   await page.waitForFunction(() => window.resumeReview);

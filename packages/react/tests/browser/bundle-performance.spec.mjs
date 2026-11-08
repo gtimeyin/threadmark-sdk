@@ -47,10 +47,10 @@ test('real chunks load on demand and preserve strict CSP styling', async ({ page
     return route.fulfill({ contentType: 'text/html', headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'" }, body: '<div id="root"></div><script type="module" src="/entry.js"></script>' });
   });
   await page.goto('http://localhost/');
-  await expect(page.getByRole('button', { name: 'Review page' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ })).toBeVisible();
   expect(requests.some(name => name.startsWith('fonts-'))).toBe(false);
   expect(requests.some(name => name.startsWith('videoFeatures-'))).toBe(false);
-  await page.getByRole('button', { name: 'Review page' }).click();
+  await page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ }).click();
   await expect.poll(() => requests.some(name => name.startsWith('fonts-'))).toBe(true);
   expect(requests.some(name => name.startsWith('videoFeatures-'))).toBe(false);
   await page.getByRole('button', { name: /Feedback tools/ }).click();
