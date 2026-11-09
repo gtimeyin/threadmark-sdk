@@ -1,7 +1,7 @@
 /** Geometry is independent of comment content: scroll subscribers never rerender the full overlay. */
 export function sameRect(left, right) {
   return left === right || Boolean(left && right && left.left === right.left && left.top === right.top
-    && left.width === right.width && left.height === right.height);
+    && left.width === right.width && left.height === right.height && left.pinX === right.pinX && left.pinY === right.pinY);
 }
 
 export function createMarkerPositions() {

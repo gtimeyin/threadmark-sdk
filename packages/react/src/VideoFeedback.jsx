@@ -881,7 +881,7 @@ export function VideoDrawLayer({ active, onStroke }) {
  * Chapters from the host's `video.notes` (or the reviewer's own moments), and the code-searchable steps.
  * Every timestamp seeks the recording.
  */
-export function VideoPreview({ video, media, targets = [], describeEvent, onReplay, readOnly = false }) {
+export function VideoPreview({ video, media, targets = [], describeEvent, onReplay, onMoment, readOnly = false }) {
   const url = useMediaUrl(media);
   const mediaRef = useRef(null);
   const [currentMs, setCurrentMs] = useState(video?.trim?.startMs || 0);
@@ -907,6 +907,7 @@ export function VideoPreview({ video, media, targets = [], describeEvent, onRepl
   const tabsId = useId();
 
   const seek = (offsetMs, play = false) => {
+    onMoment?.(offsetMs);
     const element = mediaRef.current;
     if (!element) return;
     element.currentTime = Math.max(0, offsetMs / 1000);

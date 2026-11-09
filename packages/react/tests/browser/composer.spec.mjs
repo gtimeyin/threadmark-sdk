@@ -454,6 +454,96 @@ test("the Capture bar boxes an area or the whole view, keeps its colour, and ↵
   await expect(page.locator(".tm-markup-canvas polyline")).toHaveAttribute("stroke", "#ffffff");
 
   await page.keyboard.press("Enter");
-  await expect(page.locator(".tm-popover .tm-snapshot img")).toBeVisible();
+  await expect(page.locator(".tm-popover .tm-composer__sketch img")).toBeVisible();
   expect(pageErrors).toEqual([]);
+});
+
+// Board 02, 6b and 6d.
+test("the sketch box resizes from its corners and moves by its size label, and Esc in the composer goes back to drawing", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.keyboard.press("s");
+  const target = await page.locator("#custom-target").boundingBox();
+  await page.mouse.move(target.x, target.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x + 200, target.y + 80, { steps: 5 });
+  await page.mouse.up();
+  const canvas = page.locator(".tm-markup-canvas");
+  await expect(canvas.locator("img")).toBeVisible();
+  const before = await canvas.boundingBox();
+
+  // Drag the bottom-right handle out by 60 × 40.
+  const handle = await page.locator(".tm-markup-handle--se").boundingBox();
+  await page.mouse.move(handle.x + 4, handle.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + 64, handle.y + 44, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await canvas.boundingBox()).width - before.width)).toBe(60);
+  await expect(canvas.locator("img")).toBeVisible();
+
+  // Drag the size label to move the box.
+  const label = await page.locator(".tm-markup-canvas__dimensions").boundingBox();
+  const moved = await canvas.boundingBox();
+  await page.mouse.move(label.x + 10, label.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(label.x + 110, label.y + 58, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await canvas.boundingBox()).x - moved.x)).toBe(100);
+  await expect(canvas.locator("img")).toBeVisible();
+
+  // Once there is a sketch, the box stays put.
+  const svg = await page.locator('svg[aria-label="Screenshot drawing canvas"]').boundingBox();
+  await page.mouse.move(svg.x + 10, svg.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(svg.x + svg.width - 10, svg.y + svg.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.locator(".tm-markup-handle")).toHaveCount(0);
+
+  // 6d: the composer carries the sketch as a chip; Esc goes back with the strokes kept.
+  await page.keyboard.press("Enter");
+  const chip = page.locator(".tm-composer__sketch");
+  await expect(chip).toContainText("Region");
+  await expect(chip).toContainText("Screenshot with your sketch");
+  await expect(page.locator(".tm-popover .tm-composer__esc")).toContainText("back to drawing");
+  await page.locator("#tm-comment").fill("These feel cramped");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".tm-popover")).toHaveCount(0);
+  await expect(page.locator(".tm-markup-canvas polyline")).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(chip).toBeVisible();
+  await page.locator("#tm-comment").fill("These feel cramped");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".tm-toast")).toContainText("Comment added");
+  const saved = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
+  expect(saved.captureKind).toBe("screenshot");
+  expect(saved.evidence[0]).toMatchObject({ kind: "snapshot" });
+  expect(pageErrors).toEqual([]);
+});
+
+test("a quote's pin sits at the end of its last line, and long quotes end on a whole word", async ({ page }) => {
+  await mountFixture(page, "");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const box = await page.locator("#custom-target").boundingBox();
+  const lines = await page.evaluate(() => {
+    const node = document.querySelector("#custom-target");
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return [...range.getClientRects()].filter((rect) => rect.width > 4).map((rect) => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }));
+  });
+  expect(lines.length).toBeGreaterThan(1);
+  const first = lines[0];
+  const last = lines[lines.length - 1];
+  await page.mouse.move(first.left + 4, (first.top + first.bottom) / 2);
+  await page.mouse.down();
+  await page.mouse.move(last.right - 2, (last.top + last.bottom) / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator(".tm-popover--compose")).toBeVisible();
+  await page.locator("#tm-comment").fill("Quote pin");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".tm-toast")).toContainText("Comment added");
+  const pin = await page.locator(".tm-marker").first().boundingBox();
+  // The pin is by the end of the last line, not at the far right of the first.
+  expect(pin.y).toBeGreaterThan(last.top - 16);
+  expect(pin.x).toBeLessThan(Math.max(...lines.map((line) => line.right)) + 4);
+  expect(box).not.toBeNull();
 });

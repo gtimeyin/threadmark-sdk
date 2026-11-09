@@ -119,7 +119,17 @@ function rectFromElement(element) {
 function rectFromRange(range) {
   const rect = range?.getBoundingClientRect?.();
   if (!rect || rect.width <= 0 || rect.height <= 0) return null;
-  return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+  // A quote's pin sits at the end of its last line, next to the words, not at the far corner of
+  // the box around every line it covers.
+  const lines = [...(range.getClientRects?.() || [])].filter((line) => line.width > 0 && line.height > 0);
+  const last = lines[lines.length - 1];
+  return {
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+    ...(last && lines.length > 1 ? { pinX: last.right, pinY: last.top + Math.min(18, last.height / 2) } : {}),
+  };
 }
 
 function rectFromTarget(target) {
@@ -425,6 +435,19 @@ function describeMediaError(error, { camera, microphone }) {
 
 function makeId(prefix) {
   return globalThis.crypto?.randomUUID?.() || `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** "Cards", "Pricing table": a short name for what sits under the middle of a boxed region. */
+function regionPlaceLabel(rect) {
+  if (typeof document === "undefined" || !document.elementsFromPoint) return "";
+  const element = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    .find((node) => !node.closest?.("[data-threadmark-root]") && node !== document.documentElement && node !== document.body);
+  if (!element) return "";
+  const labelled = element.closest?.("[aria-label], section, article, nav, header, footer, form, h1, h2, h3, button, a") || element;
+  const raw = labelled.getAttribute?.("aria-label") || labelled.querySelector?.("h1, h2, h3")?.textContent || labelled.textContent || "";
+  const words = raw.replace(/\s+/g, " ").trim();
+  if (!words) return "";
+  return words.length > 28 ? `${words.slice(0, 28).replace(/\s+\S*$/, "")}…` : words;
 }
 
 function revokePreview(regionSelection) {
@@ -758,6 +781,7 @@ export function Threadmark({
     captureControllerRef.current = null;
     setScreenshotSelection((current) => {
       revokePreview(current);
+      if (current?.original?.previewUrl && typeof URL !== "undefined") URL.revokeObjectURL(current.original.previewUrl);
       return null;
     });
     setComposingScreenshot(false);
@@ -1726,6 +1750,8 @@ export function Threadmark({
         y: rect.top + Math.min(18, rect.height / 2) + window.scrollY,
       },
       strokes: [],
+      // 6d: what is under the box, for the composer's "Region · Cards" chip.
+      placeLabel: regionPlaceLabel(rect),
       snapshot: {
         status: "capturing",
         approved: false,
@@ -1821,9 +1847,15 @@ export function Threadmark({
           URL.revokeObjectURL(previewUrl);
           return selection;
         }
-        revokePreview(selection);
+        // Keep the unsketched capture so Esc in the composer can go back to drawing (6d).
+        if (selection.original) revokePreview(selection);
         return {
           ...selection,
+          original: selection.original || {
+            previewUrl: selection.snapshot.previewUrl,
+            blob: selection.snapshot.blob,
+            metadata: selection.snapshot.metadata,
+          },
           snapshot: {
             ...selection.snapshot,
             status: "ready",
@@ -1848,6 +1880,24 @@ export function Threadmark({
       if (markupGeneration === markupGenerationRef.current) setComposingScreenshot(false);
     }
   }, [callbacks.onError, composingScreenshot, emitStatus, safeCall, screenshotRef, showNotice]);
+
+  // 6d: Esc in the composer goes back to the sketch, strokes and all.
+  const backToDrawing = useCallback(() => {
+    const current = screenshotRef.current;
+    if (!current?.original || modeRef.current !== "selected") return;
+    setScreenshotSelection((selection) => {
+      if (!selection?.original) return selection;
+      revokePreview(selection);
+      return {
+        ...selection,
+        original: null,
+        snapshot: { ...selection.snapshot, status: "ready", approved: false, ...selection.original },
+      };
+    });
+    modeRef.current = "markup";
+    setMode("markup");
+    emitStatus("selected");
+  }, [emitStatus, modeRef, screenshotRef]);
 
   const startInteractionRecording = useCallback(() => {
     clearCapture();
@@ -4212,6 +4262,7 @@ export function Threadmark({
       onScreenshotAreaComplete={captureScreenshotArea}
       onScreenshotCancel={cancelScreenshotMarkup}
       onScreenshotConfirm={confirmScreenshotMarkup}
+      onBackToDrawing={backToDrawing}
       onScreenshotStrokesChange={updateScreenshotStrokes}
       onSubmit={submitFeedback}
       onPause={togglePause}

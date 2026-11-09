@@ -1203,8 +1203,9 @@ test("reopening a screenshot annotation restores its approved preview", async ({
     document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-capture-bar__done").click();
   });
 
+  // 6d: in the composer the sketch is a small chip; the reopened thread shows the full screenshot.
   await expect.poll(() => page.evaluate(() => Boolean(
-    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-popover .tm-snapshot img"),
+    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-popover .tm-composer__sketch img"),
   ))).toBe(true);
   await setComposerComment(page, "Keep this screenshot visible when reopened.");
   await submitComposer(page);

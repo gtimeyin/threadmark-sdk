@@ -211,10 +211,19 @@ function Outline({ rect, hover = false, badge, region = false, text = false, gro
   );
 }
 
+/** Long quotes end on a whole word with an ellipsis, never mid-word. */
+export function quoteExcerpt(text, max = 80) {
+  const words = String(text || "").replace(/\s+/g, " ").trim();
+  if (words.length <= max) return words;
+  const cut = words.slice(0, max);
+  const atWord = cut.replace(/\s+\S*$/, "");
+  return `${(atWord.length >= max * 0.6 ? atWord : cut).replace(/[\s.,;:!?–—-]+$/, "")}…`;
+}
+
 function targetName(target) {
   if (target?.kind === "region") return "Drawn region";
   if (target?.kind === "screenshot") return "Screenshot area";
-  if (target?.kind === "text") return `“${target.selectedText || target.visibleText || "Selected text"}”`;
+  if (target?.kind === "text") return `“${quoteExcerpt(target.selectedText || target.visibleText || "Selected text")}”`;
   return target?.accessibleName || target?.visibleText || target?.tagName || "Element";
 }
 
@@ -1298,8 +1307,10 @@ function ScreenshotAreaSelector({ onComplete, onCancel, color, onColor }) {
   );
 }
 
-function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, composing, color, onColor, onRebox, onWhole }) {
+function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, composing, color, onColor, onRebox, onWhole, onAdjust }) {
   const svgRef = useRef(null);
+  // 6b: corner handles resize the box and its size label moves it, until you start sketching.
+  const [adjusting, setAdjusting] = useState(null);
   const brushWidth = MARKUP_PEN_WIDTH;
   const [draftStroke, setDraftStroke] = useState(null);
   const snapshot = screenshot?.snapshot;
@@ -1307,6 +1318,45 @@ function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, compos
   const bitmapSize = snapshot?.metadata?.pixelSize || { width: 0, height: 0 };
   const ready = snapshot?.status === "ready" && snapshot.previewUrl;
   const anchorRect = screenshot?.anchorRect || { left: 0, top: 0, width: 0, height: 0 };
+  const canAdjust = Boolean(onAdjust) && !composing && !(screenshot?.strokes || []).length;
+  const beginAdjust = (kind) => (event) => {
+    if (!canAdjust || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const start = { x: event.clientX, y: event.clientY };
+    const base = { ...anchorRect };
+    let latest = base;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    const onMove = (moveEvent) => {
+      const dx = moveEvent.clientX - start.x;
+      const dy = moveEvent.clientY - start.y;
+      if (kind === "move") {
+        latest = { ...base, left: clamp(base.left + dx, 0, width - base.width), top: clamp(base.top + dy, 0, height - base.height) };
+      } else {
+        let left = base.left;
+        let top = base.top;
+        let right = base.left + base.width;
+        let bottom = base.top + base.height;
+        if (kind.includes("w")) left = clamp(left + dx, 0, right - MIN_SCREENSHOT_SIZE);
+        if (kind.includes("e")) right = clamp(right + dx, left + MIN_SCREENSHOT_SIZE, width);
+        if (kind.includes("n")) top = clamp(top + dy, 0, bottom - MIN_SCREENSHOT_SIZE);
+        if (kind.includes("s")) bottom = clamp(bottom + dy, top + MIN_SCREENSHOT_SIZE, height);
+        latest = { left, top, width: right - left, height: bottom - top };
+      }
+      setAdjusting(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", onUp, true);
+      setAdjusting(null);
+      if (["left", "top", "width", "height"].some((key) => Math.round(latest[key]) !== Math.round(base[key]))) onAdjust(latest);
+    };
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerup", onUp, true);
+  };
+  const shownRect = adjusting || anchorRect;
 
   // ⌘Z takes back the last stroke.
   const strokesRef = useRef(null);
@@ -1381,12 +1431,12 @@ function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, compos
       tabIndex={-1}
     >
       <div
-        className="tm-markup-canvas"
+        className={`tm-markup-canvas${adjusting ? " is-adjusting" : ""}`}
         style={{
-          left: anchorRect.left,
-          top: anchorRect.top,
-          width: anchorRect.width,
-          height: anchorRect.height,
+          left: shownRect.left,
+          top: shownRect.top,
+          width: shownRect.width,
+          height: shownRect.height,
         }}
       >
         {!ready && snapshot?.status !== "failed" && (
@@ -1423,9 +1473,13 @@ function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, compos
             </svg>
           </>
         )}
-        <span className="tm-markup-canvas__dimensions" aria-hidden="true">
-          {Math.round(anchorRect.width)} × {Math.round(anchorRect.height)}
+        <span className={`tm-markup-canvas__dimensions${canAdjust ? " is-movable" : ""}`} aria-hidden="true"
+          title={canAdjust ? "Drag to move the box" : undefined} onPointerDown={beginAdjust("move")}>
+          {Math.round(shownRect.width)} × {Math.round(shownRect.height)}
         </span>
+        {canAdjust && ["nw", "ne", "sw", "se"].map((corner) => (
+          <span key={corner} className={`tm-markup-handle tm-markup-handle--${corner}`} aria-hidden="true" onPointerDown={beginAdjust(corner)} />
+        ))}
       </div>
 
       <CaptureBar tool="pen" color={color} onColor={onColor} penReady={Boolean(ready)} busy={composing}
@@ -1443,7 +1497,10 @@ const Marker = memo(function Marker({ annotation, number, rect, restoration, onE
       const button = buttonRef.current, outline = outlineRef.current;
       if (button) {
         button.style.display = next ? "" : "none";
-        if (next) { button.style.left = `${next.left + next.width}px`; button.style.top = `${next.top + Math.min(18, next.height / 2)}px`; }
+        if (next) {
+          button.style.left = `${next.pinX ?? next.left + next.width}px`;
+          button.style.top = `${next.pinY ?? next.top + Math.min(18, next.height / 2)}px`;
+        }
       }
       if (outline) {
         outline.style.display = next && next.width > 1 && next.height > 1 ? "" : "none";
@@ -1931,6 +1988,7 @@ function Overlay({
   faces = [],
   reviewerEmail = null,
   onSignOut,
+  onBackToDrawing,
   inviteSuggestions = [],
   notificationSettings,
   projectName = null,
@@ -2049,7 +2107,27 @@ function Overlay({
     ? editingAnnotation.runtime?.evidence?.find((item) => item.id === savedReplay.evidenceId)
     : null;
   const activeVideo = editingAnnotation?.payload.video || videoSelection?.video || null;
+  // 7g: a timestamp lights up what the reviewer was working on at that moment, if it is still on the page.
+  const [videoMoment, setVideoMoment] = useState(null);
+  useEffect(() => {
+    if (!videoMoment) return undefined;
+    const timer = setTimeout(() => setVideoMoment(null), 2400);
+    return () => clearTimeout(timer);
+  }, [videoMoment]);
+  const highlightVideoMoment = (offsetMs) => {
+    const events = activeVideo?.events || [];
+    const event = [...events].reverse().find((item) => item.offsetMs <= offsetMs + 250 && Number.isInteger(item.targetIndex));
+    if (!event) { setVideoMoment(null); return; }
+    const element = (editingAnnotation && annotationRestorations[editingAnnotation.id]?.results?.[event.targetIndex]?.element)
+      || (editingAnnotation ? editingAnnotation.runtime?.elements?.[event.targetIndex] : videoSelection?.elements?.[event.targetIndex]);
+    if (!element?.isConnected || element === document.documentElement || element === document.body) { setVideoMoment(null); return; }
+    element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    const box = element.getBoundingClientRect();
+    setVideoMoment({ key: `${offsetMs}`, rect: { top: box.top, left: box.left, width: box.width, height: box.height } });
+  };
   const composingNew = !editingAnnotation && !repinning;
+  // 6d: a sketch arrives in the composer as a small chip, and Esc goes back to drawing.
+  const sketchCompose = Boolean(composingNew && screenshotSelection?.original && onBackToDrawing);
   // A thread opened from its pin floats next to the pin, even with the panel open; one opened from the panel or Inbox docks there.
   const threadDocked = Boolean(editingAnnotation && allCommentsOpen && !repinning && pinThreadId !== editingAnnotation.id);
   useEffect(() => {
@@ -2419,6 +2497,7 @@ function Overlay({
           onColor={setCaptureColor}
           onRebox={onScreenshot}
           onWhole={() => { onScreenshot?.(); onScreenshotAreaComplete({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }); }}
+          onAdjust={(rect) => { onScreenshot?.(); onScreenshotAreaComplete(rect); }}
         />
       )}
 
@@ -2699,6 +2778,11 @@ function Overlay({
         </Suspense>
       )}
 
+      {videoMoment && mode === "selected" && (
+        <div key={videoMoment.key} className="tm-video-moment-mark" aria-hidden="true"
+          style={{ top: videoMoment.rect.top - 4, left: videoMoment.rect.left - 4, width: videoMoment.rect.width + 8, height: videoMoment.rect.height + 8 }} />
+      )}
+
       {mode === "selected" && composingNew && primaryTarget && !reviewingVideo && !replayingVideo && (
         /* 2c: the bar stays put and says what is happening. */
         <div className={`tm-modebar tm-modebar--writing tm-bar--at-${barPosition}`} aria-hidden="true"
@@ -2746,7 +2830,11 @@ function Overlay({
             aria-modal="true"
             aria-labelledby="tm-popover-title"
             tabIndex={-1}
-            onKeyDown={(event) => trapDialogFocus(event, event.currentTarget)}
+            onKeyDown={(event) => {
+              if (sketchCompose && event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onBackToDrawing(); return; }
+              trapDialogFocus(event, event.currentTarget);
+            }}
+            data-menu-open={sketchCompose ? "true" : undefined}
             data-placement={popoverPosition?.side || "below"}
             style={threadDocked ? undefined : {
               left: popoverPosition?.left ?? 12,
@@ -2818,11 +2906,24 @@ function Overlay({
           )}
           {editingAnnotation ? null : (
           <div className="tm-popover__header tm-composer__header">
-            {/* 2c: what you picked, in one quiet line. */}
-            <p className="tm-composer__target">
-              <MessageSquare size={14} aria-hidden="true" focusable="false" />
-              <span id="tm-popover-title"><span className="tm-sr-only">Commenting on: </span>{composerContext}</span>
-            </p>
+            {sketchCompose ? (
+              <div className="tm-composer__sketch">
+                <img src={screenshotSelection.snapshot.previewUrl} alt="" />
+                <span>
+                  <strong id="tm-popover-title"><span className="tm-sr-only">Commenting on: </span>Region{screenshotSelection.placeLabel ? ` · ${screenshotSelection.placeLabel}` : ""}</strong>
+                  <small>{screenshotSelection.strokes?.length ? "Screenshot with your sketch" : "Screenshot"}</small>
+                </span>
+                <button type="button" aria-label="Back to drawing" title="Back to drawing (Esc)" onClick={onBackToDrawing} disabled={submitting}>
+                  <CloseIcon />
+                </button>
+              </div>
+            ) : (
+              /* 2c: what you picked, in one quiet line. */
+              <p className="tm-composer__target">
+                <MessageSquare size={14} aria-hidden="true" focusable="false" />
+                <span id="tm-popover-title"><span className="tm-sr-only">Commenting on: </span>{composerContext}</span>
+              </p>
+            )}
             {composerMode === "new" && askKind !== "comment" && !repinning && (
               <span className="tm-composer__kind">{askKind === "poll" ? "Poll" : "Question"}</span>
             )}
@@ -3013,7 +3114,7 @@ function Overlay({
 
             }
             {/* Ordinary comments attach their masked screenshot automatically, so only saved, region and Pencil evidence is shown. */}
-            {(editingEvidencePreview || regionSelection || screenshotSelection) && (
+            {(editingEvidencePreview || regionSelection || (screenshotSelection && !sketchCompose)) && (
               <SnapshotPreview
                 selection={editingEvidencePreview || screenshotSelection || regionSelection}
                 readOnly={Boolean(editingEvidencePreview)}
@@ -3059,6 +3160,7 @@ function Overlay({
                 describeEvent={interactionEventLabel}
                 readOnly={Boolean(editingAnnotation)}
                 onReplay={() => setReplayingVideo(true)}
+                onMoment={highlightVideoMoment}
               />
             )}
 
@@ -3176,9 +3278,15 @@ function Overlay({
                       <span style={{ transform: `scaleX(${uploadPercent / 100})` }} />
                     </div>
                   )}
-                  <button type="button" className="tm-cancel tm-composer__esc" onClick={onRequestDismiss} disabled={submitting} aria-label="Cancel comment" title="Cancel">
-                    <Key>Esc</Key>
-                  </button>
+                  {sketchCompose ? (
+                    <button type="button" className="tm-cancel tm-composer__esc tm-composer__esc--back" onClick={onBackToDrawing} disabled={submitting} aria-label="Back to drawing">
+                      <Key>Esc</Key><span aria-hidden="true">back to drawing</span>
+                    </button>
+                  ) : (
+                    <button type="button" className="tm-cancel tm-composer__esc" onClick={onRequestDismiss} disabled={submitting} aria-label="Cancel comment" title="Cancel">
+                      <Key>Esc</Key>
+                    </button>
+                  )}
                   <span className="tm-composer__tools">
                     {reviewers?.length > 0 && (
                       <button type="button" className="tm-composer__tool" aria-label="Mention someone" title="Mention someone (@)" disabled={submitting}

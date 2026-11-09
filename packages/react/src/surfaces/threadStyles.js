@@ -264,6 +264,23 @@ export const threadStyles = `
   .tm-composer__menu .tm-ask-switch { margin: 0; }
   .tm-popover--compose .tm-composer__actions button:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
 
+  /* 6d: the sketch rides along as a small chip; Esc goes back to drawing. */
+  .tm-composer__sketch { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: var(--tm-radius-button); background: var(--tm-surface); }
+  .tm-composer__sketch img { flex: none; width: 56px; height: 36px; object-fit: cover; border-radius: 4px; background: var(--tm-raised); }
+  .tm-composer__sketch > span { flex: 1; min-width: 0; display: grid; }
+  .tm-composer__sketch strong { overflow: hidden; font: 600 13px/18px var(--tm-font); text-overflow: ellipsis; white-space: nowrap; }
+  .tm-composer__sketch small { color: var(--tm-text-muted); font: 400 11px/14px var(--tm-font); }
+  .tm-composer__sketch button { flex: none; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-muted); cursor: pointer; }
+  .tm-composer__sketch button:hover { color: var(--tm-text-primary); background: rgba(251, 250, 246, .06); }
+  .tm-composer__sketch button svg { width: 14px; height: 14px; }
+  .tm-popover .tm-composer__esc--back { display: inline-flex; align-items: center; gap: 8px; color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font); }
+  .tm-popover--compose .tm-composer__header:has(.tm-composer__sketch) { margin-bottom: 10px; }
+
+  /* 7g: what was on screen at a timestamp, outlined in Lime for a moment. */
+  .tm-video-moment-mark { position: fixed; z-index: 35; border: 2px solid var(--tm-lime); border-radius: var(--tm-radius-panel); background: rgba(224, 243, 84, .08); pointer-events: none; animation: tm-moment-mark 2.4s var(--tm-ease-standard, ease) both; }
+  @keyframes tm-moment-mark { 0% { opacity: 0; } 10%, 75% { opacity: 1; } 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .tm-video-moment-mark { animation: none; } }
+
   /* 2c: the bar stays visible while you write. */
   .tm-modebar.tm-modebar--writing { pointer-events: none; padding: 8px 10px; }
 

@@ -200,6 +200,13 @@ test("records the tab with camera and voice, tracks the cursor, and restores the
   await postFromReview(page, "The secondary action should not reset the results.");
   await page.getByRole("tab", { name: "Steps" }).click();
   await expect(page.locator(".tm-video-events li").filter({ hasText: "Clicked Secondary host action" })).toHaveCount(1);
+  // 7g: a timestamp lights up what was being worked on at that moment.
+  await page.locator(".tm-video-events li").filter({ hasText: "Clicked Secondary host action" }).getByRole("button").click();
+  const mark = page.locator(".tm-video-moment-mark");
+  await expect(mark).toBeVisible();
+  const markBox = await mark.boundingBox();
+  const hostBox = await page.locator("#secondary-target").boundingBox();
+  expect(Math.abs(markBox.x + 4 - hostBox.x)).toBeLessThan(2);
   await page.getByRole("tab", { name: "Chapters" }).click();
   await expect(page.locator(".tm-video-notes")).toContainText("Moment 1");
   const saved = await page.evaluate(() => window.__threadmarkFeedback.at(-1));

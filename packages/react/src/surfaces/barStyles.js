@@ -300,6 +300,15 @@ export const barStyles = `
   .tm-capture-selection::before, .tm-capture-selection::after { content: ""; position: absolute; width: 7px; height: 7px; border: 1px solid var(--tm-ground); background: #fff; }
   .tm-capture-selection::before { left: -5px; top: -5px; }
   .tm-capture-selection::after { right: -5px; bottom: -5px; }
+  .tm-markup-canvas { overflow: visible !important; }
+  .tm-markup-canvas > img, .tm-markup-canvas > svg { overflow: hidden; }
+  .tm-markup-canvas.is-adjusting > img, .tm-markup-canvas.is-adjusting > svg { opacity: .35; }
+  .tm-markup-canvas__dimensions.is-movable { cursor: move; pointer-events: auto; }
+  .tm-markup-handle { position: absolute; z-index: 3; width: 9px; height: 9px; border: 1px solid var(--tm-ground); background: #fff; pointer-events: auto; }
+  .tm-markup-handle--nw { left: -6px; top: -6px; cursor: nwse-resize; }
+  .tm-markup-handle--ne { right: -6px; top: -6px; cursor: nesw-resize; }
+  .tm-markup-handle--sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+  .tm-markup-handle--se { right: -6px; bottom: -6px; cursor: nwse-resize; }
   .tm-capture-bar { z-index: 61; gap: 2px; padding: 6px; font: 500 12px/16px var(--tm-font); }
   .tm-markup-overlay .tm-capture-bar, .tm-capture-surface .tm-capture-bar { position: fixed; }
   .tm-capture-bar__label { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--tm-text-muted); }
