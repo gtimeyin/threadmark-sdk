@@ -156,7 +156,10 @@ test("Try it plays the draft in a temporary player and saves nothing", async ({ 
   await openTourMode(page);
   await panel(page).getByRole("button", { name: "Try it" }).click();
 
-  await expect(page.getByRole("status").filter({ hasText: "Trying your tour. Nothing is saved." })).toBeVisible();
+  // 20d: the bar says which tour and which step; Stop ends it.
+  const previewBar = page.locator(".tm-bar-status");
+  await expect(previewBar).toContainText("Previewing step 1 of");
+  await expect(previewBar.getByRole("button", { name: "Stop" })).toBeVisible();
   const card = page.locator("[data-threadmark-tours]").getByRole("dialog");
   await expect(card).toHaveAccessibleName("The custom control");
   expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("threadmark:tour")))).toEqual([]);
@@ -165,6 +168,17 @@ test("Try it plays the draft in a temporary player and saves nothing", async ({ 
   await expect(panel(page)).toBeVisible();
   await expect(page.locator("[data-threadmark-tours]")).toHaveCount(0);
   expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("threadmark:tour")))).toEqual([]);
+});
+
+test("Stop on the preview bar ends Try it, even while the tour dims the page", async ({ page }) => {
+  await mountFixture(page, "?tours=1");
+  await page.locator(".tm-launcher").click();
+  await openTourMode(page);
+  await panel(page).getByRole("button", { name: "Try it" }).click();
+  await expect(page.locator("[data-threadmark-tours]").getByRole("dialog")).toBeVisible();
+  await page.locator(".tm-bar-status").getByRole("button", { name: "Stop" }).click();
+  await expect(page.locator("[data-threadmark-tours]")).toHaveCount(0);
+  await expect(panel(page)).toBeVisible();
 });
 
 test("closing review during Try it ends the preview and its temporary player", async ({ page }) => {
@@ -177,7 +191,7 @@ test("closing review during Try it ends the preview and its temporary player", a
   await page.keyboard.press("Control+Shift+F");
   await expect(page.locator(".tm-launcher")).toBeVisible();
   await expect(page.locator("[data-threadmark-tours]")).toHaveCount(0);
-  await expect(page.getByRole("status").filter({ hasText: "Trying your tour" })).toHaveCount(0);
+  await expect(page.locator(".tm-bar-status")).toHaveCount(0);
 });
 
 test("without onTourSave, Tour mode offers Copy file but not Save to code", async ({ page }) => {

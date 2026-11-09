@@ -166,3 +166,19 @@ export function BarHint({ children }) {
     </span>
   );
 }
+
+/**
+ * A bar that says what is happening (board 06, 20d; board 12, 37c): an icon, what it is, how far along,
+ * a Lime Stop and Esc. It takes the bar's place, wherever the bar sits.
+ */
+export function BarStatus({ icon: Icon, title, detail, onStop, position = "bottom-center", hint }) {
+  return (
+    <div className={`tm-modebar tm-bar-status tm-bar--at-${position}`} role="status" title={hint}>
+      {Icon && <Icon className="tm-bar-status__icon" aria-hidden="true" focusable="false" />}
+      <strong>{title}</strong>
+      {detail && <span className="tm-bar-status__detail">{detail}</span>}
+      {onStop && <button type="button" className="tm-bar-status__stop" onClick={onStop}>Stop</button>}
+      <Key>Esc</Key>
+    </div>
+  );
+}

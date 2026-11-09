@@ -3344,7 +3344,10 @@ export function Threadmark({
         }
         return;
       }
-      const result = player.preview(tourPreview.tour, { onEnd: backToTour });
+      const result = player.preview(tourPreview.tour, {
+        onEnd: backToTour,
+        onStep: (step) => { if (!cancelled) setTourPreview((current) => current && { ...current, step }); },
+      });
       if (!result.ok) {
         showNotice("Fix the tour’s problems before trying it.");
         backToTour();
@@ -4088,6 +4091,7 @@ export function Threadmark({
       tourPick={tourPick}
       onTourPreview={previewTour}
       onStopTourPreview={stopTourPreview}
+      tourPreviewInfo={tourPreview ? { title: tourPreview.tour?.title || tourPreview.tour?.name || "", step: tourPreview.step || 0, total: tourPreview.tour?.steps?.length || 0 } : null}
       onTourSave={callbacks.onTourSave.current ? (tour, file) => callbacks.onTourSave.current(tour, file) : undefined}
       onTourSendToAi={callbacks.onTourSendToAi.current ? (tour, file) => callbacks.onTourSendToAi.current(tour, file) : undefined}
       aiConnection={aiConnection && typeof aiConnection.name === "string" ? { name: aiConnection.name.slice(0, 60), connected: aiConnection.connected === true, detail: typeof aiConnection.detail === "string" ? aiConnection.detail.slice(0, 120) : null } : null}

@@ -288,6 +288,51 @@ export const barStyles = `
   .tm-share__resend { flex: none; padding: 2px 4px; border: 0; background: none; color: var(--tm-lime); font: 500 12px/16px var(--tm-font); cursor: pointer; }
   .tm-share__resend:hover { text-decoration: underline; }
   .tm-share__end { height: 14px; }
+  /* Board 02, 6a-6c: capture. A slight dim, a crosshair hint, a dashed box with its size, and one Capture bar. */
+  .tm-capture-surface { background: rgba(14, 23, 20, .12); }
+  .tm-capture-hint { position: fixed; z-index: 3; padding: 3px 8px; border-radius: var(--tm-radius-button); background: var(--tm-ground); color: var(--tm-text-primary); font: 500 12px/16px var(--tm-font); pointer-events: none; white-space: nowrap; }
+  .tm-capture-selection, .tm-markup-canvas { border: 1.5px dashed var(--tm-ground) !important; outline: 1px solid rgba(255, 255, 255, .9); outline-offset: 0; border-radius: 0 !important; box-shadow: 0 0 0 9999px rgba(14, 23, 20, .18) !important; background: transparent; }
+  .tm-markup-canvas { background: var(--tm-paper, #fbfaf6); }
+  .tm-capture-selection > span, .tm-markup-canvas__dimensions {
+    position: absolute; left: -2px !important; right: auto !important; top: -28px !important; bottom: auto !important; min-height: 22px; display: grid; place-items: center;
+    padding: 0 7px; border-radius: 4px; background: var(--tm-ground); color: var(--tm-text-primary); font: 400 12px/16px var(--tm-font-mono);
+  }
+  .tm-capture-selection::before, .tm-capture-selection::after { content: ""; position: absolute; width: 7px; height: 7px; border: 1px solid var(--tm-ground); background: #fff; }
+  .tm-capture-selection::before { left: -5px; top: -5px; }
+  .tm-capture-selection::after { right: -5px; bottom: -5px; }
+  .tm-capture-bar { z-index: 61; gap: 2px; padding: 6px; font: 500 12px/16px var(--tm-font); }
+  .tm-markup-overlay .tm-capture-bar, .tm-capture-surface .tm-capture-bar { position: fixed; }
+  .tm-capture-bar__label { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--tm-text-muted); }
+  .tm-capture-bar__label svg { width: 14px; height: 14px; }
+  .tm-capture-bar__rule { width: 1px; height: 20px; margin: 0 2px; background: var(--tm-line); }
+  .tm-modebar.tm-capture-bar button { width: auto; min-width: 0; flex: none; white-space: nowrap; }
+  .tm-modebar.tm-capture-bar button svg { display: block; flex: none; }
+  .tm-capture-bar button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border: 0; border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-muted); cursor: pointer; font: inherit; }
+  .tm-capture-bar button svg { width: 14px; height: 14px; }
+  .tm-capture-bar button:hover:not(:disabled) { color: var(--tm-text-primary); }
+  .tm-capture-bar button.is-active { background: var(--tm-raised); color: var(--tm-text-primary); }
+  .tm-capture-bar button.is-active svg { color: var(--tm-lime); }
+  .tm-capture-bar button:disabled { opacity: .45; cursor: default; }
+  .tm-capture-bar .tm-ui-key { color: var(--tm-text-muted); }
+  .tm-capture-bar__colors { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; }
+  .tm-modebar.tm-capture-bar .tm-capture-bar__colors button { min-height: 0; min-width: 0; width: 22px; height: 22px; padding: 0; justify-content: center; border-radius: 50%; }
+  .tm-capture-bar__colors button span { width: 12px; height: 12px; border-radius: 50%; }
+  .tm-capture-bar__colors button.is-selected { box-shadow: inset 0 0 0 1.5px var(--tm-text-primary); }
+  .tm-capture-bar__esc { padding: 0 4px !important; }
+  .tm-capture-bar .tm-capture-bar__done { margin-left: 4px; padding: 0 10px; background: var(--tm-lime); color: var(--tm-ground); font-weight: 600; }
+  .tm-capture-bar .tm-capture-bar__done:hover:not(:disabled) { background: #eaf77f; color: var(--tm-ground); }
+  .tm-capture-bar .tm-capture-bar__done .tm-ui-key { border-color: rgba(14, 23, 20, .2); background: transparent; color: rgba(14, 23, 20, .6); }
+  .tm-capture-bar button:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
+
+  /* Board 06, 20d and 12, 37c: a bar that says what is happening, with a Lime Stop and Esc. */
+  .tm-bar-status { z-index: 60; gap: 8px; padding: 6px 8px 6px 14px; font: 600 13px/18px var(--tm-font); }
+  .tm-bar-status__icon { flex: none; width: 14px; height: 14px; color: var(--tm-lime); }
+  .tm-bar-status__detail { color: var(--tm-text-muted); font-weight: 500; }
+  .tm-bar-status__detail::before { content: "·"; margin-right: 8px; }
+  .tm-bar-status__stop { height: 28px; padding: 0 4px; border: 0; background: none; color: var(--tm-lime); cursor: pointer; font: 600 13px/18px var(--tm-font); }
+  .tm-bar-status__stop:hover { text-decoration: underline; }
+  .tm-bar-status__stop:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
+
   /* Board 04, 15b and 15f: invite chips, suggestions, a note, and one role menu per person. */
   .tm-share__invite { display: grid; gap: 8px; }
   .tm-share__invite-row { display: flex; gap: 8px; }

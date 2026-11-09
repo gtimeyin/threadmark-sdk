@@ -39,7 +39,6 @@ import { StopIcon as Square } from "./icons.jsx";
 import { FilterIcon as Filter } from "./icons.jsx";
 import { DeleteIcon as Trash2 } from "./icons.jsx";
 import { WarningIcon as TriangleAlert } from "./icons.jsx";
-import { ReopenIcon as Undo2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
 import { AiIcon, EditIcon, HideIcon, InboxIcon, IntegrationsIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
@@ -53,12 +52,11 @@ import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
 import { Avatar, EmptyState, Key } from "./ui/primitives.jsx";
 import { notificationDay, notificationVerb } from "./notifications.js";
-import { ArrowLeftIcon, MentionIcon } from "./icons.jsx";
-import { BarHint, IdleBar } from "./surfaces/Bar.jsx";
+import { ArrowLeftIcon, CaptureIcon, CropIcon, MentionIcon, RegionIcon, SketchIcon } from "./icons.jsx";
+import { BarHint, BarStatus, IdleBar } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
 import {
   addMarkupStroke,
-  clearMarkupStrokes,
   mapMarkupPoint,
   normalizeDrawRect,
   simplifyMarkupPoints,
@@ -1026,10 +1024,6 @@ function StopIcon() {
   return <Square {...iconProps} />;
 }
 
-function UndoIcon() {
-  return <Undo2 {...iconProps} />;
-}
-
 function ClearIcon() {
   return <Trash2 {...iconProps} />;
 }
@@ -1139,39 +1133,86 @@ function VersionState({ version }) {
   return <span className={`tm-version-state tm-version-state--${version.state}`}>{version.state}</span>;
 }
 
+// Board 02, 6c: three colours, nothing more.
 const MARKUP_COLORS = [
   { value: "#f15722", label: "Orange" },
-  { value: "#f2c94c", label: "Yellow" },
-  { value: "#e0f354", label: "Green" },
-  { value: "#4c8dff", label: "Blue" },
+  { value: "#e0f354", label: "Lime" },
   { value: "#ffffff", label: "White" },
 ];
 
-const MARKUP_SIZES = [
-  { value: 3, label: "Fine" },
-  { value: 5, label: "Medium" },
-  { value: 9, label: "Bold" },
-];
+const MARKUP_PEN_WIDTH = 4;
 
-function ScreenshotAreaSelector({ onComplete, onCancel }) {
+/**
+ * The Capture bar (board 02, 6a-6c): Box (B), Pen (P), Whole view (W), three colours and Esc, at the bottom of
+ * the page in both stages. Pen works once there is a box. ↵ (or Comment) attaches the sketch to a comment.
+ */
+function CaptureBar({ tool, color, onColor, onBox, onPen, onWhole, onCancel, onDone, penReady = false, busy = false }) {
+  const latest = useRef({});
+  latest.current = { tool, onBox, onPen, onWhole, onDone, penReady, busy };
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+      const current = latest.current;
+      const key = event.key.toLowerCase();
+      if (key === "b" && current.onBox && current.tool !== "box") current.onBox();
+      else if (key === "p" && current.penReady && current.onPen) current.onPen();
+      else if (key === "w" && current.onWhole && !current.busy) current.onWhole();
+      else if (event.key === "Enter" && current.onDone && !current.busy && !(event.target instanceof HTMLButtonElement)) current.onDone();
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
+  return (
+    <div className="tm-modebar tm-capture-bar" role="toolbar" aria-label="Capture" onPointerDown={(event) => event.stopPropagation()}>
+      <span className="tm-capture-bar__label"><CropIcon size={14} aria-hidden="true" focusable="false" />Capture</span>
+      <span className="tm-capture-bar__rule" aria-hidden="true" />
+      <button type="button" className={tool === "box" ? "is-active" : undefined} aria-pressed={tool === "box"} aria-keyshortcuts="B" onClick={onBox} disabled={busy}>
+        <RegionIcon size={14} aria-hidden="true" focusable="false" />Box<Key>B</Key>
+      </button>
+      <button type="button" className={tool === "pen" ? "is-active" : undefined} aria-pressed={tool === "pen"} aria-keyshortcuts="P"
+        onClick={onPen} disabled={!penReady || busy} title={penReady ? "Sketch inside the box" : "Box an area first"}>
+        <SketchIcon size={14} aria-hidden="true" focusable="false" />Pen<Key>P</Key>
+      </button>
+      <button type="button" aria-keyshortcuts="W" onClick={onWhole} disabled={busy}>
+        <CaptureIcon size={14} aria-hidden="true" focusable="false" />Whole view<Key>W</Key>
+      </button>
+      <span className="tm-capture-bar__colors" role="radiogroup" aria-label="Pen colour">
+        {MARKUP_COLORS.map((option) => (
+          <button key={option.value} type="button" role="radio" aria-checked={color === option.value} aria-label={`${option.label} pen`}
+            title={`${option.label} pen`} className={color === option.value ? "is-selected" : undefined} disabled={busy}
+            onClick={() => onColor(option.value)}>
+            <span style={{ background: option.value }} />
+          </button>
+        ))}
+      </span>
+      <button type="button" className="tm-capture-bar__esc" aria-label="Cancel capture" aria-keyshortcuts="Escape" title="Cancel (Esc)" onClick={onCancel}>
+        <Key>Esc</Key>
+      </button>
+      {onDone && (
+        <button type="button" className="tm-capture-bar__done" onClick={onDone} disabled={busy}>
+          {busy ? "Preparing…" : "Comment"}{!busy && <Key>↵</Key>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ScreenshotAreaSelector({ onComplete, onCancel, color, onColor }) {
   const [start, setStart] = useState(null);
   const [rect, setRect] = useState(null);
   const [error, setError] = useState("");
 
   const viewport = () => ({ width: window.innerWidth, height: window.innerHeight });
 
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      document.querySelector("[data-threadmark-root]")?.shadowRoot
-        ?.querySelector(".tm-capture-cancel")?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, []);
+  const [pointer, setPointer] = useState(null);
 
   const begin = (event) => {
     if (
       event.button !== 0
-      || event.target.closest?.("button, .tm-capture-instruction")
+      || event.target.closest?.("button, .tm-capture-bar")
     ) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1183,6 +1224,7 @@ function ScreenshotAreaSelector({ onComplete, onCancel }) {
   };
 
   const move = (event) => {
+    if (!start) setPointer({ x: event.clientX, y: event.clientY });
     if (!start || start.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1222,17 +1264,11 @@ function ScreenshotAreaSelector({ onComplete, onCancel }) {
       onPointerUp={finish}
       onPointerCancel={cancelGesture}
     >
-      <div className="tm-capture-instruction" onPointerDown={(event) => event.stopPropagation()}>
-        <div className="tm-capture-instruction__copy">
-          <strong id="tm-capture-title">Select screenshot area</strong>
-          <span>Drag around the exact area you want to mark up.</span>
-        </div>
-        <div className="tm-capture-instruction__actions">
-          <button type="button" className="tm-capture-cancel" aria-keyshortcuts="Escape" onClick={onCancel}>
-            Back to Comment<kbd aria-hidden="true">Esc</kbd>
-          </button>
-        </div>
-      </div>
+      <h2 id="tm-capture-title" className="tm-sr-only">Box an area to capture</h2>
+      {/* 6a: a quiet hint follows the crosshair until the drag starts. */}
+      {!rect && pointer && <span className="tm-capture-hint" style={{ left: pointer.x + 16, top: pointer.y + 16 }} aria-hidden="true">Drag to box an area</span>}
+      <CaptureBar tool="box" color={color} onColor={onColor} onBox={() => {}} onCancel={onCancel}
+        onWhole={() => onComplete({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight })} />
       {rect && (
         <div
           className="tm-capture-selection"
@@ -1247,10 +1283,9 @@ function ScreenshotAreaSelector({ onComplete, onCancel }) {
   );
 }
 
-function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, composing }) {
+function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, composing, color, onColor, onRebox, onWhole }) {
   const svgRef = useRef(null);
-  const [color, setColor] = useState(MARKUP_COLORS[0].value);
-  const [brushWidth, setBrushWidth] = useState(MARKUP_SIZES[1].value);
+  const brushWidth = MARKUP_PEN_WIDTH;
   const [draftStroke, setDraftStroke] = useState(null);
   const snapshot = screenshot?.snapshot;
   const strokes = screenshot?.strokes || [];
@@ -1258,15 +1293,19 @@ function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, compos
   const ready = snapshot?.status === "ready" && snapshot.previewUrl;
   const anchorRect = screenshot?.anchorRect || { left: 0, top: 0, width: 0, height: 0 };
 
+  // ⌘Z takes back the last stroke.
+  const strokesRef = useRef(null);
+  strokesRef.current = screenshot?.strokes || [];
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      // Focus "Use screenshot" (or the first drawing tool while it's still preparing), never Cancel.
-      const root = document.querySelector("[data-threadmark-root]")?.shadowRoot;
-      (root?.querySelector(".tm-markup-confirm:not(:disabled)")
-        || root?.querySelector(".tm-markup-overlay button:not(:disabled):not(.tm-markup-cancel)"))?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, []);
+    const onKeyDown = (event) => {
+      if (event.key.toLowerCase() !== "z" || !(event.metaKey || event.ctrlKey) || event.shiftKey || !strokesRef.current.length) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onStrokesChange(undoMarkupStroke(strokesRef.current));
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [onStrokesChange]);
 
   const pointFromEvent = (event) => {
     const bounds = svgRef.current?.getBoundingClientRect();
@@ -1374,78 +1413,9 @@ function MarkupEditor({ screenshot, onStrokesChange, onCancel, onConfirm, compos
         </span>
       </div>
 
-      <div className="tm-markup-dock">
-        <div className="tm-markup-dock__context">
-          <strong id="tm-markup-title">Mark up</strong>
-          <span>{Math.round(anchorRect.width)} × {Math.round(anchorRect.height)} crop</span>
-        </div>
-        <div className="tm-markup-divider" />
-        <div className="tm-markup-tools" role="toolbar" aria-label="Screenshot drawing tools">
-          <span className="tm-markup-tools__label">Color</span>
-          <div className="tm-color-tools">
-            {MARKUP_COLORS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={color === option.value ? "is-selected" : ""}
-                aria-label={`${option.label} pen`}
-                aria-pressed={color === option.value}
-                title={`${option.label} pen`}
-                onClick={() => setColor(option.value)}
-                disabled={!ready || composing}
-              >
-                <span style={{ background: option.value }} />
-              </button>
-            ))}
-          </div>
-          <div className="tm-markup-divider" />
-          <span className="tm-markup-tools__label">Pen</span>
-          <div className="tm-size-tools" aria-label="Pen thickness">
-            {MARKUP_SIZES.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={brushWidth === option.value ? "is-selected" : ""}
-                aria-label={`${option.label} pen thickness`}
-                aria-pressed={brushWidth === option.value}
-                title={`${option.label} pen thickness`}
-                onClick={() => setBrushWidth(option.value)}
-                disabled={!ready || composing}
-              >
-                <span style={{ width: option.value + 4, height: option.value + 4 }} />
-              </button>
-            ))}
-          </div>
-          <div className="tm-markup-tools__spacer" />
-          <button
-            type="button"
-            className="tm-markup-action"
-            disabled={!strokes.length || composing}
-            onClick={() => onStrokesChange(undoMarkupStroke(strokes))}
-          >
-            <UndoIcon />
-            Undo
-          </button>
-          <button
-            type="button"
-            className="tm-markup-action"
-            disabled={!strokes.length || composing}
-            onClick={() => onStrokesChange(clearMarkupStrokes(strokes))}
-          >
-            <ClearIcon />
-            Clear
-          </button>
-        </div>
-        <div className="tm-markup-divider" />
-        <div className="tm-markup-dock__actions">
-          <button type="button" className="tm-markup-cancel" onClick={onCancel} disabled={composing}>Cancel</button>
-          <button type="button" className="tm-markup-confirm" onClick={onConfirm} disabled={!ready || composing}>
-            {composing ? "Preparing…" : "Use screenshot"}
-          </button>
-        </div>
-      </div>
-
-      <p className="tm-markup-note">Only this selected crop and its burned-in markup will be attached.</p>
+      <CaptureBar tool="pen" color={color} onColor={onColor} penReady={Boolean(ready)} busy={composing}
+        onBox={onRebox} onPen={() => {}} onWhole={onWhole} onCancel={onCancel} onDone={ready ? onConfirm : undefined} />
+      <p className="tm-sr-only" id="tm-markup-title">Sketch on the boxed area. Only this area and your sketch are attached.</p>
     </section>
   );
 }
@@ -1828,6 +1798,7 @@ function Overlay({
   tourPick,
   onTourPreview,
   onStopTourPreview,
+  tourPreviewInfo = null,
   onTourSave,
   onCopyText,
   tourStepComments,
@@ -2051,6 +2022,8 @@ function Overlay({
   const [workflowMoreOpen, setWorkflowMoreOpen] = useState(false);
   // The + menu in the composer: Comment, Question or Poll (2c).
   const [kindMenuOpen, setKindMenuOpen] = useState(false);
+  // The sketch colour stays the same from boxing to drawing (board 02, 6a-6c).
+  const [captureColor, setCaptureColor] = useState(MARKUP_COLORS[0].value);
   useEffect(() => { setKindMenuOpen(false); }, [mode, editingAnnotation?.id]);
   const [threadPanel, setThreadPanel] = useState(null);
   const [replayingVideo, setReplayingVideo] = useState(false);
@@ -2410,6 +2383,8 @@ function Overlay({
         <ScreenshotAreaSelector
           onComplete={onScreenshotAreaComplete}
           onCancel={onScreenshotCancel}
+          color={captureColor}
+          onColor={setCaptureColor}
         />
       )}
 
@@ -2420,6 +2395,10 @@ function Overlay({
           onCancel={onScreenshotCancel}
           onConfirm={onScreenshotConfirm}
           composing={composingScreenshot}
+          color={captureColor}
+          onColor={setCaptureColor}
+          onRebox={onScreenshot}
+          onWhole={() => { onScreenshot?.(); onScreenshotAreaComplete({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }); }}
         />
       )}
 
@@ -2611,7 +2590,7 @@ function Overlay({
       {onAiReview && onPostAiComment && (
         <AiPageReview open={aiReviewOpen} onOpenChange={setAiReviewOpen} route={aiRoute} buildId={aiBuildId}
           ignoredSelectors={aiIgnoredSelectors} onAiReview={onAiReview} onAiDismiss={onAiDismiss}
-          onPost={onPostAiComment} onNotice={onAiNotice} />
+          onPost={onPostAiComment} onNotice={onAiNotice} barPosition={barPosition} />
       )}
       {askAiElement && onAskAi && (
         <AskAiCard element={askAiElement} route={aiRoute} onAskAi={onAskAi}
@@ -2663,10 +2642,10 @@ function Overlay({
       )}
 
       {mode === "tour-preview" && (
-        <div className="tm-tour-preview-bar" role="status">
-          <span>Trying your tour. Nothing is saved.</span>
-          <button type="button" onClick={onStopTourPreview}>Stop</button>
-        </div>
+        /* 20d: the bar stays small, says where the preview is, and stops at any step. Nothing is saved. */
+        <BarStatus icon={TourIcon} title={tourPreviewInfo?.title || "Your tour"} position={barPosition} onStop={onStopTourPreview}
+          hint="Trying your tour. Nothing is saved."
+          detail={tourPreviewInfo?.total ? `Previewing step ${Math.min(tourPreviewInfo.step + 1, tourPreviewInfo.total)} of ${tourPreviewInfo.total}` : "Previewing"} />
       )}
 
       {surveyBuilderOpen && mode === "picking" && onSurveyPublish && (

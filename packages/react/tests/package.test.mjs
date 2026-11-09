@@ -348,7 +348,8 @@ test("video feedback keeps media access in one module and its UI on brand icons"
   assert.match(declarations, /ThreadmarkVideoCapture/);
 });
 
-test("page version history is host-driven and exposes explicit navigation and carry-forward callbacks", async () => {
+// The panel's Versions tab was removed (2026-11-09); host-supplied versions still power Carry forward.
+test("page versions are host-driven and power carry-forward from the thread menu", async () => {
   const [source, styles, declarations] = await Promise.all([
     readThreadmarkSource(),
     readFile(resolvePackagePath("./src/overlayStyles.js"), "utf8"),
@@ -357,10 +358,8 @@ test("page version history is host-driven and exposes explicit navigation and ca
 
   assert.match(source, /aria-label="Feedback panel"/);
   assert.match(source, /role="tablist"/);
-  assert.match(source, /Versions <span className="tm-sr-only">/);
-  assert.match(source, /className="tm-version-list"/);
+  assert.doesNotMatch(source, /Versions <span className="tm-sr-only">/);
   assert.match(source, /Carry comment forward/);
-  assert.match(styles, /\.tm-version-list\s*\{/);
   assert.match(styles, /\.tm-carry-forward\s*\{/);
   assert.match(declarations, /interface ThreadmarkPageVersion/);
   assert.match(declarations, /onPageVersionSelect/);

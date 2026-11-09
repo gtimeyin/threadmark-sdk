@@ -573,9 +573,9 @@ test("the toolbar groups feedback tools and other actions into keyboard-friendly
   await expect(page.locator("#animated-target")).toHaveCSS("animation-play-state", "paused");
   await expect(toolbar.locator(".tm-toolbar-more__flag")).toBeVisible();
 
-  // Tool shortcuts start a capture; Back to Comment (or Escape) returns to the toolbar.
+  // Tool shortcuts start a capture; the Capture bar's Esc (or Escape) returns to the toolbar.
   await page.keyboard.press("s");
-  const backToComment = page.getByRole("button", { name: /Back to Comment/ });
+  const backToComment = page.getByRole("button", { name: "Cancel capture" });
   await expect(backToComment).toBeVisible();
   await expect(toolbar).toHaveCount(0);
   await backToComment.click();
@@ -1092,8 +1092,7 @@ test("pencil markup stays aligned to the selected crop and submits one approved 
   })).toBeGreaterThan(2);
 
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.includes("Use screenshot")).click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-capture-bar__done").click();
   });
   await waitForComposer(page);
   await setComposerComment(page, "Use the marked-up crop as visual evidence.");
@@ -1141,7 +1140,6 @@ test("pencil tools change pen style, undo, clear, and cancel without creating fe
   await page.evaluate(() => {
     const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
     shadow.querySelector('button[aria-label="Orange pen"]').click();
-    shadow.querySelector('button[aria-label="Bold pen thickness"]').click();
   });
   const drawingSurface = await page.evaluate(() => {
     const rect = document.querySelector("[data-threadmark-root]").shadowRoot
@@ -1161,26 +1159,22 @@ test("pencil tools change pen style, undo, clear, and cancel without creating fe
     return line ? { stroke: line.getAttribute("stroke"), width: Number(line.getAttribute("stroke-width")) } : null;
   })).toEqual({ stroke: "#f15722", width: expect.any(Number) });
 
-  await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.trim() === "Undo").click();
-  });
+  // ⌘Z takes back the last stroke (board 02, 6c keeps the bar to Box, Pen, Whole view and three colours).
+  await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => page.evaluate(() => (
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelectorAll(".tm-markup-canvas polyline").length
   ))).toBe(0);
 
   await drawStroke(8);
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.trim() === "Clear").click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector('button[aria-label="Lime pen"]').click();
   });
-  await expect.poll(() => page.evaluate(() => (
-    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelectorAll(".tm-markup-canvas polyline").length
-  ))).toBe(0);
+  await drawStroke(16);
+  await expect.poll(() => page.evaluate(() => [...document.querySelector("[data-threadmark-root]").shadowRoot
+    .querySelectorAll(".tm-markup-canvas polyline")].map((line) => line.getAttribute("stroke")))).toEqual(["#f15722", "#e0f354"]);
 
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.trim() === "Cancel").click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector('button[aria-label="Cancel capture"]').click();
   });
   await expect.poll(() => page.evaluate(() => ({
     markupOpen: Boolean(document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-markup-overlay")),
@@ -1206,8 +1200,7 @@ test("reopening a screenshot annotation restores its approved preview", async ({
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-markup-canvas img"),
   ))).toBe(true);
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.includes("Use screenshot")).click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-capture-bar__done").click();
   });
 
   await expect.poll(() => page.evaluate(() => Boolean(
@@ -1242,8 +1235,7 @@ test("persisted screenshot annotations survive reload, edit, and delete", async 
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-markup-canvas img"),
   ))).toBe(true);
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.includes("Use screenshot")).click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-capture-bar__done").click();
   });
   await waitForComposer(page);
   await setComposerComment(page, "Persist this screenshot across reloads.");

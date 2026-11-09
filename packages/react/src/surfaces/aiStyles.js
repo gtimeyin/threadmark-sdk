@@ -17,17 +17,10 @@ export const aiStyles = `
     background: linear-gradient(to bottom, rgba(224, 243, 84, 0), rgba(224, 243, 84, .16) 70%, rgba(224, 243, 84, .32));
     border-bottom: 1px solid rgba(224, 243, 84, .7); animation: tm-ai-read 3.2s var(--tm-ease-standard, ease-in-out) infinite; }
   @keyframes tm-ai-read { from { top: -120px; } to { top: 100vh; } }
-  .tm-ai-status { position: fixed; z-index: 60; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
-    padding: 8px 10px 8px 12px; border-radius: var(--tm-radius-panel); background: var(--tm-ground); color: var(--tm-text-primary);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, .3), 0 0 0 1px rgba(251, 250, 246, .08); font: 400 13px/18px var(--tm-font); white-space: nowrap; pointer-events: auto; }
   /* 27c: while AI reads the page, its status takes the bar's place. */
-  .tm-root:has(.tm-ai-status) .tm-modebar, .tm-root:has(.tm-ai-status) .tm-bar { visibility: hidden; }
+  .tm-root:has(.tm-bar-status) .tm-modebar:not(.tm-bar-status), .tm-root:has(.tm-bar-status) .tm-bar { visibility: hidden; }
   .tm-ai-panel__header h2:focus { outline: none; }
   .tm-ai-setup .tm-send__go { flex: none; white-space: nowrap; }
-  .tm-ai-status svg { width: 14px; height: 14px; color: var(--tm-lime); }
-  .tm-ai-status strong { font-weight: 600; }
-  .tm-ai-status span { color: var(--tm-text-secondary); }
-  .tm-ai-status button { padding: 0 2px; border: 0; background: none; color: var(--tm-lime); font: 600 13px/18px var(--tm-font); cursor: pointer; }
 
   .tm-ai-pin { position: fixed; z-index: 25; width: 22px; height: 22px; display: grid; place-items: center; padding: 0;
     border: 1.5px solid var(--tm-lime); border-radius: 11px 11px 11px 3px; background: var(--tm-ground); color: var(--tm-lime);

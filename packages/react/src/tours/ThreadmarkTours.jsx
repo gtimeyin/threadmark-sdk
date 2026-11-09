@@ -167,6 +167,10 @@ export function ThreadmarkTours({
   }
 
   function emit(type, extra = {}) {
+    // A preview reports each step it shows, so the review bar can say "Previewing step 2 of 3".
+    if (type === "stepShown" && latest.current?.run?.preview) {
+      try { previewRef.current?.onStep?.(extra.stepIndex ?? 0); } catch { /* The bar's count is a nicety. */ }
+    }
     const handler = latest.current?.onTourEvent;
     if (typeof handler !== "function" || latest.current.run?.preview) return;
     try {
@@ -350,11 +354,11 @@ export function ThreadmarkTours({
       return true;
     },
     // Plays a draft tour right away, from its first step, with nothing saved or reported.
-    preview(tourData, { onEnd } = {}) {
+    preview(tourData, { onEnd, onStep } = {}) {
       const result = validateTour(tourData);
       if (!result.ok) return { ok: false, errors: result.errors };
       if (latest.current.run) finish("paused");
-      previewRef.current = { tour: result.tour, onEnd };
+      previewRef.current = { tour: result.tour, onEnd, onStep };
       previewHoldRef.current = latest.current.path;
       begin(result.tour, { preview: true });
       return { ok: true, errors: [] };

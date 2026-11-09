@@ -6,7 +6,7 @@ export const smallScreenStyles = `
 
   /* Touch: no keyboard hints, and every target at least 44px. */
   @media (hover: none) and (pointer: coarse) {
-    .tm-bar .tm-ui-key, .tm-modebar .tm-ui-key, .tm-toolbar-menu kbd, .tm-ai-status .tm-ui-key,
+    .tm-bar .tm-ui-key, .tm-modebar .tm-ui-key, .tm-toolbar-menu kbd, .tm-bar-status .tm-ui-key,
     .tm-you__header .tm-ui-key, .tm-ui-button .tm-ui-key, .tm-send__go .tm-ui-key, .tm-send__cancel .tm-ui-key, .tm-ai-follow .tm-ui-key { display: none; }
     .tm-bar button, .tm-modebar button, .tm-bar .tm-bar__main, .tm-bar .tm-launcher { min-height: 44px; }
     .tm-bar__tools, .tm-bar__shrink, .tm-modebar .tm-toolbar-tools > button { min-width: 44px; }
@@ -64,8 +64,8 @@ export const smallScreenStyles = `
     .tm-you__footer { flex-wrap: wrap; }
     .tm-ai-card { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: auto !important;
       border-radius: var(--tm-radius-popover, 16px) var(--tm-radius-popover, 16px) 0 0; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
-    .tm-ai-status { max-width: calc(100vw - 24px); }
-    .tm-ai-status > span { display: none; }
+    .tm-bar-status { max-width: calc(100vw - 24px); }
+    .tm-bar-status__detail { display: none; }
     .tm-send__link, .tm-share__invite { flex-wrap: wrap; }
   }
   @keyframes tm-sheet-up { from { transform: translateY(24px); opacity: 0; } }

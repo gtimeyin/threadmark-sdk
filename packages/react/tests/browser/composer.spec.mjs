@@ -393,3 +393,43 @@ test("Share invites several people as chips with suggestions and a note, and eac
   expect(await page.evaluate(() => window.__threadmarkMemberChanges.at(-1))).toEqual({ id: "sam", change: { remove: true } });
   await expect(sheet).toContainText("Sam can’t open this any more.");
 });
+
+// Board 02, 6a-6d.
+test("the Capture bar boxes an area or the whole view, keeps its colour, and ↵ attaches the sketch to a comment", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.keyboard.press("s");
+  const bar = page.getByRole("toolbar", { name: "Capture" });
+  await expect(bar.getByRole("button", { name: /^Box/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(bar.getByRole("button", { name: /^Pen/ })).toBeDisabled();
+  await bar.getByRole("radio", { name: "White pen" }).click();
+
+  // W takes the whole view; the pen is ready and the colour carried over.
+  await page.keyboard.press("w");
+  const canvas = page.locator(".tm-markup-canvas");
+  await expect(canvas.locator("img")).toBeVisible();
+  const box = await canvas.boundingBox();
+  expect(Math.round(box.width)).toBeGreaterThanOrEqual(1276);
+  await expect(bar.getByRole("button", { name: /^Pen/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(bar.getByRole("radio", { name: "White pen" })).toHaveAttribute("aria-checked", "true");
+
+  // B goes back to boxing a smaller area.
+  await page.keyboard.press("b");
+  await expect(page.locator(".tm-capture-surface")).toBeVisible();
+  const target = await page.locator("#custom-target").boundingBox();
+  await page.mouse.move(target.x, target.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width, target.y + target.height, { steps: 5 });
+  await page.mouse.up();
+  await expect(canvas.locator("img")).toBeVisible();
+  const svg = await page.locator('svg[aria-label="Screenshot drawing canvas"]').boundingBox();
+  await page.mouse.move(svg.x + 10, svg.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(svg.x + svg.width - 10, svg.y + svg.height - 10, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.locator(".tm-markup-canvas polyline")).toHaveAttribute("stroke", "#ffffff");
+
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".tm-popover .tm-snapshot img")).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});

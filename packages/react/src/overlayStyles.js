@@ -388,12 +388,6 @@ export const overlayStyles = `
   .tm-tour-file { margin: 0; color: var(--tm-text-secondary); }
   .tm-tour-mark { position: fixed; z-index: 30; border: 2px solid var(--tm-lime); border-radius: var(--tm-radius-button); box-shadow: 0 0 0 1px rgba(14, 23, 20, .5); pointer-events: none; }
   .tm-tour-mark span { position: absolute; top: -11px; left: -11px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--tm-lime); color: var(--tm-ground); font: 600 11px/1 var(--tm-font); box-shadow: 0 2px 6px rgba(14, 23, 20, .3); }
-  .tm-tour-preview-bar {
-    position: fixed; z-index: 45; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
-    padding: 6px 6px 6px 14px; border-radius: var(--tm-radius-panel); background: var(--tm-ground); color: var(--tm-text-primary); font-size: 13px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, .25); pointer-events: auto;
-  }
-  .tm-tour-preview-bar button { min-height: 30px; padding: 0 12px; border: 0; border-radius: var(--tm-radius-button); background: var(--tm-lime); color: var(--tm-ground); font: inherit; font-weight: 600; cursor: pointer; }
   .tm-icon-credit a { color: inherit; text-underline-offset: 2px; }
   .tm-panel-tabs { display: flex; gap: 4px; margin: 0 18px 4px; padding: 3px; border-radius: var(--tm-radius-button); background: rgba(222, 221, 215, .55); }
   .tm-panel-tabs button { flex: 1; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: var(--tm-radius-button); background: transparent; color: var(--tm-stone); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background-color var(--tm-motion-fast) ease, color var(--tm-motion-fast) ease; }

@@ -6,6 +6,7 @@ import { AiIcon, ArrowLeftIcon, CheckIcon, CloseIcon, ErrorIcon } from "../icons
 import { collectPageReview } from "../pageReview.js";
 import { restoreTargetDescriptor } from "../target.js";
 import { Key, Switch } from "../ui/primitives.jsx";
+import { BarStatus } from "./Bar.jsx";
 
 export const AI_FOCUS = [
   { id: "accessibility", label: "Accessibility", hint: "Contrast, labels, focus, target sizes", on: true },
@@ -150,17 +151,12 @@ export function AiLooksAt({ onClose }) {
 }
 
 /** 27c: the band that reads down the page, and the bar's status with Stop. */
-function ReviewBand({ route, progress, onStop }) {
+function ReviewBand({ route, progress, onStop, barPosition }) {
   return (
     <>
       <div className="tm-ai-band" aria-hidden="true" />
-      <div className="tm-ai-status" role="status">
-        <AiIcon aria-hidden="true" focusable="false" />
-        <strong>Reviewing {route}</strong>
-        {progress.total > 0 && <span>· {Math.min(progress.checked, progress.total)} of {progress.total} elements</span>}
-        <button type="button" onClick={onStop}>Stop</button>
-        <Key>Esc</Key>
-      </div>
+      <BarStatus icon={AiIcon} title={`Reviewing ${route}`} position={barPosition} onStop={onStop}
+        detail={progress.total > 0 ? `${Math.min(progress.checked, progress.total)} of ${progress.total} elements` : null} />
     </>
   );
 }
@@ -309,7 +305,7 @@ function ReviewResults({ result, route, activeId, onActivate, onPost, onPostAll,
  * The whole-page review: setup → reading the page → drafts. Rendered by the overlay while `open` or
  * while a review is running or showing.
  */
-export function AiPageReview({ open, onOpenChange, route, buildId, ignoredSelectors = [], onAiReview, onAiDismiss, onPost, onNotice }) {
+export function AiPageReview({ open, onOpenChange, route, buildId, ignoredSelectors = [], onAiReview, onAiDismiss, onPost, onNotice, barPosition }) {
   const [phase, setPhase] = useState(null); // setup | looks | running | results
   const [focus, setFocus] = useState(() => AI_FOCUS.filter((item) => item.on).map((item) => item.id));
   const [progress, setProgress] = useState({ checked: 0, total: 0 });
@@ -399,7 +395,7 @@ export function AiPageReview({ open, onOpenChange, route, buildId, ignoredSelect
   if (phase === "setup") return <ReviewSetup focus={focus} onFocusChange={setFocus} onStart={start} onShowLooksAt={() => setPhase("looks")} onClose={close} />;
   if (phase === "looks") return <AiLooksAt onClose={() => setPhase("setup")} />;
   if (phase === "running") {
-    return <ReviewBand route={route} progress={progress} onStop={stop} />;
+    return <ReviewBand route={route} progress={progress} onStop={stop} barPosition={barPosition} />;
   }
   if (phase === "results" && result) {
     return (
