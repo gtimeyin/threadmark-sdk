@@ -1476,7 +1476,9 @@ test("capture failure leaves a postable comment and a persistent unavailable sta
   expect(await page.evaluate(() => window.__threadmarkFeedback[0].evidence[0].quality)).toBe('unavailable');
   expect(await page.evaluate(() => window.__threadmarkFeedbackContexts[0].evidence)).toEqual([]);
   await page.locator('.tm-marker').click();
-  await expect(page.locator('.tm-snapshot__state--error')).toBeVisible();
+  // A saved comment says so quietly, without the composer's "you can still post".
+  await expect(page.locator('.tm-snapshot__note')).toHaveText('No screenshot. It couldn’t be taken when this was posted.');
+  await expect(page.locator('.tm-snapshot__state--error')).toHaveCount(0);
 });
 
 test("a region pin needs repair on a new build and repinning retains its original evidence", async ({ page }) => {

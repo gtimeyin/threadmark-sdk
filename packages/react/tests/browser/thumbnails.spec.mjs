@@ -25,6 +25,22 @@ test('only real screenshots become thumbnails; a playback is never shown as a br
   const thread = page.locator('.tm-popover--thread');
   await expect(thread).toBeVisible();
   await expect.poll(() => thread.locator('img').evaluateAll((images) => images.filter((image) => image.complete && image.naturalWidth === 0).length)).toBe(0);
+  // A posted comment says quietly that it has no screenshot; the composer's "you can still post" is not for it.
+  const insideCard = async (popover) => {
+    const card = await popover.boundingBox();
+    const row = await popover.locator('.tm-replay-open').boundingBox();
+    return row.x >= card.x && row.x + row.width <= card.x + card.width;
+  };
+  await expect(thread.locator('.tm-snapshot__note')).toHaveText('No screenshot. It couldn’t be taken when this was posted.');
+  await expect(thread).not.toContainText('You can still post');
+  await expect.poll(() => insideCard(thread)).toBe(true);
+  // The same thread opened from its pin, as a popover beside it.
+  await thread.getByRole('button', { name: 'All comments' }).click();
+  await page.getByRole('button', { name: 'Close feedback panel' }).click();
+  await page.getByRole('button', { name: 'Edit annotation 1' }).dispatchEvent('click');
+  const popover = page.locator('.tm-popover--thread');
+  await expect(popover.locator('.tm-replay-open')).toBeVisible();
+  await expect.poll(() => insideCard(popover)).toBe(true);
 });
 
 test('panel filter options are readable, Esc closes search before the panel, and delete can be undone', async ({ page }) => {

@@ -984,12 +984,15 @@ function SnapshotPreview({ selection, readOnly = false, onRetry }) {
           </div>
         </>
       )}
-      {snapshot.status === "failed" && (
-        <div className="tm-snapshot__state tm-snapshot__state--error">
-          <span>Snapshot unavailable. You can post this comment without a screenshot.</span>
-          {onRetry && <button type="button" onClick={onRetry}>Retry</button>}
-        </div>
-      )}
+      {snapshot.status === "failed" && (readOnly
+        /* A posted comment: say what happened, quietly. There is nothing to do about it now. */
+        ? <p className="tm-snapshot__note">No screenshot. It couldn’t be taken when this was posted.</p>
+        : (
+          <div className="tm-snapshot__state tm-snapshot__state--error">
+            <span>The screenshot couldn’t be taken. You can still post your comment.</span>
+            {onRetry && <button type="button" onClick={onRetry}>Retry</button>}
+          </div>
+        ))}
     </div>
   );
 }

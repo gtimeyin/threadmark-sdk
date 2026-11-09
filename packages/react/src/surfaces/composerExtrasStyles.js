@@ -44,7 +44,12 @@ export const composerExtrasStyles = `
     font-size: 10px;
   }
   .tm-replay-open {
-    width: 100%;
+    /* Stretch, don't size to 100%: in a saved thread the row also has side margins, and 100% plus those
+       pushed it past the card's right edge. */
+    width: auto;
+    justify-self: stretch;
+    min-width: 0;
+    box-sizing: border-box;
     grid-template-columns: 18px minmax(0, 1fr);
     cursor: pointer;
     text-align: left;
@@ -166,4 +171,7 @@ export const composerExtrasStyles = `
     .tm-poll, .tm-poll-option__bar { animation: none; transition: none; }
   }
 
+  /* A saved comment whose screenshot couldn't be taken: one quiet line, not an error box. */
+  .tm-snapshot:has(.tm-snapshot__note) { border: 0; background: none; }
+  .tm-snapshot__note { margin: 0; color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font); }
 `;
