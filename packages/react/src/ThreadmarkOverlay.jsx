@@ -2255,7 +2255,12 @@ function Overlay({
     previousComparisonOpenRef.current = comparisonOpen;
     if (mode !== "selected" || !popoverPosition || comparisonOpen) return undefined;
     const timer = setTimeout(() => {
-      popoverRef.current?.querySelector(returningFromComparison
+      const popover = popoverRef.current;
+      // The popover moves as it grows (poll answers, a second line); don't pull focus back to the
+      // comment field from wherever the reviewer is typing inside it.
+      const active = popover?.getRootNode?.().activeElement;
+      if (!returningFromComparison && active && active !== popover && popover?.contains(active)) return;
+      popover?.querySelector(returningFromComparison
         ? '[aria-label="More thread actions"]' : "#tm-comment")?.focus();
     }, 0);
     return () => clearTimeout(timer);
