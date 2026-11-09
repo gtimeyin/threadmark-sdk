@@ -688,6 +688,8 @@ export interface ThreadmarkProps {
   onNotificationSettingsChange?: (settings: ThreadmarkNotificationSettings) => void | Promise<void>;
   /** Adds Leave project, with a confirm step. */
   onLeaveProject?: () => void | Promise<void>;
+  /** Adds Sign out to the You menu under your face in the panel (board 08, 27a). Signing out is the host's own flow. */
+  onSignOut?: () => void;
   /** The review link shown in Share with Copy link. */
   shareUrl?: string;
   /** What anyone with the link can do. */
@@ -695,9 +697,16 @@ export interface ThreadmarkProps {
   /** People with access, shown in Share. */
   members?: readonly ThreadmarkMember[];
   /** Invite people by name or email. Passing this (or `shareUrl`) adds Share to the panel and the More menu. */
-  onInvite?: (invite: { entries: string[]; role: ThreadmarkMemberRole }) => void | Promise<void>;
+  /** `message` is the optional note typed under the invite (board 04, 15b). */
+  onInvite?: (invite: { entries: string[]; role: ThreadmarkMemberRole; message?: string }) => void | Promise<void>;
+  /**
+   * People to suggest while typing a name or email in Share, usually your workspace (15b). `note` is the
+   * small line after the email, such as "in Ojie's studio". A typed email nobody knows is offered as "new".
+   */
+  inviteSuggestions?: Array<{ id: string; displayName?: string; email?: string; avatarUrl?: string | null; note?: string }>;
   /** Change someone's access, or remove it. Passing this makes each person's access editable. */
-  onMemberChange?: (memberId: string, change: { role: ThreadmarkMemberRole } | { remove: true }) => void | Promise<void>;
+  /** `role: "owner"` is offered only to an owner (Make owner, 15f). Remove access asks once first. */
+  onMemberChange?: (memberId: string, change: { role: ThreadmarkMemberRole | "owner" } | { remove: true }) => void | Promise<void>;
   /** Send a pending invite again. */
   onResendInvite?: (memberId: string) => void | Promise<void>;
   /** Change what anyone with the link can do. */

@@ -288,6 +288,68 @@ export const barStyles = `
   .tm-share__resend { flex: none; padding: 2px 4px; border: 0; background: none; color: var(--tm-lime); font: 500 12px/16px var(--tm-font); cursor: pointer; }
   .tm-share__resend:hover { text-decoration: underline; }
   .tm-share__end { height: 14px; }
+  /* Board 04, 15b and 15f: invite chips, suggestions, a note, and one role menu per person. */
+  .tm-share__invite { display: grid; gap: 8px; }
+  .tm-share__invite-row { display: flex; gap: 8px; }
+  .tm-share .tm-share__field { height: auto; min-height: 34px; align-items: flex-start; padding: 3px 4px 3px 10px; cursor: text; }
+  .tm-share__field .tm-share__role-menu { margin-top: 1px; }
+  .tm-share__field.is-active { border-color: rgba(224, 243, 84, .5); }
+  .tm-share__chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .tm-share__chips input { flex: 1 0 80px; height: 26px; }
+  .tm-share__chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 4px 0 8px; border-radius: 4px; background: var(--tm-raised); color: var(--tm-text-primary); font: 400 12px/16px var(--tm-font); }
+  .tm-share__chip button { width: 16px; height: 16px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--tm-text-muted); cursor: pointer; }
+  .tm-share__chip button:hover { background: rgba(251, 250, 246, .1); color: var(--tm-text-primary); }
+  .tm-share__button.is-primary { background: var(--tm-lime); color: var(--tm-ground); }
+  .tm-share__button.is-primary:hover:not(:disabled) { background: #eaf77f; }
+  .tm-share__suggestions { display: grid; gap: 2px; margin: 0; padding: 4px; list-style: none; border: 1px solid rgba(251, 250, 246, .1); border-radius: var(--tm-radius-panel); background: var(--tm-surface); }
+  .tm-share__suggestions li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--tm-radius-button); cursor: pointer; }
+  .tm-share__suggestions li.is-active { background: var(--tm-raised); }
+  .tm-share__suggestions li > span { display: grid; min-width: 0; }
+  .tm-share__suggestions strong { font: 400 14px/20px var(--tm-font); }
+  .tm-share__suggestions small { overflow: hidden; color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font); text-overflow: ellipsis; white-space: nowrap; }
+  .tm-share__note { height: 38px; padding: 0 12px; border: 1px solid rgba(251, 250, 246, .12); border-radius: var(--tm-radius-button); background: var(--tm-surface); color: var(--tm-text-primary); font: 400 13px/18px var(--tm-font); outline: none; }
+  .tm-share__note:focus { border-color: rgba(251, 250, 246, .3); }
+  .tm-share__note::placeholder { color: var(--tm-text-secondary); }
+  .tm-share__role-menu { position: relative; flex: none; display: inline-flex; }
+  .tm-share__role-button { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px; border: 0; border-radius: 4px; background: none; color: var(--tm-text-secondary); cursor: pointer; font: 400 12px/16px var(--tm-font); white-space: nowrap; }
+  .tm-share__role-button:hover, .tm-share__role-button[aria-expanded="true"] { background: rgba(251, 250, 246, .06); color: var(--tm-text-primary); }
+  .tm-share__role-button svg { width: 10px; height: 10px; }
+  .tm-share__menu { position: fixed; z-index: 80; width: 220px; display: grid; gap: 2px; padding: 6px; border-radius: var(--tm-radius-panel); background: var(--tm-surface); box-shadow: 0 14px 36px rgba(0, 0, 0, .4), 0 0 0 1px rgba(251, 250, 246, .1); }
+  .tm-share__menu button { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; border: 0; border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-primary); cursor: pointer; text-align: left; }
+  .tm-share__menu button:hover, .tm-share__menu button:focus-visible, .tm-share__menu button[aria-checked="true"] { background: var(--tm-raised); outline: none; }
+  .tm-share__menu button > span { display: grid; }
+  .tm-share__menu strong { font: 400 14px/20px var(--tm-font); }
+  .tm-share__menu small { color: var(--tm-text-muted); font: 400 11px/14px var(--tm-font); }
+  .tm-share__menu svg { width: 14px; height: 14px; color: var(--tm-lime); }
+  .tm-share__menu-rule { height: 1px; margin: 2px 4px; background: rgba(251, 250, 246, .08); }
+  .tm-share__menu .tm-share__remove { color: #ff8f66; font: 400 14px/20px var(--tm-font); }
+  .tm-share__people li.tm-share__confirm { background: var(--tm-surface); }
+  .tm-share__confirm > span { flex: 1; min-width: 0; display: grid; }
+  .tm-share__confirm small { color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font); }
+  .tm-share__confirm .tm-share__button { height: 30px; }
+  .tm-share__button--danger { background: var(--tm-orange); color: #fff; }
+  .tm-share__button--danger:hover:not(:disabled) { background: #d9481a; }
+  .tm-share button:focus-visible, .tm-share input:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
+  .tm-share__chips input:focus-visible { outline: none; }
+
+  /* Board 08, 27a: the You menu under your face in the panel header. */
+  .tm-comments-you-wrap { position: relative; display: inline-flex; }
+  .tm-you-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; width: 248px; display: grid; gap: 2px; padding: 6px; border-radius: var(--tm-radius-panel); background: var(--tm-surface); box-shadow: 0 14px 36px rgba(0, 0, 0, .4), 0 0 0 1px rgba(251, 250, 246, .1); color: var(--tm-text-primary); }
+  .tm-you-menu__who { display: flex; align-items: center; gap: 10px; padding: 6px 8px 8px; }
+  .tm-you-menu__who > span { display: grid; min-width: 0; }
+  .tm-you-menu__who strong { font: 500 14px/20px var(--tm-font); }
+  .tm-you-menu__who small { overflow: hidden; color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font); text-overflow: ellipsis; white-space: nowrap; }
+  .tm-you-menu button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 34px; padding: 0 10px; border: 0; border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-primary); cursor: pointer; font: 500 13px/18px var(--tm-font); text-align: left; }
+  .tm-you-menu button:hover, .tm-you-menu button:focus-visible { background: var(--tm-raised); outline: none; }
+  .tm-you-menu__keys { display: inline-flex; gap: 4px; }
+  /* 27b, 28b: a narrower face sheet, and a small leave confirm with Stay and an Orange Leave. */
+  .tm-you--face { width: min(420px, 100%); }
+  .tm-you--face .tm-you__face-grid { margin-top: 0; }
+  .tm-you--leave { width: min(420px, 100%); }
+  .tm-you__footer--end { justify-content: flex-end; }
+  .tm-you__stay { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 1px solid rgba(251, 250, 246, .16); border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-primary); cursor: pointer; font: 600 13px/18px var(--tm-font); }
+  .tm-you__stay:hover { background: rgba(251, 250, 246, .06); }
+  .tm-you__email input { font-family: var(--tm-font-mono); font-size: 12px; }
   /* Tour Save to code (board 06, 20e) */
   .tm-tour-save { width: min(480px, 100%); }
   .tm-tour-save .tm-tool-icon { width: 14px; height: 14px; flex: none; }

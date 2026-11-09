@@ -44,7 +44,7 @@ import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
 import { AiIcon, EditIcon, HideIcon, InboxIcon, IntegrationsIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
 import { ShortcutSheet } from "./surfaces/ShortcutSheet.jsx";
-import { YouSheet } from "./surfaces/YouSheet.jsx";
+import { FaceSheet, LeaveSheet, YouMenu, YouSheet } from "./surfaces/YouSheet.jsx";
 import { ShareSheet } from "./surfaces/ShareSheet.jsx";
 import { DestinationMark, DestinationsSheet, SendSheet } from "./surfaces/SendSheet.jsx";
 import { AiPageReview, AskAiCard } from "./surfaces/AiReview.jsx";
@@ -687,8 +687,10 @@ function formatShortAge(iso, now = Date.now()) {
 
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
   nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
-  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null, members = [] }) {
+  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null, members = [], youMenu = null }) {
   const [halfSheet, setHalfSheet] = useState(false);
+  const [youMenuOpen, setYouMenuOpen] = useState(false);
+  const youButtonRef = useRef(null);
   const searchToggleRef = useRef(null);
   // Items are marked read when opened (board 05, 17c), or all at once with Mark all read; never just by looking.
   const unreadNotifications = notifications ? notifications.filter((item) => !item.read) : [];
@@ -871,9 +873,15 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           {onOpenShare && <button type="button" className="tm-comments-share" aria-label="Share" title="Share" onClick={onOpenShare}>
             <ShareIcon size={16} aria-hidden="true" focusable="false" />
           </button>}
-          {onOpenYou && <button type="button" className="tm-comments-you" aria-label="Your settings" title="Your settings" onClick={onOpenYou}>
-            <Avatar name={reviewer?.displayName} src={reviewer?.avatarUrl} size={20} />
-          </button>}
+          {youMenu && <span className="tm-comments-you-wrap">
+            <button ref={youButtonRef} type="button" className="tm-comments-you" aria-label="You" title="You" aria-haspopup="menu" aria-expanded={youMenuOpen}
+              onClick={() => setYouMenuOpen((open) => !open)}>
+              <Avatar name={reviewer?.displayName} src={reviewer?.avatarUrl} size={20} />
+            </button>
+            {youMenuOpen && <YouMenu reviewer={reviewer} email={youMenu.email} onFace={youMenu.onFace} onSettings={youMenu.onSettings}
+              onShortcuts={youMenu.onShortcuts} onHide={youMenu.onHide} onSignOut={youMenu.onSignOut}
+              onClose={() => { setYouMenuOpen(false); requestAnimationFrame(() => youButtonRef.current?.focus()); }} />}
+          </span>}
           <button type="button" aria-label="Close feedback panel" onClick={onClose}><X size={18} /></button>
         </div>
       </header>
@@ -1978,6 +1986,8 @@ function Overlay({
   surveyRoute = "/",
   faces = [],
   reviewerEmail = null,
+  onSignOut,
+  inviteSuggestions = [],
   notificationSettings,
   projectName = null,
   onReviewerChange,
@@ -2117,8 +2127,10 @@ function Overlay({
   const [toolbarMenu, setToolbarMenu] = useState(null);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [surveyBuilderOpen, setSurveyBuilderOpen] = useState(false);
+  // Board 08: "menu" (27a), "face" (27b), "settings" (28a) or "leave" (28b).
   const [youOpen, setYouOpen] = useState(false);
   const canEditYou = Boolean(onReviewerChange || onNotificationSettingsChange || onLeaveProject);
+  const hasYouMenu = Boolean(canEditYou || onSignOut);
   const [shareOpen, setShareOpen] = useState(false);
   const [sendTarget, setSendTarget] = useState(null);
   const [aiReviewOpen, setAiReviewOpen] = useState(false);
@@ -2568,7 +2580,7 @@ function Overlay({
                 {onConnectDestination && destinations.length > 0 && <ToolbarMenuItem icon={<IntegrationsIcon {...iconProps} />} label="Send feedback to…"
                   onClick={runToolbarItem(() => setDestinationsOpen(true))} />}
                 {canEditYou && <ToolbarMenuItem icon={<EditIcon {...iconProps} />} label="Your settings"
-                  onClick={runToolbarItem(() => setYouOpen(true))} />}
+                  onClick={runToolbarItem(() => setYouOpen("settings"))} />}
                 {onShortcutsOpenChange && <ToolbarMenuItem icon={<InfoIcon {...iconProps} />} label="Keyboard shortcuts"
                   shortcut="?" keyshortcuts="Shift+?" onClick={runToolbarItem(() => onShortcutsOpenChange(true))} />}
                 <div className="tm-toolbar-menu__separator" role="separator" />
@@ -2616,14 +2628,22 @@ function Overlay({
 
       {shortcutsOpen && <ShortcutSheet videoEnabled={videoEnabled} onClose={() => onShortcutsOpenChange?.(false)} />}
 
-      {youOpen && canEditYou && (
-        <YouSheet reviewer={reviewer ? { ...reviewer, email: reviewerEmail } : null} faces={faces} notificationSettings={notificationSettings}
+      {youOpen === "face" && onReviewerChange && (
+        <FaceSheet reviewer={reviewer} faces={faces} onReviewerChange={onReviewerChange} onClose={() => setYouOpen(false)}
+          onDone={() => { setYouOpen(false); onAiNotice?.("Your face is set"); }} />
+      )}
+      {youOpen === "settings" && canEditYou && (
+        <YouSheet reviewer={reviewer ? { ...reviewer, email: reviewerEmail } : null} notificationSettings={notificationSettings}
           projectName={projectName} onReviewerChange={onReviewerChange} onNotificationSettingsChange={onNotificationSettingsChange}
-          onLeaveProject={onLeaveProject} onClose={() => setYouOpen(false)} />
+          onLeave={onLeaveProject ? () => setYouOpen("leave") : null} onClose={() => setYouOpen(false)} />
+      )}
+      {youOpen === "leave" && onLeaveProject && (
+        <LeaveSheet projectName={projectName} onLeaveProject={onLeaveProject} onClose={() => setYouOpen("settings")}
+          onDone={() => { setYouOpen(false); onAiNotice?.(`You left ${projectName || "the project"}`); }} />
       )}
 
       {shareOpen && canShare && (
-        <ShareSheet projectName={projectName} shareUrl={shareUrl} linkAccess={linkAccess} members={members}
+        <ShareSheet projectName={projectName} shareUrl={shareUrl} linkAccess={linkAccess} members={members} inviteSuggestions={inviteSuggestions}
           onInvite={onInvite} onMemberChange={onMemberChange} onResendInvite={onResendInvite}
           onLinkAccessChange={onLinkAccessChange} onClose={() => setShareOpen(false)} />
       )}
@@ -2702,7 +2722,15 @@ function Overlay({
           onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps}
           notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen}
           surveys={surveys} surveyResults={surveyResults} openSurveyId={openSurveyId} onOpenSurvey={setOpenSurveyId} onSurveyEnd={onSurveyEnd}
-          onOpenYou={canEditYou ? () => setYouOpen(true) : null} onOpenShare={canShare ? () => setShareOpen(true) : null} members={members} />
+          onOpenYou={canEditYou ? () => setYouOpen("settings") : null} onOpenShare={canShare ? () => setShareOpen(true) : null} members={members}
+          youMenu={hasYouMenu ? {
+            email: reviewerEmail,
+            onFace: onReviewerChange ? () => setYouOpen("face") : null,
+            onSettings: canEditYou ? () => setYouOpen("settings") : null,
+            onShortcuts: onShortcutsOpenChange ? () => onShortcutsOpenChange(true) : null,
+            onHide: onBarHide || null,
+            onSignOut: onSignOut || null,
+          } : null} />
       )}
 
       {replayViewer && (

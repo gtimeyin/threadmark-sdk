@@ -372,6 +372,10 @@ export function App() {
         linkAccess={linkAccess}
         onLinkAccessChange={setLinkAccess}
         members={[{ ...me, role: "owner", you: true }, ...members]}
+        inviteSuggestions={[
+          { id: "jo", displayName: "Jo Bello", email: "jo@studio.co", note: "in your studio" },
+          { id: "joanna", displayName: "Joanna Reid", email: "joanna@client.com", note: "worked on Pricing" },
+        ]}
         onInvite={({ entries, role }) => setMembers((list) => [...entries.map((entry) => ({ id: `invite-${entry}`, displayName: entry.includes("@") ? undefined : entry, email: entry.includes("@") ? entry : undefined, role, pending: true })), ...list])}
         onMemberChange={(id, change) => setMembers((list) => change.remove ? list.filter((member) => member.id !== id) : list.map((member) => member.id === id ? { ...member, role: change.role } : member))}
         onResendInvite={() => {}}

@@ -524,6 +524,8 @@ export function Threadmark({
   onReviewerChange,
   onNotificationSettingsChange,
   onLeaveProject,
+  onSignOut,
+  inviteSuggestions,
   shareUrl,
   linkAccess,
   members,
@@ -4256,6 +4258,8 @@ export function Threadmark({
       onReviewerChange={onReviewerChange}
       onNotificationSettingsChange={onNotificationSettingsChange}
       onLeaveProject={onLeaveProject}
+      onSignOut={onSignOut}
+      inviteSuggestions={Array.isArray(inviteSuggestions) ? inviteSuggestions : undefined}
       shareUrl={typeof shareUrl === "string" && shareUrl ? shareUrl : null}
       linkAccess={["comment", "view", "off"].includes(linkAccess) ? linkAccess : null}
       members={Array.isArray(members) ? members.filter((member) => member && member.id != null && (member.displayName || member.email)) : []}
