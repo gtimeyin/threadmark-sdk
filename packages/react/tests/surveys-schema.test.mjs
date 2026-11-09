@@ -9,6 +9,8 @@ import {
   surveyIsLive,
   surveyPageMatches,
   surveyProblems,
+  surveyResultsCsv,
+  surveyResultsText,
 } from "../src/surveys/schema.js";
 
 const scale = (overrides = {}) => ({
@@ -92,4 +94,20 @@ test("normalizing twice gives the same survey, so stored surveys keep their foll
   assert.deepEqual(normalizeSurvey(once), once);
   const draft = { ...scale(), followUp: { enabled: false, text: "Anything else?" } };
   assert.equal(normalizeSurvey(draft).followUp, null);
+});
+
+test("survey results export as CSV and share as a short read (board 03, 11d)", () => {
+  const survey = normalizeSurvey({ ...createSurveyDraft("/pricing"), id: "s1", status: "live",
+    question: { kind: "scale", text: 'How "easy" was pricing?', scale: { points: 5, display: "numbers", low: "Hard", high: "Easy" } } });
+  const results = { total: 3, counts: { 5: 2, 2: 1 }, average: 4, texts: ["Price per seat, please", "Fine"], summary: "Mostly clear." };
+  const csv = surveyResultsCsv(survey, results);
+  assert.match(csv, /^"Question","How ""easy"" was pricing\?"/);
+  assert.match(csv, /"Average","4 of 5"/);
+  assert.match(csv, /"5","2","67%"/);
+  assert.match(csv, /"Price per seat, please"/);
+  const text = surveyResultsText(survey, results);
+  assert.equal(text.split("\n")[1], "4 of 5 · 3 answers");
+  assert.match(text, /5: 67% \(2\)/);
+  assert.match(text, /Mostly clear\./);
+  assert.match(text, /“Fine”/);
 });

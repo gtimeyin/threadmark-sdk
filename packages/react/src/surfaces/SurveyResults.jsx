@@ -45,7 +45,7 @@ function Bars({ rows }) {
 }
 
 /** One question's answers for the team. */
-export function SurveyResultsView({ survey, results, onBack, onEnd, onExport }) {
+export function SurveyResultsView({ survey, results, onBack, onEnd, onExport, onShare }) {
   const total = results?.total || 0;
   const share = (count) => (total ? Math.round((count / total) * 100) : 0);
   const { question } = survey;
@@ -78,7 +78,8 @@ export function SurveyResultsView({ survey, results, onBack, onEnd, onExport }) 
       )}
       {!total && <p className="tm-survey-results__empty">No answers yet. They appear here as people respond.</p>}
       <footer className="tm-survey-results__footer">
-        {onExport && <button type="button" onClick={() => onExport(survey)}>Copy answers</button>}
+        {onExport && <button type="button" onClick={() => onExport(survey)} disabled={!total}>Export</button>}
+        {onShare && <button type="button" onClick={() => onShare(survey)} disabled={!total}>Share results</button>}
         {onEnd && survey.status === "live" && <button type="button" className="tm-survey-results__end" onClick={() => onEnd(survey)}>End survey</button>}
       </footer>
     </div>

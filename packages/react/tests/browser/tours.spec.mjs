@@ -117,9 +117,12 @@ test("Esc pauses the tour, and the tour waits until a later visit", async ({ pag
   const later = await context.newPage();
   await open(later);
   await expect(card(later)).toHaveAccessibleName("Pick up where you left off?");
-  await expect(card(later).getByText("Step 3 of 4 · Templates live here")).toBeVisible();
-  await card(later).getByRole("button", { name: "Start over" }).click();
-  await expect(card(later)).toHaveAccessibleName("Start something new");
+  // 21d: "<tour> · step 3 of 4", with Continue and No thanks.
+  await expect(card(later).getByText(/· step 3 of 4$/)).toBeVisible();
+  await expect(card(later).getByRole("button", { name: "Start over" })).toHaveCount(0);
+  await card(later).getByRole("button", { name: "Continue" }).click();
+  // Step 3's element lives behind a click on this page, so the player says it can't see it yet.
+  await expect(card(later)).not.toHaveAccessibleName("Pick up where you left off?");
 });
 
 test("click steps wait for the real element, slow elements get a waiting notice, and pages change with the router", async ({ page }) => {

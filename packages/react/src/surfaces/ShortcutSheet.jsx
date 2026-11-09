@@ -6,7 +6,7 @@ import { Key } from "../ui/primitives.jsx";
 
 const mac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 
-export function ShortcutSheet({ videoEnabled = false, onClose }) {
+export function ShortcutSheet({ videoEnabled = false, aiEnabled = false, onClose }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.focus(); }, []);
   const cmd = mac() ? "⌘" : "Ctrl";
@@ -15,13 +15,14 @@ export function ShortcutSheet({ videoEnabled = false, onClose }) {
     ["Shrink to a dot", [`${cmd}.`]],
     ["This sheet", ["?"]],
     ["Close or go back", ["Esc"]],
-  ];
+    aiEnabled && ["Ask AI about what you picked", [`${cmd}K`]],
+  ].filter(Boolean);
   const leaving = [
     ["Add a comment", ["C"]],
     ["Sketch on a screenshot", ["S"]],
     ["Record an interaction", ["R"]],
     videoEnabled && ["Record a video", ["V"]],
-    ["Send a reply", ["↵"]],
+    ["Send", ["↵"]],
     ["New line", ["⇧", "↵"]],
     ["Pause animations", ["P"]],
     ["Hide comment pins", ["H"]],

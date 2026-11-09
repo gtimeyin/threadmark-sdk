@@ -168,6 +168,18 @@ test("reviewers ask people a survey question in three steps; problems are named 
   const results = page.getByRole("tabpanel", { name: /^Answers:/ });
   await expect(results).toContainText("4.3 of 7 · 3 answers");
   await expect(results).toContainText("“Wanted to see the price per seat.”");
+  // 11d: Export saves a CSV; Share results copies a short read to paste anywhere.
+  const download = page.waitForEvent("download");
+  await results.getByRole("button", { name: "Export" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("how-easy-was-it-to-find-pricing-answers.csv");
+  const csv = await (await import("node:fs/promises")).readFile(await file.path(), "utf8");
+  expect(csv).toContain('"Average","4.3 of 7"');
+  expect(csv).toContain('"Wanted to see the price per seat."');
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://localhost" });
+  await results.getByRole("button", { name: "Share results" }).click();
+  await expect(page.locator(".tm-toast")).toContainText("Results copied");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("4.3 of 7 · 3 answers");
   await results.getByRole("button", { name: "End survey" }).click();
   await expect(results).toContainText("Ended");
   expect(pageErrors).toEqual([]);

@@ -52,6 +52,7 @@ import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
 import { Avatar, EmptyState, Key } from "./ui/primitives.jsx";
 import { notificationDay, notificationVerb } from "./notifications.js";
+import { surveyResultsCsv, surveyResultsText } from "./surveys/schema.js";
 import { ArrowLeftIcon, CaptureIcon, CropIcon, MentionIcon, RegionIcon, SketchIcon } from "./icons.jsx";
 import { BarHint, BarStatus, IdleBar } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
@@ -685,7 +686,7 @@ function formatShortAge(iso, now = Date.now()) {
 
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
   nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
-  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null, members = [], youMenu = null }) {
+  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null, members = [], youMenu = null, onNotice = null }) {
   const [halfSheet, setHalfSheet] = useState(false);
   const [youMenuOpen, setYouMenuOpen] = useState(false);
   const youButtonRef = useRef(null);
@@ -889,8 +890,22 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           return <SurveyResultsView survey={survey} results={surveyResults[survey.id]} onBack={() => onOpenSurvey(null)}
             onEnd={onSurveyEnd ? (item) => onSurveyEnd(item) : null}
             onExport={(item) => {
-              const rows = [["answer"], ...((surveyResults[item.id]?.texts) || []).map((text) => [text])];
-              navigator.clipboard?.writeText(rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n")).catch(() => {});
+              // Export: a CSV of the spread and every written answer, saved by the browser.
+              const blob = new Blob([surveyResultsCsv(item, surveyResults[item.id])], { type: "text/csv;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `${String(item.question.text).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "survey"}-answers.csv`;
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}
+            onShare={async (item) => {
+              try {
+                await navigator.clipboard.writeText(surveyResultsText(item, surveyResults[item.id]));
+                onNotice?.("Results copied");
+              } catch {
+                onNotice?.("Couldn’t copy the results");
+              }
             }} />;
         })() : <>
       {surveys && surveys.length > 0 && !query && <SurveyList surveys={surveys} results={surveyResults} onOpen={onOpenSurvey} />}
@@ -1865,7 +1880,6 @@ function Overlay({
   editingAnnotation,
   pageVersions,
   pageVersionRoute,
-  versionHistoryOpen,
   carryingVersionId,
   reviewer,
   toolbarPosition,
@@ -1904,7 +1918,6 @@ function Overlay({
   onEditAnnotation,
   onRecheckAnnotation,
   onCopyAnnotationLink,
-  onShowVersions,
   onSelectPageVersion,
   nextSteps = null,
   notifications = null,
@@ -2020,6 +2033,9 @@ function Overlay({
   const [popoverPosition, setPopoverPosition] = useState(null);
   const [editingEvidencePreview, setEditingEvidencePreview] = useState(null);
   const [workflowMoreOpen, setWorkflowMoreOpen] = useState(false);
+  // The thread last opened from its pin on the page: it stays a popover by the pin instead of docking into the panel.
+  const [pinThreadId, setPinThreadId] = useState(null);
+  const openPinThread = useCallback((id) => { setPinThreadId(id); onEditAnnotation(id); }, [onEditAnnotation]);
   // The + menu in the composer: Comment, Question or Poll (2c).
   const [kindMenuOpen, setKindMenuOpen] = useState(false);
   // The sketch colour stays the same from boxing to drawing (board 02, 6a-6c).
@@ -2034,7 +2050,11 @@ function Overlay({
     : null;
   const activeVideo = editingAnnotation?.payload.video || videoSelection?.video || null;
   const composingNew = !editingAnnotation && !repinning;
-  const threadDocked = Boolean(editingAnnotation && allCommentsOpen && !repinning);
+  // A thread opened from its pin floats next to the pin, even with the panel open; one opened from the panel or Inbox docks there.
+  const threadDocked = Boolean(editingAnnotation && allCommentsOpen && !repinning && pinThreadId !== editingAnnotation.id);
+  useEffect(() => {
+    if (pinThreadId && editingAnnotation?.id !== pinThreadId) setPinThreadId(null);
+  }, [editingAnnotation?.id, pinThreadId]);
   const reviewingVideo = Boolean(videoReview && videoSelection && videoReview.id === videoSelection.id && !editingAnnotation);
   const activeVideoEvidence = editingAnnotation
     ? editingAnnotation.runtime?.evidence?.find((item) => item.id === activeVideo?.evidenceId)
@@ -2277,7 +2297,7 @@ function Overlay({
           number={index + 1}
           rect={annotationRects[annotation.id]}
           restoration={annotationRestorations[annotation.id]}
-          onEdit={onEditAnnotation}
+          onEdit={openPinThread}
           markerPositions={markerPositions}
           active={editingAnnotation?.id === annotation.id}
         />
@@ -2565,7 +2585,7 @@ function Overlay({
         </div>
       )}
 
-      {shortcutsOpen && <ShortcutSheet videoEnabled={videoEnabled} onClose={() => onShortcutsOpenChange?.(false)} />}
+      {shortcutsOpen && <ShortcutSheet videoEnabled={videoEnabled} aiEnabled={Boolean(onAskAi && onPostAiComment)} onClose={() => onShortcutsOpenChange?.(false)} />}
 
       {youOpen === "face" && onReviewerChange && (
         <FaceSheet reviewer={reviewer} faces={faces} onReviewerChange={onReviewerChange} onClose={() => setYouOpen(false)}
@@ -2662,6 +2682,7 @@ function Overlay({
           notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen}
           surveys={surveys} surveyResults={surveyResults} openSurveyId={openSurveyId} onOpenSurvey={setOpenSurveyId} onSurveyEnd={onSurveyEnd}
           onOpenYou={canEditYou ? () => setYouOpen("settings") : null} onOpenShare={canShare ? () => setShareOpen(true) : null} members={members}
+          onNotice={onAiNotice}
           youMenu={hasYouMenu ? {
             email: reviewerEmail,
             onFace: onReviewerChange ? () => setYouOpen("face") : null,

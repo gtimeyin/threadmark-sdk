@@ -612,7 +612,6 @@ export function Threadmark({
   const [discardPending, setDiscardPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
-  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [nextStepsOpen, setNextStepsOpen] = useState(false);
   // Ticks shown at once while the host stores them; the next `nextSteps` from the host replaces them.
   const [nextStepTicks, setNextStepTicks] = useState({});
@@ -1150,7 +1149,6 @@ export function Threadmark({
     setMode("idle");
     setPaused(false);
     setClearArmed(false);
-    setVersionHistoryOpen(false);
     setAllCommentsOpen(false);
     setEditingAnnotationId(null);
     setComment("");
@@ -1183,7 +1181,6 @@ export function Threadmark({
   const startTourMode = useCallback(() => {
     clearCapture();
     setAllCommentsOpen(false);
-    setVersionHistoryOpen(false);
     setTourDrafts((current) => current ?? (Array.isArray(toursRef.current)
       ? toursRef.current.filter((tour) => tour && typeof tour === "object").map((tour) => JSON.parse(JSON.stringify(tour)))
       : []));
@@ -1495,7 +1492,6 @@ export function Threadmark({
     try {
       if (callbacks.onPageVersionSelect.current) {
         await callbacks.onPageVersionSelect.current(version, context);
-        setVersionHistoryOpen(false);
         showNotice(`Opened ${version.label}`);
       } else {
         window.location.assign(version.url);
@@ -1531,10 +1527,6 @@ export function Threadmark({
       setCarryingVersionId(null);
     }
   }, [activeRoute, annotationsRef, callbacks.onError, callbacks.onFeedbackCarryForward, editingIdRef, safeCall, showNotice]);
-
-  useEffect(() => {
-    if (mode !== "picking" && versionHistoryOpen) setVersionHistoryOpen(false);
-  }, [mode, versionHistoryOpen]);
 
   useEffect(() => {
     if (!portalRoot || !observedLocation) return;
@@ -2565,7 +2557,6 @@ export function Threadmark({
           if (mode === "tour") exitTourMode();
           else if (allCommentsOpen && mode === "picking") {
             setAllCommentsOpen(false);
-            setVersionHistoryOpen(false);
             portalRoot.querySelector(".tm-all-comments-trigger")?.focus();
           }
           else if (mode === "recording") cancelInteractionRecording();
@@ -2622,7 +2613,6 @@ export function Threadmark({
     startInteractionRecording,
     startVideoSetup,
     videoOptions.enabled,
-    versionHistoryOpen,
     allCommentsOpen,
     exitTourMode,
   ]);
@@ -4124,8 +4114,8 @@ export function Threadmark({
           region: { left, top, width: right - left, height: bottom - top } });
       }}
       allCommentsOpen={allCommentsOpen}
-      onToggleAllComments={() => { setAllCommentsOpen((open) => !open); setVersionHistoryOpen(false); }}
-      onCloseAllComments={() => { setAllCommentsOpen(false); setVersionHistoryOpen(false); portalRoot.querySelector(".tm-all-comments-trigger")?.focus(); }}
+      onToggleAllComments={() => { setAllCommentsOpen((open) => !open); }}
+      onCloseAllComments={() => { setAllCommentsOpen(false); portalRoot.querySelector(".tm-all-comments-trigger")?.focus(); }}
       onOpenListedAnnotation={openListedAnnotation}
       repinning={Boolean(repinningId)}
       repinTargetCount={(() => {
@@ -4182,7 +4172,6 @@ export function Threadmark({
       editingAnnotation={editingAnnotation}
       pageVersions={normalizedPageVersions}
       pageVersionRoute={activeRoute}
-      versionHistoryOpen={versionHistoryOpen}
       carryingVersionId={carryingVersionId}
       reviewer={normalizedReviewer}
       toolbarPosition={toolbarPosition}
@@ -4231,7 +4220,6 @@ export function Threadmark({
       onEditAnnotation={editAnnotation}
       onRecheckAnnotation={recheckAnnotation}
       onCopyAnnotationLink={copyAnnotationLink}
-      onShowVersions={setVersionHistoryOpen}
       onSelectPageVersion={selectPageVersion}
       nextSteps={shownNextSteps}
       notifications={Array.isArray(notifications) ? normalizedNotifications : null}

@@ -663,19 +663,13 @@ export function ThreadmarkTours({
     let content = null;
 
     if (showingOffer) {
-      const resumeAt = tour.steps[run.index];
+      // Board 06, 21d: a small offer to continue or let it go. Done stays done.
       content = {
         title: "Pick up where you left off?",
-        body: `Step ${run.index + 1} of ${total} · ${resumeAt.title}`,
+        body: `${tour.title || "This tour"} · step ${run.index + 1} of ${total}`,
         secondary: <button type="button" className="tmt-link" onClick={() => finish("skipped")}>No thanks</button>,
         actions: (
           <>
-            <button type="button" className="tmt-btn" onClick={() => {
-              saveRecord(createProgressRecord(run.tourId, userId, Date.now()));
-              emit("started");
-              keyRef.current += 1;
-              setRun({ ...run, index: 0, mode: "step", key: keyRef.current });
-            }}>Start over</button>
             <button type="button" className="tmt-btn" data-primary="" onClick={() => {
               updateRecord(run.tourId, { status: "inProgress" });
               emit("resumed", { stepIndex: run.index });

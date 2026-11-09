@@ -210,6 +210,30 @@ test("a thread opened from the panel opens in the panel, with a way back to the 
   await expect(page.locator("#tm-all-comments")).toContainText("Docked thread");
 });
 
+test("a pin opens its thread as a popover by the pin, even with the panel open", async ({ page }) => {
+  await mountFixture(page, "");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.locator("#secondary-target").click();
+  await page.locator("#tm-comment").fill("Pinned thread");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".tm-toast")).toContainText("Comment added");
+
+  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await expect(page.locator("#tm-all-comments")).toBeVisible();
+  await page.locator(".tm-marker").first().click();
+  const thread = page.locator(".tm-popover--thread");
+  await expect(thread).toBeVisible();
+  await expect(page.locator(".tm-popover--docked")).toHaveCount(0);
+  await expect(thread.locator(".tm-thread-back")).toHaveCount(0);
+  await expect(thread.getByPlaceholder("Reply")).toBeVisible();
+
+  // Closed, the same comment opened from the list docks in the panel again.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".tm-popover")).toHaveCount(0);
+  await page.locator(".tm-comments-list li").first().click();
+  await expect(page.locator(".tm-popover--docked")).toBeVisible();
+});
+
 test("deleting a comment nobody replied to is instant, and Undo creates it again", async ({ page }) => {
   await mountFixture(page, "");
   await page.locator("#secondary-target").click();

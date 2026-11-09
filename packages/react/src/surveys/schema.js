@@ -167,3 +167,45 @@ export function summarizeSurveyAnswers(survey, answers = []) {
   }
   return result;
 }
+
+function resultRows(survey, results) {
+  const total = results?.total || 0;
+  const share = (count) => (total ? `${Math.round((count / total) * 100)}%` : "0%");
+  const { question } = survey;
+  if (question.kind === "scale") {
+    return Array.from({ length: question.scale.points }, (_, index) => question.scale.points - index)
+      .map((point) => ({ label: String(point), count: results?.counts?.[point] || 0, share: share(results?.counts?.[point] || 0) }));
+  }
+  if (question.kind === "poll") {
+    return question.options.map((option) => ({ label: option.label, count: results?.counts?.[option.id] || 0, share: share(results?.counts?.[option.id] || 0) }));
+  }
+  return [];
+}
+
+const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+
+/** Export (board 03, 11d): the question, the spread and every written answer, as CSV. */
+export function surveyResultsCsv(survey, results) {
+  const lines = [
+    ["Question", survey.question.text],
+    ["Answers", results?.total || 0],
+    ...(survey.question.kind === "scale" && results?.average != null ? [["Average", `${results.average} of ${survey.question.scale.points}`]] : []),
+  ];
+  const rows = resultRows(survey, results);
+  if (rows.length) lines.push([], ["Answer", "Count", "Share"], ...rows.map((row) => [row.label, row.count, row.share]));
+  const texts = results?.texts || [];
+  if (texts.length) lines.push([], [survey.followUp?.text || "Written answer"], ...texts.map((value) => [value]));
+  return lines.map((line) => line.map(csvCell).join(",")).join("\n");
+}
+
+/** Share results: a short plain-text read of the answers to paste anywhere. */
+export function surveyResultsText(survey, results) {
+  const total = results?.total || 0;
+  const score = survey.question.kind === "scale" && results?.average != null ? `${results.average} of ${survey.question.scale.points} · ` : "";
+  const lines = [survey.question.text, `${score}${total} answer${total === 1 ? "" : "s"}`];
+  for (const row of resultRows(survey, results)) lines.push(`${row.label}: ${row.share} (${row.count})`);
+  if (results?.summary) lines.push("", results.summary);
+  const texts = (results?.texts || []).slice(0, 3);
+  if (texts.length) lines.push("", ...texts.map((value) => `“${value}”`));
+  return lines.join("\n");
+}

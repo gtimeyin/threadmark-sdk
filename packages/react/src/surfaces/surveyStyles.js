@@ -129,6 +129,7 @@ export const surveyStyles = `
   .tm-survey-results__footer { position: sticky; bottom: 0; display: flex; align-items: center; gap: 16px; margin: auto -16px 0; padding: 12px 16px; border-top: 1px solid rgba(251, 250, 246, .08); background: var(--tm-ground); }
   .tm-survey-results__footer button { padding: 0; border: 0; background: none; color: var(--tm-text-secondary); font: 600 12px/16px var(--tm-font); cursor: pointer; }
   .tm-survey-results__footer button:hover { color: var(--tm-text-primary); }
+  .tm-survey-results__footer button:disabled { opacity: .45; cursor: default; }
   .tm-survey-results__end { margin-left: auto; color: var(--tm-text-primary) !important; }
 
   @media (prefers-reduced-motion: reduce) { .tm-survey-builder { animation: none; } }
