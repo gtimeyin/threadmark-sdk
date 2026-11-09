@@ -74,6 +74,8 @@ import {
   decodeReplayEvents,
 } from "./sessionReplay.js";
 
+const videoModeLabel = (mode) => (mode === "tab" ? "Tab" : mode === "screen" ? "Screen" : "Voice + cursor");
+
 function deferred(loader, name) {
   const Component = lazy(() => loader().then(module => ({ default: module[name] })));
   return function OptionalFeature(props) {
@@ -89,6 +91,8 @@ const VideoDrawLayer = deferred(loadVideo, 'VideoDrawLayer');
 const VideoPreview = deferred(loadVideo, 'VideoPreview');
 const VideoRecorderBar = deferred(loadVideo, 'VideoRecorderBar');
 const VideoSetupPanel = deferred(loadVideo, 'VideoSetupPanel');
+const VideoCountdown = deferred(loadVideo, 'VideoCountdown');
+const VideoReviewCard = deferred(loadVideo, 'VideoReviewCard');
 const VoiceReplay = deferred(loadVideo, 'VoiceReplay');
 const TourPanel = deferred(() => import('./TourPanel.jsx'), 'TourPanel');
 
@@ -1839,7 +1843,13 @@ function Overlay({
   onBeginVideoRecording,
   onCancelVideoSetup,
   onToggleVideoPause,
-  onRestartVideo,
+  onToggleVideoSource,
+  onMarkVideoMoment,
+  videoCountdown = null,
+  onCancelVideoCountdown,
+  videoReview = null,
+  onPostVideo,
+  onRetakeVideo,
   videoBlurred = [],
   videoTool = null,
   onVideoTool,
@@ -2021,6 +2031,7 @@ function Overlay({
     ? editingAnnotation.runtime?.evidence?.find((item) => item.id === savedReplay.evidenceId)
     : null;
   const activeVideo = editingAnnotation?.payload.video || videoSelection?.video || null;
+  const reviewingVideo = Boolean(videoReview && videoSelection && videoReview.id === videoSelection.id && !editingAnnotation);
   const activeVideoEvidence = editingAnnotation
     ? editingAnnotation.runtime?.evidence?.find((item) => item.id === activeVideo?.evidenceId)
     : videoSelection?.evidence;
@@ -2220,7 +2231,7 @@ function Overlay({
   }
   // The mono context line at the top of the composer and thread, e.g. "Button · Start free".
   const composerContext = !primaryTarget ? ""
-    : captureKind === "video" ? `${videoSelection?.video.mode === "tab" ? "Tab" : "Voice + cursor"} recording · ${formatClock(videoSelection?.video.durationMs)}`
+    : captureKind === "video" ? `${videoModeLabel(activeVideo?.mode)} recording · ${formatClock(activeVideo?.durationMs)}`
     : captureKind === "interaction" ? `Interaction · ${interactionSelection?.interaction.events.length || 0} steps`
     : captureKind === "screenshot" ? `Sketch · ${primaryTarget.bounds?.width} × ${primaryTarget.bounds?.height}`
     : captureKind === "region" ? `Area · ${primaryTarget.bounds?.width} × ${primaryTarget.bounds?.height}`
@@ -2293,7 +2304,11 @@ function Overlay({
         <BlurPicker shadowHost={shadowHost} chosen={videoBlurred} onToggle={onToggleVideoBlur} onDone={() => onVideoTool?.(null)} />
       )}
 
-      {mode === "video-setup" && videoSetup && videoTool !== "blur" && (
+      {mode === "video-setup" && videoCountdown != null && (
+        <VideoCountdown seconds={videoCountdown} onCancel={onCancelVideoCountdown} />
+      )}
+
+      {mode === "video-setup" && videoSetup && videoTool !== "blur" && videoSetup.status !== "countdown" && (
         <VideoSetupPanel
           setup={videoSetup}
           maxDurationMs={videoMaxDurationMs}
@@ -2307,9 +2322,11 @@ function Overlay({
 
       {mode === "video-recording" && videoRecording && (
         <>
+          {/* 7d / 8a: an Orange frame means live; a quiet dashed one means paused. */}
+          <div className={`tm-video-frame${videoRecording.paused ? " is-paused" : ""}`} aria-hidden="true" />
           <VideoDrawLayer active={videoTool === "draw"} onStroke={onVideoStroke} />
           <RecordingCursorLayer shadowHost={shadowHost} />
-          {videoSetup?.camera && videoSetup.previewStream?.getVideoTracks?.().length > 0 && (
+          {videoSetup?.camera && videoRecording.cameraOn !== false && videoSetup.previewStream?.getVideoTracks?.().length > 0 && (
             <CameraBubble stream={videoSetup.previewStream} />
           )}
           <VideoRecorderBar
@@ -2317,8 +2334,8 @@ function Overlay({
             tool={videoTool}
             onTool={onVideoTool}
             onPause={onToggleVideoPause}
-            onRestart={onRestartVideo}
-            onDiscard={onDiscardVideo}
+            onSource={onToggleVideoSource}
+            onMoment={onMarkVideoMoment}
             onStop={onStopVideo}
           />
         </>
@@ -2628,7 +2645,20 @@ function Overlay({
         </Suspense>
       )}
 
-      {mode === "selected" && primaryTarget && !replayingVideo && !replayViewer && (
+      {mode === "selected" && reviewingVideo && (
+        <VideoReviewCard
+          key={videoReview.id}
+          review={videoReview}
+          video={videoSelection.video}
+          media={videoSelection.evidence}
+          posting={submitting}
+          onPost={onPostVideo}
+          onRetake={onRetakeVideo}
+          onDelete={onDiscardVideo}
+        />
+      )}
+
+      {mode === "selected" && primaryTarget && !replayingVideo && !replayViewer && !reviewingVideo && (
         <>
           <div
             className="tm-dismiss-layer"
@@ -2729,7 +2759,7 @@ function Overlay({
                   {editingAnnotation
                     ? `Annotation ${annotations.findIndex((item) => item.id === editingAnnotation.id) + 1}`
                     : captureKind === "video"
-                      ? `${videoSelection?.video.mode === "tab" ? "Tab" : "Voice + cursor"} recording`
+                      ? `${videoModeLabel(activeVideo?.mode)} recording`
                     : captureKind === "interaction"
                       ? `${interactionSelection?.interaction.events.length || 0} interaction steps`
                     : captureKind === "screenshot"

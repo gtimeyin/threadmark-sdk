@@ -444,8 +444,22 @@ function normalizeVideo(value, targetCount, evidence) {
       const points = normalizeSampleList(stroke.points, 300, 10_000);
       return points.length >= 2 ? [{ offsetMs: Math.min(durationMs, count(stroke.offsetMs)), points }] : [];
     });
+  // Moments the reviewer marked with M, and the part of the recording they chose to keep (board 02, 7d-7e).
+  const moments = (Array.isArray(value.moments) ? value.moments : [])
+    .slice(0, 50)
+    .map((item) => Math.min(durationMs, count(item?.offsetMs ?? item)))
+    .sort((a, b) => a - b)
+    .map((offsetMs) => ({ offsetMs }));
+  const trimStart = Math.min(durationMs, count(value.trim?.startMs));
+  const trimEnd = Math.min(durationMs, count(value.trim?.endMs ?? durationMs));
+  const trim = value.trim && trimEnd - trimStart >= 1000 && (trimStart > 0 || trimEnd < durationMs)
+    ? { startMs: trimStart, endMs: trimEnd }
+    : null;
+  const title = cleanString(value.title, 120);
+  const notes = normalizeVideoNotes(value.notes, durationMs);
   return {
     version: 1,
+    ...(title ? { title } : {}),
     mode: VIDEO_MODES.has(value.mode) ? value.mode : "voice",
     startedAt,
     durationMs,
@@ -463,6 +477,35 @@ function normalizeVideo(value, targetCount, evidence) {
     events,
     ...(pauses.length ? { pauses } : {}),
     ...(drawings.length ? { drawings } : {}),
+    ...(moments.length ? { moments } : {}),
+    ...(trim ? { trim } : {}),
+    ...(notes ? { notes } : {}),
+  };
+}
+
+/**
+ * What the host wrote about a posted video (board 02, 7f-7g): a summary, transcript and chapters, each a list
+ * of timestamped lines. `status: "processing"` shows that they are still being written.
+ */
+export function normalizeVideoNotes(value, durationMs = MAX_VIDEO_DURATION_MS) {
+  if (!value || typeof value !== "object") return null;
+  const lines = (list, max) => (Array.isArray(list) ? list : [])
+    .slice(0, max)
+    .flatMap((item) => {
+      const text = cleanString(item?.text ?? item?.title, 400);
+      return text ? [{ offsetMs: Math.min(durationMs, count(item.offsetMs)), text }] : [];
+    });
+  const summary = lines(value.summary, 20);
+  const transcript = lines(value.transcript, 400);
+  const chapters = lines(value.chapters, 40);
+  const status = value.status === "processing" ? "processing" : value.status === "failed" ? "failed" : "ready";
+  if (status === "ready" && !summary.length && !transcript.length && !chapters.length) return null;
+  return {
+    status,
+    ...(summary.length ? { summary } : {}),
+    ...(transcript.length ? { transcript } : {}),
+    ...(chapters.length ? { chapters } : {}),
+    ...(value.silent ? { silent: true } : {}),
   };
 }
 

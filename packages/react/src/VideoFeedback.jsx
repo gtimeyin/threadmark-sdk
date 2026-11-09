@@ -9,13 +9,12 @@ import { SelectIcon as MousePointer2 } from "./icons.jsx";
 import { PauseIcon as Pause } from "./icons.jsx";
 import { SketchIcon as PenLine } from "./icons.jsx";
 import { PlayIcon as Play } from "./icons.jsx";
-import { RefreshIcon as RotateCcw } from "./icons.jsx";
 import { StopIcon as Square } from "./icons.jsx";
-import { DeleteIcon as Trash2 } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { HideIcon as VideoOff } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { CameraIcon, ErrorIcon, InfoIcon } from "./icons.jsx";
+import { CameraIcon, ClockIcon, CommentIcon, EditIcon, ErrorIcon, InfoIcon, MomentIcon, SummaryIcon } from "./icons.jsx";
+import { Key } from "./ui/primitives.jsx";
 import {
   activeEventIndex,
   formatClock,
@@ -225,26 +224,46 @@ export function VideoSetupPanel({ setup, maxDurationMs, blurredCount = 0, onBlur
   );
 }
 
+const WARN_BEFORE_LIMIT_MS = 30_000;
+
+function isTypingTarget(event) {
+  const target = event.composedPath?.()[0] || event.target;
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
+}
+
 /**
- * Floating recorder: timer, blur and draw tools, pause, restart, discard, and stop. Losing footage always needs
- * a second step. Blurring is offered for tab recordings, the only ones that record the page itself.
+ * Floating recorder (board 02, 7d and 8a-8b): state and clock, microphone and camera, mark a moment (M),
+ * blur and draw, pause, and an Orange stop. Nothing is lost from here: Stop opens the review, where the
+ * video can be retaken or deleted.
  */
-export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestart, onDiscard, onStop }) {
-  const [pendingAction, setPendingAction] = useState(null);
-  const confirmRef = useRef(null);
-  const openerRef = useRef(null);
-  const ask = (action) => (event) => { openerRef.current = event.currentTarget; setPendingAction(action); };
-  const keep = () => {
-    setPendingAction(null);
-    requestAnimationFrame(() => openerRef.current?.isConnected && openerRef.current.focus());
-  };
+export function VideoRecorderBar({ state, tool = null, onTool, onPause, onSource, onMoment, onStop }) {
+  const [flash, setFlash] = useState(null);
+  const remainingMs = Math.max(0, state.maxDurationMs - state.elapsedMs);
+  const nearLimit = !state.finishing && state.maxDurationMs > WARN_BEFORE_LIMIT_MS && remainingMs <= WARN_BEFORE_LIMIT_MS;
   const announcement = state.finishing
     ? "Saving recording"
     : state.paused ? "Recording paused" : `Recording ${state.mode === "tab" ? "this tab" : "voice and cursor"}`;
 
+  // A short "Moment at 0:08" so the reviewer knows M landed.
   useEffect(() => {
-    if (pendingAction) confirmRef.current?.focus();
-  }, [pendingAction]);
+    if (state.lastMomentMs == null) return undefined;
+    setFlash(state.lastMomentMs);
+    const timer = setTimeout(() => setFlash(null), 1600);
+    return () => clearTimeout(timer);
+  }, [state.moments, state.lastMomentMs]);
+
+  // M marks a moment from anywhere on the page, except while typing.
+  useEffect(() => {
+    if (!onMoment) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key?.toLowerCase() !== "m" || event.repeat || event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event)) return;
+      event.preventDefault();
+      onMoment();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [onMoment]);
 
   // Esc leaves Draw the same way it leaves Blur.
   useEffect(() => {
@@ -259,47 +278,44 @@ export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestar
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [tool, onTool]);
 
-  if (pendingAction) {
-    const restarting = pendingAction === "restart";
-    return (
-      <section className="tm-video-recorder is-confirming" aria-label="Video recorder" role="alert"
-        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); keep(); } }}>
-        <div className="tm-video-recorder__copy">
-          <strong>{restarting ? "Restart from the beginning?" : "Discard this recording?"}</strong>
-          <span>{formatClock(state.elapsedMs)} of video{state.eventCount ? ` and ${state.eventCount} step${state.eventCount === 1 ? "" : "s"}` : ""} will be lost.</span>
-        </div>
-        {/* The safe choice gets focus, so a stray ↵ never throws the footage away. */}
-        <button ref={confirmRef} type="button" className="tm-cancel" onClick={keep}>Keep recording</button>
-        <button
-          type="button"
-          className="tm-video-danger"
-          onClick={() => {
-            setPendingAction(null);
-            if (restarting) onRestart();
-            else onDiscard();
-          }}
-        >
-          {restarting ? <RotateCcw {...iconProps} /> : <Trash2 {...iconProps} />}
-          {restarting ? "Restart" : "Discard"}
-        </button>
-      </section>
-    );
-  }
-
+  const busy = Boolean(state.finishing);
   return (
-    <section className={`tm-video-recorder${state.paused ? " is-paused" : ""}`} aria-label="Video recorder">
+    <section className={`tm-video-recorder${state.paused ? " is-paused" : ""}${nearLimit ? " is-near-limit" : ""}`} aria-label="Video recorder">
       <span className="tm-sr-only" aria-live="polite">{announcement}</span>
-      <span className="tm-recording-dot" aria-hidden="true" />
-      <div className="tm-video-recorder__copy">
-        <strong>
-          <span className="tm-video-recorder__clock">{formatClock(state.elapsedMs)}</span>
-          <span className="tm-video-recorder__limit"> / {formatClock(state.maxDurationMs)}</span>
-        </strong>
-        <span>{state.paused ? "Paused" : state.mode === "tab" ? "Recording this tab" : "Recording voice + cursor"}</span>
-      </div>
-      <span className="tm-video-recorder__count">
-        {state.eventCount} step{state.eventCount === 1 ? "" : "s"}
+      {(nearLimit || flash != null) && (
+        <p className="tm-video-recorder__note" role="status">
+          {nearLimit
+            ? <><ClockIcon {...iconProps} />{Math.ceil(remainingMs / 1000)} seconds left. The video stops at {formatClock(state.maxDurationMs)}.</>
+            : <><MomentIcon {...iconProps} />Moment at {formatClock(flash)}</>}
+        </p>
+      )}
+      <span className="tm-video-recorder__state">
+        <span className="tm-recording-dot" aria-hidden="true" />
+        <strong>{busy ? "Saving…" : state.paused ? "Paused" : "Recording"}</strong>
+        <span className="tm-video-recorder__clock">{formatClock(state.elapsedMs)}</span>
       </span>
+      <span className="tm-video-recorder__rule" aria-hidden="true" />
+      {state.microphone && onSource && (
+        <button type="button" className={`tm-video-icon-button${state.microphoneOn === false ? " is-off" : ""}`}
+          aria-label="Microphone" aria-pressed={state.microphoneOn !== false} title={state.microphoneOn === false ? "Unmute" : "Mute"}
+          disabled={busy} onClick={() => onSource("microphone")}>
+          {state.microphoneOn === false ? <MicOff {...iconProps} /> : <Mic {...iconProps} />}
+        </button>
+      )}
+      {state.camera && onSource && (
+        <button type="button" className={`tm-video-icon-button${state.cameraOn === false ? " is-off" : ""}`}
+          aria-label="Camera" aria-pressed={state.cameraOn !== false} title={state.cameraOn === false ? "Turn camera on" : "Turn camera off"}
+          disabled={busy} onClick={() => onSource("camera")}>
+          {state.cameraOn === false ? <VideoOff {...iconProps} /> : <CameraIcon {...iconProps} />}
+        </button>
+      )}
+      {onMoment && (
+        <button type="button" className="tm-video-icon-button tm-video-moment" aria-label="Mark a moment" aria-keyshortcuts="M"
+          title="Mark a moment (M)" disabled={busy || state.paused} onClick={onMoment}>
+          <MomentIcon {...iconProps} />
+          {state.paused && <span>Moment <Key>M</Key></span>}
+        </button>
+      )}
       {onTool && state.mode === "tab" && (
         <button
           type="button"
@@ -307,7 +323,7 @@ export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestar
           aria-label="Blur parts of the page"
           aria-pressed={tool === "blur"}
           title="Blur (pauses while you choose)"
-          disabled={state.finishing}
+          disabled={busy}
           onClick={() => onTool(tool === "blur" ? null : "blur")}
         >
           <EyeOff {...iconProps} />
@@ -320,7 +336,7 @@ export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestar
           aria-label="Draw on the page"
           aria-pressed={tool === "draw"}
           title="Draw (strokes fade after 3 seconds)"
-          disabled={state.finishing}
+          disabled={busy}
           onClick={() => onTool(tool === "draw" ? null : "draw")}
         >
           <PenLine {...iconProps} />
@@ -328,39 +344,207 @@ export function VideoRecorderBar({ state, tool = null, onTool, onPause, onRestar
       )}
       <button
         type="button"
-        className="tm-video-icon-button"
+        className={`tm-video-icon-button${state.paused ? " tm-video-resume" : ""}`}
         aria-label={state.paused ? "Resume recording" : "Pause recording"}
         title={state.paused ? "Resume" : "Pause"}
-        disabled={state.finishing}
+        disabled={busy}
         onClick={onPause}
       >
         {state.paused ? <Play {...iconProps} /> : <Pause {...iconProps} />}
       </button>
-      <button
-        type="button"
-        className="tm-video-icon-button"
-        aria-label="Restart recording"
-        title="Restart"
-        disabled={state.finishing}
-        onClick={ask("restart")}
-      >
-        <RotateCcw {...iconProps} />
-      </button>
-      <button
-        type="button"
-        className="tm-video-icon-button"
-        aria-label="Discard recording"
-        title="Discard"
-        disabled={state.finishing}
-        onClick={ask("discard")}
-      >
-        <Trash2 {...iconProps} />
-      </button>
-      <button type="button" className="tm-recording-stop" disabled={state.finishing} onClick={onStop}>
+      <button type="button" className="tm-recording-stop" aria-label="Stop recording" title="Stop and review" disabled={busy} onClick={onStop}>
         <Square {...iconProps} />
-        {state.finishing ? "Saving…" : "Stop"}
       </button>
     </section>
+  );
+}
+
+/** 7c: three seconds to get ready. The page is already shared; Esc cancels. */
+export function VideoCountdown({ seconds, onCancel }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onCancel?.();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [onCancel]);
+  return (
+    <div className="tm-video-countdown" data-menu-open="true">
+      <span className="tm-video-countdown__number" role="timer" aria-live="assertive" aria-label={`Recording starts in ${seconds}`}>{seconds}</span>
+      <button type="button" className="tm-video-countdown__cancel" onClick={onCancel}>
+        <strong>Starting</strong> <Key>Esc</Key> to cancel
+      </button>
+    </div>
+  );
+}
+
+function placeLabel(element) {
+  if (!element?.isConnected || element === document.documentElement || element === document.body) return "Whole page";
+  const tag = element.tagName.toLowerCase();
+  const kind = tag === "button" ? "Button" : tag === "a" ? "Link" : /^h[1-6]$/.test(tag) ? "Heading" : tag === "img" ? "Image"
+    : ["input", "textarea", "select"].includes(tag) ? "Field" : null;
+  const text = String(element.getAttribute("aria-label") || (tag === "img" ? element.getAttribute("alt") : element.textContent) || "")
+    .replace(/\s+/g, " ").trim();
+  const words = text.length > 32 ? `${text.slice(0, 31).replace(/\s+\S*$/, "")}…` : text;
+  return [kind, words].filter(Boolean).join(" · ") || "Element";
+}
+
+const MIN_TRIM_MS = 1000;
+const FOCUSABLE = "button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+/**
+ * 7e, review before posting: play it back, trim the ends, check the suggested title and see where it posts.
+ * Nothing is shared until Post. Retake and Delete each ask once, because the footage is lost.
+ */
+export function VideoReviewCard({ review, video, media, posting = false, onPost, onRetake, onDelete }) {
+  const url = useMediaUrl(media);
+  const hasVideo = mediaHasVideo(media);
+  const durationMs = Math.max(1, video?.durationMs || review.endMs || 1);
+  const moments = video?.moments || [];
+  const [title, setTitle] = useState(review.title || "");
+  const [renaming, setRenaming] = useState(false);
+  const [start, setStart] = useState(review.startMs || 0);
+  const [end, setEnd] = useState(review.endMs || durationMs);
+  const [playing, setPlaying] = useState(false);
+  const [pending, setPending] = useState(null);
+  const mediaRef = useRef(null);
+  const cardRef = useRef(null);
+  const postRef = useRef(null);
+  const keepRef = useRef(null);
+  const titleId = useId();
+
+  useEffect(() => { postRef.current?.focus(); }, []);
+  useEffect(() => {
+    if (pending) keepRef.current?.focus();
+  }, [pending]);
+
+  const keptMs = Math.max(0, end - start);
+  const post = () => {
+    if (posting || pending) return;
+    mediaRef.current?.pause();
+    onPost?.({ title, startMs: Math.round(start), endMs: Math.round(end) });
+  };
+  const toggle = () => {
+    const element = mediaRef.current;
+    if (!element) return;
+    if (!element.paused) { element.pause(); return; }
+    const at = element.currentTime * 1000;
+    if (at < start || at >= end - 100) element.currentTime = start / 1000;
+    element.play().catch(() => {});
+  };
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (renaming) { setRenaming(false); return; }
+      setPending(pending ? null : "delete");
+      return;
+    }
+    if (event.key === "Tab") {
+      const items = [...cardRef.current.querySelectorAll(FOCUSABLE)];
+      if (!items.length) return;
+      const root = cardRef.current.getRootNode();
+      const index = items.indexOf(root.activeElement);
+      const next = event.shiftKey ? (index <= 0 ? items.length - 1 : index - 1) : (index === items.length - 1 ? 0 : index + 1);
+      event.preventDefault();
+      items[next].focus();
+      return;
+    }
+    const target = event.nativeEvent?.composedPath?.()[0] || event.target;
+    const inField = target instanceof HTMLInputElement && target.type === "text";
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey || (!inField && !(target instanceof HTMLButtonElement)))) {
+      event.preventDefault();
+      post();
+    }
+  };
+  const pct = (ms) => `${(Math.min(durationMs, Math.max(0, ms)) / durationMs) * 100}%`;
+  const place = placeLabel(review.element);
+
+  return (
+    <div className="tm-sheet-layer tm-video-review-layer" data-menu-open="true">
+      <section ref={cardRef} className="tm-video-review" role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={onKeyDown}>
+        <header className="tm-video-review__header">
+          {renaming ? (
+            <input
+              className="tm-video-review__title-input"
+              value={title}
+              maxLength={120}
+              aria-label="Video title"
+              autoFocus
+              onChange={(event) => setTitle(event.target.value)}
+              onBlur={() => setRenaming(false)}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); setRenaming(false); } }}
+            />
+          ) : (
+            <button type="button" className="tm-video-review__title" onClick={() => setRenaming(true)} aria-label={`Rename video: ${title || "Untitled"}`}>
+              <strong id={titleId}>{title || "Untitled video"}</strong>
+              <EditIcon {...iconProps} />
+            </button>
+          )}
+          <span className="tm-video-review__length">{formatClock(keptMs)}</span>
+          <button type="button" className="tm-video-review__close" aria-label="Delete video" onClick={() => setPending("delete")}>
+            <X {...iconProps} />
+          </button>
+        </header>
+
+        <div className={`tm-video-review__player${hasVideo ? "" : " is-audio"}`}>
+          {url && (hasVideo
+            ? <video ref={mediaRef} src={url} playsInline preload="metadata" onClick={toggle}
+              onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+              onTimeUpdate={(event) => { if (event.currentTarget.currentTime * 1000 >= end) event.currentTarget.pause(); }} />
+            : <audio ref={mediaRef} src={url} preload="metadata"
+              onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+              onTimeUpdate={(event) => { if (event.currentTarget.currentTime * 1000 >= end) event.currentTarget.pause(); }} />)}
+          {!hasVideo && <AudioLines className="tm-video-review__wave" aria-hidden="true" focusable="false" />}
+          <button type="button" className={`tm-video-play${playing ? " is-playing" : ""}`} aria-label={playing ? "Pause" : "Play"} onClick={toggle} disabled={!url}>
+            {playing ? <Pause {...iconProps} /> : <Play {...iconProps} />}
+          </button>
+        </div>
+
+        <div className="tm-video-trim">
+          <div className="tm-video-trim__track" aria-hidden="true">
+            <span className="tm-video-trim__kept" style={{ left: pct(start), width: `calc(${pct(end)} - ${pct(start)})` }} />
+            {moments.map((moment) => <span key={moment.offsetMs} className="tm-video-trim__moment" style={{ left: pct(moment.offsetMs) }} />)}
+          </div>
+          <input type="range" className="tm-video-trim__handle" aria-label="Start of the video" aria-valuetext={formatClock(start)}
+            min={0} max={durationMs} step={100} value={start}
+            onChange={(event) => setStart(Math.min(Number(event.target.value), end - MIN_TRIM_MS))} />
+          <input type="range" className="tm-video-trim__handle" aria-label="End of the video" aria-valuetext={formatClock(end)}
+            min={0} max={durationMs} step={100} value={end}
+            onChange={(event) => setEnd(Math.max(Number(event.target.value), start + MIN_TRIM_MS))} />
+        </div>
+        <p className="tm-video-trim__labels">
+          <span>{formatClock(start)}</span>
+          <span>{moments.length ? `${moments.length} moment${moments.length === 1 ? "" : "s"}` : "Drag the ends to trim"}</span>
+          <span>{formatClock(end)}</span>
+        </p>
+        <p className="tm-video-review__place"><CommentIcon {...iconProps} />Posts on <strong>{place}</strong></p>
+
+        {pending ? (
+          <footer className="tm-video-review__footer is-confirming" role="alert">
+            <span>
+              <strong>{pending === "retake" ? "Record it again?" : "Delete this video?"}</strong>
+              {pending === "retake" ? ` This ${formatClock(durationMs)} take will be thrown away.` : ` The ${formatClock(durationMs)} recording hasn’t been shared and will be lost.`}
+            </span>
+            <button ref={keepRef} type="button" className="tm-video-review__secondary" onClick={() => setPending(null)}>Keep it</button>
+            <button type="button" className="tm-video-danger" onClick={() => (pending === "retake" ? onRetake?.() : onDelete?.())}>
+              {pending === "retake" ? "Retake" : "Delete"}
+            </button>
+          </footer>
+        ) : (
+          <footer className="tm-video-review__footer">
+            <button type="button" className="tm-video-review__secondary" disabled={posting} onClick={() => setPending("retake")}>Retake</button>
+            <button type="button" className="tm-video-review__text" disabled={posting} onClick={() => setPending("delete")}>Delete</button>
+            <button ref={postRef} type="button" className="tm-video-post" disabled={posting} onClick={post}>
+              {posting ? "Posting…" : "Post video"} {!posting && <Key>↵</Key>}
+            </button>
+          </footer>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -692,76 +876,138 @@ export function VideoDrawLayer({ active, onStroke }) {
   );
 }
 
-/** Playback with a timeline of code-searchable steps; each step seeks the recording. */
+/**
+ * A posted video (board 02, 7f-7g): the recording with a Lime play button, then Summary, Transcript and
+ * Chapters from the host's `video.notes` (or the reviewer's own moments), and the code-searchable steps.
+ * Every timestamp seeks the recording.
+ */
 export function VideoPreview({ video, media, targets = [], describeEvent, onReplay, readOnly = false }) {
   const url = useMediaUrl(media);
   const mediaRef = useRef(null);
-  const [currentMs, setCurrentMs] = useState(0);
+  const [currentMs, setCurrentMs] = useState(video?.trim?.startMs || 0);
+  const [playing, setPlaying] = useState(false);
   const events = video?.events || [];
-  const activeIndex = activeEventIndex(events, currentMs);
+  const notes = video?.notes || null;
+  const moments = video?.moments || [];
   const hasVideo = mediaHasVideo(media);
-  const title = video?.mode === "tab" ? "Tab recording" : video?.mode === "screen" ? "Screen recording" : video?.camera ? "Voice, camera + cursor" : "Voice + cursor";
+  const durationMs = Math.max(1, video?.durationMs || 1);
+  const startMs = video?.trim?.startMs || 0;
+  const endMs = video?.trim?.endMs || durationMs;
+  const processing = notes?.status === "processing";
 
-  const seek = (offsetMs) => {
-    const media = mediaRef.current;
-    if (!media) return;
-    media.currentTime = Math.max(0, offsetMs / 1000);
+  const chapters = notes?.chapters?.length ? notes.chapters : moments.map((moment, index) => ({ offsetMs: moment.offsetMs, text: `Moment ${index + 1}` }));
+  const tabs = [
+    (processing || notes?.summary) && { id: "summary", label: "Summary", lines: notes?.summary || [] },
+    (processing || notes?.transcript) && { id: "transcript", label: "Transcript", lines: notes?.transcript || [] },
+    (processing || chapters.length) && { id: "chapters", label: "Chapters", lines: chapters },
+    events.length && { id: "steps", label: "Steps" },
+  ].filter(Boolean);
+  const [tabId, setTabId] = useState(tabs[0]?.id || null);
+  const tab = tabs.find((item) => item.id === tabId) || tabs[0] || null;
+  const tabsId = useId();
+
+  const seek = (offsetMs, play = false) => {
+    const element = mediaRef.current;
+    if (!element) return;
+    element.currentTime = Math.max(0, offsetMs / 1000);
     setCurrentMs(offsetMs);
+    if (play) element.play().catch(() => {});
   };
+  const toggle = () => {
+    const element = mediaRef.current;
+    if (!element) return;
+    if (!element.paused) { element.pause(); return; }
+    const at = element.currentTime * 1000;
+    if (at < startMs || at >= endMs - 100) element.currentTime = startMs / 1000;
+    element.play().catch(() => {});
+  };
+  const onTime = (event) => {
+    const at = event.currentTarget.currentTime * 1000;
+    setCurrentMs(at);
+    if (at >= endMs && !event.currentTarget.paused) event.currentTarget.pause();
+  };
+  const activeLine = (lines) => {
+    let index = -1;
+    lines.forEach((line, i) => { if (line.offsetMs <= currentMs + 50) index = i; });
+    return index;
+  };
+  const activeIndex = activeEventIndex(events, currentMs);
+  const started = playing || currentMs > startMs + 50;
 
   return (
     <section className="tm-video-preview" aria-label="Recorded video">
-      <div className="tm-video-preview__header">
-        <div>
-          <strong>{title}</strong>
-          <span>{formatClock(video?.durationMs)} · {events.length} step{events.length === 1 ? "" : "s"}</span>
-        </div>
-        {video?.mode === "voice" && onReplay && url && (
-          <button type="button" onClick={onReplay}>
-            <MousePointer2 {...iconProps} />
-            Replay on page
+      {url ? (
+        <div className={`tm-video-preview__player${hasVideo ? "" : " is-audio"}${video?.mode === "voice" && hasVideo ? " is-camera" : ""}`}>
+          {hasVideo
+            ? <video ref={mediaRef} className="tm-video-preview__media" src={url} playsInline preload="metadata" onClick={toggle}
+              onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={onTime} />
+            : <audio ref={mediaRef} className="tm-video-preview__audio" src={url} preload="metadata"
+              onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={onTime} />}
+          {!hasVideo && <AudioLines className="tm-video-review__wave" aria-hidden="true" focusable="false" />}
+          <button type="button" className={`tm-video-play${playing ? " is-playing" : ""}`} aria-label={playing ? "Pause" : "Play"} onClick={toggle}>
+            {playing ? <Pause {...iconProps} /> : <Play {...iconProps} />}
           </button>
-        )}
-      </div>
-      {url
-        ? hasVideo
-          ? (
-            <video
-              ref={mediaRef}
-              className={`tm-video-preview__media${video?.mode === "voice" ? " is-camera" : ""}`}
-              src={url}
-              controls
-              playsInline
-              preload="metadata"
-              onTimeUpdate={(event) => setCurrentMs(event.currentTarget.currentTime * 1000)}
-            />
-          )
-          : (
-            <audio
-              ref={mediaRef}
-              className="tm-video-preview__audio"
-              src={url}
-              controls
-              preload="metadata"
-              onTimeUpdate={(event) => setCurrentMs(event.currentTarget.currentTime * 1000)}
-            />
-          )
-        : <p className="tm-video-preview__missing">{readOnly ? "The recording isn’t available on this device." : "Preparing the recording…"}</p>}
-      {events.length > 0 && (
-        <ol className="tm-interaction-events tm-video-events">
-          {events.map((event, index) => (
-            <li key={`${event.offsetMs}-${event.type}-${index}`} className={activeIndex === index ? "is-active" : ""}>
-              <button type="button" onClick={() => seek(event.offsetMs)} disabled={!url}>
-                <time>{formatClock(event.offsetMs)}</time>
-                <span className="tm-interaction-event__label">{describeEvent(event, targets)}</span>
-              </button>
-            </li>
-          ))}
-        </ol>
+          {started && <span className="tm-video-preview__time">{formatClock(currentMs)} / {formatClock(endMs)}</span>}
+          <input type="range" className="tm-video-preview__seek" aria-label="Seek" aria-valuetext={formatClock(currentMs)}
+            min={0} max={durationMs} step={100} value={Math.min(durationMs, currentMs)}
+            style={{ "--tm-seek": `${(Math.min(durationMs, currentMs) / durationMs) * 100}%` }}
+            onChange={(event) => seek(Number(event.target.value))} />
+        </div>
+      ) : <p className="tm-video-preview__missing">{readOnly ? "The recording isn’t available on this device." : "Preparing the recording…"}</p>}
+
+      {video?.mode === "voice" && onReplay && url && (
+        <button type="button" className="tm-video-preview__replay" onClick={onReplay}>
+          <MousePointer2 {...iconProps} />
+          Replay on page
+        </button>
       )}
-      <p className="tm-video-preview__note">
-        The step timeline omits typed values and printable keys. {video?.mode === "tab" ? "The video shows everything that was visible in the tab." : video?.mode === "screen" ? "The video shows everything that was on the shared screen." : "Only your voice, camera, and cursor path were recorded."}
-      </p>
+
+      {tab && (
+        <>
+          <div className="tm-video-tabs" role="tablist" aria-label="About this video">
+            {tabs.map((item) => (
+              <button key={item.id} type="button" role="tab" id={`${tabsId}-${item.id}`} aria-selected={item.id === tab.id}
+                aria-controls={`${tabsId}-panel`} className={item.id === tab.id ? "is-active" : ""} onClick={() => setTabId(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${tab.id}`} className="tm-video-tabpanel">
+            {tab.id === "steps" ? (
+              <ol className="tm-interaction-events tm-video-events">
+                {events.map((event, index) => (
+                  <li key={`${event.offsetMs}-${event.type}-${index}`} className={activeIndex === index ? "is-active" : ""}>
+                    <button type="button" onClick={() => seek(event.offsetMs)} disabled={!url}>
+                      <time>{formatClock(event.offsetMs)}</time>
+                      <span className="tm-interaction-event__label">{describeEvent(event, targets)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : processing && !tab.lines.length ? (
+              <div className="tm-video-notes is-processing" role="status">
+                <p><SummaryIcon {...iconProps} />Writing the summary and transcript…</p>
+                <span /><span /><span />
+              </div>
+            ) : (
+              <ol className="tm-video-notes">
+                {tab.id === "summary" && notes?.silent && <li className="tm-video-notes__lead">No speech in this video, so this summary comes from what was on screen.</li>}
+                {tab.lines.map((line, index) => (
+                  <li key={`${line.offsetMs}-${index}`} className={activeLine(tab.lines) === index && started ? "is-active" : ""}>
+                    <button type="button" onClick={() => seek(line.offsetMs, true)} disabled={!url}>
+                      <time>{formatClock(line.offsetMs)}</time>
+                      <span>{line.text}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </>
+      )}
+      {events.length > 0 && <p className="tm-video-preview__note">
+        Steps leave out typed values and keys. {video?.mode === "tab" ? "The video shows what was visible in the tab." : video?.mode === "screen" ? "The video shows what was on the shared screen." : "Only your voice, camera and cursor path were recorded."}
+      </p>}
     </section>
   );
 }

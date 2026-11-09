@@ -32,6 +32,26 @@ function TourButton() {
 const IGNORED_SELECTORS = [".analytics-internal", ".event-log"];
 const MAX_LOG_ENTRIES = 6;
 const PROJECT_KEY = "pk_threadmark_basic_react";
+// What a transcription service might send back for a video. Built from the recorded steps and moments here;
+// a real host would write it from the audio and frames.
+function exampleVideoNotes(feedback) {
+  const video = feedback.video;
+  const targets = feedback.targets || [];
+  const steps = (video.events || []).slice(0, 4).map((event) => {
+    const name = targets[event.targetIndex]?.accessibleName || targets[event.targetIndex]?.visibleText || "the page";
+    const verb = event.type === "click" ? "Clicks" : event.type === "input" ? "Types in" : event.type === "scroll" ? "Scrolls" : "Moves to";
+    return { offsetMs: event.offsetMs, text: `${verb} ${name}.` };
+  });
+  const summary = steps.length ? steps : [{ offsetMs: 0, text: "Talks through the page without clicking anything." }];
+  return {
+    status: "ready",
+    summary,
+    transcript: summary.map((line) => ({ offsetMs: line.offsetMs, text: `(Example transcript) ${line.text}` })),
+    chapters: (video.moments || []).map((moment, index) => ({ offsetMs: moment.offsetMs, text: `Moment ${index + 1}` })),
+    ...(video.microphone ? {} : { silent: true }),
+  };
+}
+
 const EXAMPLE_AI_TEXT = {
   "unnamed-control": { category: "accessibility", title: "This control has no name", detail: "Screen readers announce it as just “button”." },
   "missing-alt": { category: "accessibility", title: "Image has no description", detail: "Add alt text, or alt=\"\" if it's decoration." },
@@ -177,12 +197,22 @@ export function App() {
   const handleFeedbackCreate = useCallback(async (feedback, context) => {
     // Poll votes live beside the record, so keep them when a reply or edit saves the thread again.
     const poll = context?.poll || annotations.find((item) => item.feedback.id === feedback.id)?.context?.poll;
-    const record = { feedback, context: poll ? { ...context, poll } : context };
-    await feedbackStore.upsert(feedback, record.context);
+    // A stand-in for a host that transcribes videos: notes show as "processing", then fill in (board 02, 7f-7g).
+    const newVideo = feedback.captureKind === "video" && feedback.video && !feedback.video.notes;
+    const saved = newVideo ? { ...feedback, video: { ...feedback.video, notes: { status: "processing" } } } : feedback;
+    const record = { feedback: saved, context: poll ? { ...context, poll } : context };
+    await feedbackStore.upsert(saved, record.context);
     setAnnotations((current) => [
       ...current.filter((item) => item.feedback.id !== feedback.id),
       record,
     ]);
+    if (newVideo) {
+      setTimeout(async () => {
+        const ready = { ...saved, video: { ...saved.video, notes: exampleVideoNotes(saved) } };
+        await feedbackStore.upsert(ready, record.context);
+        setAnnotations((current) => current.map((item) => (item.feedback.id === ready.id ? { ...item, feedback: ready } : item)));
+      }, 4000);
+    }
     setFeedbackEntries((current) => [
       logEntry(record),
       ...current.filter((item) => item.feedback.id !== feedback.id),

@@ -76,6 +76,7 @@ import {
   readRecordingMetadata,
   resolveVideoRecordingOptions,
   stopStream,
+  suggestVideoTitle,
 } from "./videoRecording.js";
 
 import { AgentReview } from "./AgentReview.jsx";
@@ -560,6 +561,9 @@ export function Threadmark({
   const [videoSetup, setVideoSetup] = useState(null);
   const [videoRecordingState, setVideoRecordingState] = useState(null);
   const [videoSelection, setVideoSelection] = useState(null);
+  // 3-2-1 before recording (7c) and the review after Stop (7e): title, trim and where it posts.
+  const [videoCountdown, setVideoCountdown] = useState(null);
+  const [videoReview, setVideoReview] = useState(null);
   // What the reviewer chose to blur in a tab recording, and the tool in use (blur or draw).
   const [videoBlurred, setVideoBlurred] = useState([]);
   const [videoTool, setVideoTool] = useState(null);
@@ -637,6 +641,8 @@ export function Threadmark({
   const videoPreviewStreamRef = useRef(null);
   const videoPreviewGenerationRef = useRef(0);
   const finishVideoRecordingRef = useRef(null);
+  const videoCountdownCancelRef = useRef(null);
+  const postVideoPendingRef = useRef(null);
   const replayRecorderRef = useRef(null);
   const clientHintsRef = useRef(null);
   const metadataRef = useLatest(metadata);
@@ -694,7 +700,7 @@ export function Threadmark({
   const ignoredSelectorsKey = useMemo(() => ignoredSelectors.join("\n"), [ignoredSelectors]);
   const videoOptions = useMemo(
     () => resolveVideoRecordingOptions(videoRecording),
-    [videoRecording === false, videoRecording?.maxDurationMs],
+    [videoRecording === false, videoRecording?.maxDurationMs, videoRecording?.countdownSeconds],
   );
   const replayOptions = resolveSessionReplayOptions(sessionReplay);
   const replayProviderRef = useLatest(replayOptions.provider);
@@ -766,6 +772,9 @@ export function Threadmark({
     const session = videoSessionRef.current;
     videoSessionRef.current = null;
     videoPreviewGenerationRef.current += 1;
+    videoCountdownCancelRef.current?.();
+    postVideoPendingRef.current = null;
+    setVideoReview(null);
     session?.recorder?.discard();
     stopStream(session?.displayStream);
     stopStream(videoPreviewStreamRef.current);
@@ -1990,6 +1999,26 @@ export function Threadmark({
     emitStatus("selecting");
   }, [emitStatus, modeRef, releaseVideo]);
 
+  // Resolves true when the count reaches zero, false when Esc cancels it.
+  const runVideoCountdown = useCallback((seconds) => new Promise((resolve) => {
+    let left = seconds;
+    setVideoCountdown(left);
+    let timer = null;
+    const finish = (finished) => {
+      clearInterval(timer);
+      videoCountdownCancelRef.current = null;
+      setVideoCountdown(null);
+      resolve(finished);
+    };
+    timer = setInterval(() => {
+      left -= 1;
+      if (left <= 0) finish(true);
+      else setVideoCountdown(left);
+    }, 1000);
+    videoCountdownCancelRef.current = () => finish(false);
+  }), []);
+  const cancelVideoCountdown = useCallback(() => { videoCountdownCancelRef.current?.(); }, []);
+
   const beginVideoRecording = useCallback(async () => {
     const setup = videoSetupRef.current;
     if (!setup || modeRef.current !== "video-setup" || ["requesting", "starting", "error"].includes(setup.status)) return;
@@ -2018,6 +2047,17 @@ export function Threadmark({
       stopStream(displayStream);
       return;
     }
+    // The tab is already shared, so what the reviewer sees during the count is what will be recorded.
+    if (videoOptions.countdownSeconds > 0) {
+      setVideoSetup((current) => current && { ...current, status: "countdown" });
+      const finished = await runVideoCountdown(videoOptions.countdownSeconds);
+      const current = generation === videoPreviewGenerationRef.current && modeRef.current === "video-setup";
+      if (!finished || !current) {
+        stopStream(displayStream);
+        if (current) setVideoSetup((value) => value && { ...value, status: "ready", error: "" });
+        return;
+      }
+    }
     const preview = videoPreviewStreamRef.current;
     const audioTracks = setup.microphone ? preview?.getAudioTracks?.() || [] : [];
     const cameraTracks = setup.camera ? preview?.getVideoTracks?.() || [] : [];
@@ -2042,6 +2082,7 @@ export function Threadmark({
       maxEvents: MAX_VIDEO_EVENTS,
       events: [],
       drawings: [],
+      moments: [],
       targets: [],
       targetKeys: new Map(),
       lastScrollAt: 0,
@@ -2085,12 +2126,40 @@ export function Threadmark({
       paused: false,
       finishing: false,
       eventCount: 0,
+      moments: 0,
+      lastMomentMs: null,
       mode: session.mode,
       maxDurationMs: session.maxDurationMs,
+      microphone: session.microphone,
+      camera: session.camera,
+      microphoneOn: true,
+      cameraOn: true,
     });
     modeRef.current = "video-recording";
     setMode("video-recording");
-  }, [callbacks.onError, modeRef, safeCall, videoOptions.maxDurationMs, videoSetupRef]);
+  }, [callbacks.onError, modeRef, runVideoCountdown, safeCall, videoOptions.countdownSeconds, videoOptions.maxDurationMs, videoSetupRef]);
+
+  // Mute the microphone or turn the camera off mid-recording without stopping (7d). The recorder keeps
+  // the same tracks, so the video carries silence or a still frame for that stretch.
+  const toggleVideoSource = useCallback((kind) => {
+    const session = videoSessionRef.current;
+    if (!session || session.finishing) return;
+    const preview = videoPreviewStreamRef.current;
+    const tracks = kind === "microphone" ? preview?.getAudioTracks?.() || [] : preview?.getVideoTracks?.() || [];
+    if (!tracks.length) return;
+    const next = !tracks[0].enabled;
+    for (const track of tracks) track.enabled = next;
+    setVideoRecordingState((current) => current && { ...current, [kind === "microphone" ? "microphoneOn" : "cameraOn"]: next });
+  }, []);
+
+  // M marks a moment worth talking about later; moments become ticks on the trim bar and chapters.
+  const markVideoMoment = useCallback(() => {
+    const session = videoSessionRef.current;
+    if (!session || session.finishing || session.clock.paused || session.moments.length >= 50) return;
+    const offsetMs = session.clock.elapsed();
+    session.moments.push({ offsetMs });
+    setVideoRecordingState((current) => current && { ...current, moments: session.moments.length, lastMomentMs: offsetMs });
+  }, []);
 
   const toggleVideoPause = useCallback(() => {
     const session = videoSessionRef.current;
@@ -2108,27 +2177,6 @@ export function Threadmark({
       elapsedMs: session.clock.elapsed(),
     });
   }, []);
-
-  const restartVideoRecording = useCallback(() => {
-    const session = videoSessionRef.current;
-    if (!session || session.finishing) return;
-    session.recorder.restart();
-    session.clock.reset();
-    session.startedAt = new Date().toISOString();
-    session.events = [];
-    session.drawings = [];
-    session.targets = [];
-    session.targetKeys = new Map();
-    session.lastScrollAt = 0;
-    session.pointer = createPointerTrack({
-      width: window.innerWidth,
-      height: window.innerHeight,
-      scrollX: window.scrollX,
-      scrollY: window.scrollY,
-    });
-    setVideoRecordingState((current) => current && { ...current, elapsedMs: 0, paused: false, eventCount: 0 });
-    showNotice("Recording restarted");
-  }, [showNotice]);
 
   // Choosing what to blur pauses the recording (so the choosing isn't in the video) and resumes it after.
   const chooseVideoTool = useCallback((tool) => {
@@ -2159,7 +2207,7 @@ export function Threadmark({
     modeRef.current = "picking";
     setMode("picking");
     emitStatus("selecting");
-    showNotice("Video discarded");
+    showNotice("Video deleted");
   }, [emitStatus, modeRef, releaseVideo, showNotice]);
 
   const finishVideoRecording = useCallback(async () => {
@@ -2230,6 +2278,7 @@ export function Threadmark({
         events: session.events,
         pauses: session.clock.pauses,
         drawings: session.drawings,
+        moments: session.moments,
       },
       evidence: {
         id: session.evidenceId,
@@ -2249,6 +2298,13 @@ export function Threadmark({
       },
     };
     setVideoSelection(selection);
+    setVideoReview({
+      id: session.id,
+      title: suggestVideoTitle(document.title, sanitizeRoute(route || window.location.pathname || "/")),
+      startMs: 0,
+      endMs: durationMs,
+      element: primaryItem?.element || null,
+    });
     setComment("");
     modeRef.current = "selected";
     setMode("selected");
@@ -3627,6 +3683,14 @@ export function Threadmark({
     editAnnotation(source.feedbackId);
   };
 
+  // Runs the ordinary submit once the review's title and trim are in state.
+  useEffect(() => {
+    const pending = postVideoPendingRef.current;
+    if (!pending || comment !== pending || videoSelection?.video?.title !== pending) return;
+    postVideoPendingRef.current = null;
+    submitFeedback({ preventDefault() {} });
+  });
+
   const submitFeedback = async (event) => {
     event.preventDefault();
     const editing = annotationsRef.current.find((annotation) => annotation.id === editingIdRef.current) || null;
@@ -3896,15 +3960,24 @@ export function Threadmark({
       // Board 01, 2d: "Comment added · Undo".
       {
         const addedId = payload.id;
-        showNotice("Comment added", { label: "Undo", run: () => removeAnnotation(addedId) });
+        showNotice(captureKind === "video" ? "Video posted" : "Comment added", { label: "Undo", run: () => removeAnnotation(addedId) });
       }
       clearCapture();
-      setEditingAnnotationId(null);
       setComment("");
-      setComposerMode("new");
       setReplyTarget(null);
       setPendingDelete(null);
       setSubmitting(false);
+      if (captureKind === "video") {
+        // 7f: the posted video opens as its thread, so it plays straight away.
+        setEditingAnnotationId(payload.id);
+        setComposerMode("reply");
+        modeRef.current = "selected";
+        setMode("selected");
+        emitStatus("selected");
+        return;
+      }
+      setEditingAnnotationId(null);
+      setComposerMode("new");
       modeRef.current = "picking";
       setMode("picking");
       emitStatus("selecting");
@@ -3918,6 +3991,19 @@ export function Threadmark({
         message: "The feedback callback did not complete successfully.",
       });
     }
+  };
+
+  // Post from the review (7e): the title becomes the comment and the trim travels with the video.
+  const postVideo = ({ title, startMs, endMs }) => {
+    const current = videoRef.current;
+    if (!current || submitting) return;
+    const text = String(title || "").trim().slice(0, 120) || "Video walkthrough";
+    setVideoSelection((selection) => selection && {
+      ...selection,
+      video: { ...selection.video, title: text, trim: { startMs, endMs } },
+    });
+    setComment(text);
+    postVideoPendingRef.current = text;
   };
 
   if (!portalRoot) return null;
@@ -4029,7 +4115,6 @@ export function Threadmark({
       onBeginVideoRecording={beginVideoRecording}
       onCancelVideoSetup={cancelVideoSetup}
       onToggleVideoPause={toggleVideoPause}
-      onRestartVideo={restartVideoRecording}
       videoBlurred={videoBlurred}
       videoTool={videoTool}
       onVideoTool={chooseVideoTool}
@@ -4037,6 +4122,13 @@ export function Threadmark({
       onVideoStroke={recordVideoStroke}
       onDiscardVideo={discardVideoRecording}
       onStopVideo={finishVideoRecording}
+      onToggleVideoSource={toggleVideoSource}
+      onMarkVideoMoment={markVideoMoment}
+      videoCountdown={videoCountdown}
+      onCancelVideoCountdown={cancelVideoCountdown}
+      videoReview={videoReview}
+      onPostVideo={postVideo}
+      onRetakeVideo={startVideoSetup}
       replayEnabled={replayOptions.enabled}
       replayDraft={replayDraft}
       onToggleReplay={toggleReplayAttachment}

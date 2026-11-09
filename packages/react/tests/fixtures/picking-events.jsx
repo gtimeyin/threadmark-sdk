@@ -74,9 +74,13 @@ const persistenceEnabled = fixtureParams.has("persist");
 const sessionReplay = fixtureParams.has("replay")
   ? { bufferMs: 30_000, ...(fixtureParams.get("network") === "bodies" ? { network: { bodies: true } } : {}) }
   : undefined;
+// Tests skip the 3-2-1 unless they ask for it with `?countdown=1`.
 const videoRecording = fixtureParams.has("novideo")
   ? false
-  : fixtureParams.has("videomax") ? { maxDurationMs: Number(fixtureParams.get("videomax")) } : undefined;
+  : {
+    countdownSeconds: Number(fixtureParams.get("countdown") || 0),
+    ...(fixtureParams.has("videomax") ? { maxDurationMs: Number(fixtureParams.get("videomax")) } : {}),
+  };
 const feedbackStore = createFeedbackStore({
   databaseName: "threadmark-browser-lifecycle",
   projectKey: "privacy-browser-fixture",

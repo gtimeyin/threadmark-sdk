@@ -313,6 +313,36 @@ export interface ThreadmarkVideoCapture {
    * recording, then `[ms into the stroke, clientX, clientY]` points. Voice recordings replay them over the page.
    */
   drawings?: Array<{ offsetMs: number; points: Array<[number, number, number]> }>;
+  /** The title from the review step (also the comment's text). */
+  title?: string;
+  /** Moments the reviewer marked with M while recording. They show as ticks on the trim bar and as chapters. */
+  moments?: Array<{ offsetMs: number }>;
+  /**
+   * The part the reviewer kept in the review step. The file itself is not cut: playback starts and stops here,
+   * and a host that re-encodes can trim to it. Absent when the whole recording was kept.
+   */
+  trim?: { startMs: number; endMs: number };
+  /** Written by the host after posting, e.g. by a transcription service. See {@link ThreadmarkVideoNotes}. */
+  notes?: ThreadmarkVideoNotes;
+}
+
+/** A line of a video's summary, transcript or chapters; clicking it seeks the recording. */
+export interface ThreadmarkVideoNoteLine {
+  offsetMs: number;
+  text: string;
+}
+
+/**
+ * What the host wrote about a posted video (board 02, 7f-7g). Threadmark doesn't transcribe: send the record
+ * back through `annotations` with `feedback.video.notes` set. `processing` shows "Writing the summary and
+ * transcript…" until the lines arrive. `silent` says the summary came from the screen, not speech.
+ */
+export interface ThreadmarkVideoNotes {
+  status?: "processing" | "ready" | "failed";
+  summary?: ThreadmarkVideoNoteLine[];
+  transcript?: ThreadmarkVideoNoteLine[];
+  chapters?: ThreadmarkVideoNoteLine[];
+  silent?: boolean;
 }
 
 /**
@@ -357,6 +387,8 @@ export type ThreadmarkMetadata = { [key: string]: ThreadmarkMetadataValue };
 export interface ThreadmarkVideoRecordingOptions {
   /** Longest recording in milliseconds. Defaults to 5 minutes; clamped to 5 seconds–10 minutes. */
   maxDurationMs?: number;
+  /** Seconds counted down after the tab is shared and before recording starts. Defaults to 3; 0–5. */
+  countdownSeconds?: number;
 }
 
 export interface ThreadmarkReaction {

@@ -21,6 +21,7 @@ import {
   pointerPositionAt,
   resolveVideoRecordingOptions,
   scrollPositionAt,
+  suggestVideoTitle,
   videoOffsetAt,
 } from "../src/videoRecording.js";
 
@@ -79,8 +80,8 @@ function videoPayload(overrides = {}) {
 }
 
 test("the videoRecording prop is on by default, can be turned off, and clamps its duration", () => {
-  assert.deepEqual(resolveVideoRecordingOptions(undefined), { enabled: true, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS });
-  assert.deepEqual(resolveVideoRecordingOptions(true), { enabled: true, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS });
+  assert.deepEqual(resolveVideoRecordingOptions(undefined), { enabled: true, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS, countdownSeconds: 3 });
+  assert.deepEqual(resolveVideoRecordingOptions(true), { enabled: true, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS, countdownSeconds: 3 });
   assert.equal(resolveVideoRecordingOptions(false).enabled, false);
   assert.equal(resolveVideoRecordingOptions({ maxDurationMs: 60_000 }).maxDurationMs, 60_000);
   assert.equal(resolveVideoRecordingOptions({ maxDurationMs: 99 * 60_000 }).maxDurationMs, MAX_VIDEO_DURATION_MS);
@@ -415,4 +416,52 @@ test("a screen recording keeps its mode, and exports name it", () => {
   });
   assert.equal(payload.video.mode, "screen");
   assert.match(formatAnnotationsMarkdown([{ payload }]), /screen recording · 0:04/);
+});
+
+test("video titles, moments, trim and host notes survive normalisation (board 02, 7e-7g)", () => {
+  const base = videoPayload().video;
+  const payload = videoPayload({
+    video: {
+      ...base,
+      title: "  Checkout walkthrough  ",
+      moments: [{ offsetMs: 9_000 }, { offsetMs: 2_000 }, { offsetMs: 99_000 }],
+      trim: { startMs: 1_000, endMs: 11_000 },
+      notes: {
+        status: "ready",
+        summary: [{ offsetMs: 4_000, text: "Asks for a company name too early." }, { offsetMs: 1, text: "" }],
+        chapters: [{ offsetMs: 0, title: "Sign-up" }],
+        evil: "<script>",
+      },
+    },
+  });
+  assert.equal(payload.video.title, "Checkout walkthrough");
+  assert.deepEqual(payload.video.moments, [{ offsetMs: 2_000 }, { offsetMs: 9_000 }, { offsetMs: 12_400 }]);
+  assert.deepEqual(payload.video.trim, { startMs: 1_000, endMs: 11_000 });
+  assert.deepEqual(payload.video.notes, {
+    status: "ready",
+    summary: [{ offsetMs: 4_000, text: "Asks for a company name too early." }],
+    chapters: [{ offsetMs: 0, text: "Sign-up" }],
+  });
+});
+
+test("an untrimmed or too-short trim and empty notes are dropped; processing notes are kept", () => {
+  const base = videoPayload().video;
+  const whole = videoPayload({ video: { ...base, trim: { startMs: 0, endMs: 12_400 }, notes: { status: "ready" } } });
+  assert.equal("trim" in whole.video, false);
+  assert.equal("notes" in whole.video, false);
+  const tiny = videoPayload({ video: { ...base, trim: { startMs: 5_000, endMs: 5_400 }, notes: { status: "processing" } } });
+  assert.equal("trim" in tiny.video, false);
+  assert.deepEqual(tiny.video.notes, { status: "processing" });
+});
+
+test("suggested video titles come from the page title, or the route", () => {
+  assert.equal(suggestVideoTitle("Sign-up | Northstar", "/signup"), "Sign-up walkthrough");
+  assert.equal(suggestVideoTitle("", "/"), "Home walkthrough");
+  assert.equal(suggestVideoTitle("", "/account/billing-settings"), "Billing settings walkthrough");
+});
+
+test("the countdown defaults to three seconds and stays between 0 and 5", () => {
+  assert.equal(resolveVideoRecordingOptions({ countdownSeconds: 0 }).countdownSeconds, 0);
+  assert.equal(resolveVideoRecordingOptions({ countdownSeconds: 30 }).countdownSeconds, 5);
+  assert.equal(resolveVideoRecordingOptions({}).countdownSeconds, 3);
 });

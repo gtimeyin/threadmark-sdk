@@ -141,6 +141,20 @@ async function setComment(page, comment) {
   }, comment);
 }
 
+// Stop opens the review (board 02, 7e); Post turns it into a comment and opens its thread.
+async function postFromReview(page, title) {
+  const review = page.locator(".tm-video-review");
+  await expect(review).toBeVisible();
+  if (title) {
+    await page.locator(".tm-video-review__title").click();
+    await page.getByRole("textbox", { name: "Video title" }).fill(title);
+    await page.keyboard.press("Enter");
+  }
+  await page.getByRole("button", { name: /^Post video/ }).click();
+  await expect(review).toHaveCount(0);
+  await expect(page.locator(".tm-popover--thread .tm-video-preview")).toBeVisible();
+}
+
 async function submitComposer(page) {
   await expect(page.locator(".tm-submit")).toBeEnabled();
   await page.locator(".tm-submit").click();
@@ -167,20 +181,31 @@ test("records the tab with camera and voice, tracks the cursor, and restores the
   await page.locator("#secondary-target").click();
   await expect(page.locator("#interaction-output")).toHaveText("Results updated");
   await expect.poll(() => page.evaluate(() => window.__threadmarkHostEvents)).toContain("secondary-click");
-  await expect(page.locator(".tm-video-recorder__count")).toHaveText(/[2-9] steps/);
+  // An Orange frame while live; M marks a moment (focus is on the button, not a field).
+  await expect(page.locator(".tm-video-frame")).toBeVisible();
+  await page.keyboard.press("m");
+  await expect(page.locator(".tm-video-recorder__note")).toContainText("Moment at 0:0");
   await page.waitForTimeout(1200);
 
-  await page.locator(".tm-recording-stop").click();
-  await expect(page.locator(".tm-popover")).toBeVisible();
-  await expect(page.locator(".tm-video-preview video")).toHaveCount(1);
-  await expect(page.locator(".tm-video-events li").filter({ hasText: "Clicked Secondary host action" })).toHaveCount(1);
+  await page.getByRole("button", { name: "Stop recording" }).click();
+  await expect(page.locator(".tm-video-review video")).toHaveCount(1);
+  await expect(page.locator(".tm-video-review")).toContainText("1 moment");
+  await expect(page.locator(".tm-video-review__title")).toContainText("walkthrough");
+  await expect(page.getByRole("button", { name: /^Post video/ })).toBeFocused();
+  await expect(page.locator(".tm-video-frame")).toHaveCount(0);
   expect(await page.evaluate(() => document.querySelector("[data-threadmark-root]").shadowRoot.textContent))
     .not.toContain("private launch plan");
   expect(await allCapturedTracksEnded(page)).toBe(true);
 
-  await setComment(page, "The secondary action should not reset the results.");
-  await submitComposer(page);
+  await postFromReview(page, "The secondary action should not reset the results.");
+  await page.getByRole("tab", { name: "Steps" }).click();
+  await expect(page.locator(".tm-video-events li").filter({ hasText: "Clicked Secondary host action" })).toHaveCount(1);
+  await page.getByRole("tab", { name: "Chapters" }).click();
+  await expect(page.locator(".tm-video-notes")).toContainText("Moment 1");
   const saved = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
+  expect(saved.comment).toBe("The secondary action should not reset the results.");
+  expect(saved.video.title).toBe("The secondary action should not reset the results.");
+  expect(saved.video.moments).toHaveLength(1);
   expect(saved.captureKind).toBe("video");
   expect(saved.video.mode).toBe("tab");
   expect(saved.video.camera).toBe(true);
@@ -205,6 +230,7 @@ test("records the tab with camera and voice, tracks the cursor, and restores the
   await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
   await page.locator(".tm-marker").first().click();
   await expect(page.locator(".tm-video-preview video")).toHaveCount(1);
+  await page.getByRole("tab", { name: "Steps" }).click();
   await expect(page.locator(".tm-video-events li")).toHaveCount(saved.video.events.length);
   expect(pageErrors).toEqual([]);
 });
@@ -223,7 +249,8 @@ test("a declined tab share falls back to voice + cursor, which replays over the 
   await expect.poll(() => page.evaluate(() => window.__mediaRequests.at(-1))).toEqual({ kind: "user", video: false, audio: true });
 
   await page.locator(".tm-video-start").click();
-  await expect(page.locator(".tm-video-recorder")).toContainText("Recording voice + cursor");
+  await expect(page.locator(".tm-video-recorder")).toContainText("Recording");
+  await expect(page.getByRole("button", { name: "Camera" })).toHaveCount(0);
   await expect(page.locator(".tm-camera-bubble")).toHaveCount(0);
   await tracePointer(page, [[60, 60], [100, 80], [140, 100], [180, 120], [220, 140]]);
   await page.locator("#secondary-target").click();
@@ -238,9 +265,8 @@ test("a declined tab share falls back to voice + cursor, which replays over the 
   await page.waitForTimeout(1100);
   await page.locator(".tm-recording-stop").click();
 
-  await expect(page.locator(".tm-video-preview audio")).toHaveCount(1);
-  await setComment(page, "Listen to the explanation while the cursor shows the path.");
-  await submitComposer(page);
+  await expect(page.locator(".tm-video-review audio")).toHaveCount(1);
+  await postFromReview(page, "Listen to the explanation while the cursor shows the path.");
   const saved = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
   expect(saved.video).toMatchObject({ mode: "voice", camera: false, microphone: true });
   expect(saved.evidence[0]).toMatchObject({ kind: "recording", mimeType: "audio/webm", hasVideo: false });
@@ -248,7 +274,6 @@ test("a declined tab share falls back to voice + cursor, which replays over the 
   expect(saved.video.drawings).toHaveLength(1);
   expect(await allCapturedTracksEnded(page)).toBe(true);
 
-  await page.locator(".tm-marker").first().click();
   await page.getByRole("button", { name: "Replay on page" }).click();
   await expect(page.locator(".tm-replay-bar")).toBeVisible();
   await expect(page.locator(".tm-replay-cursor")).toHaveCount(1);
@@ -262,7 +287,7 @@ test("a declined tab share falls back to voice + cursor, which replays over the 
   expect(await page.evaluate(() => window.__threadmarkHostEvents.filter((event) => event === "secondary-click").length)).toBe(1);
 });
 
-test("a running recording ignores Escape and needs a second step to discard or restart", async ({ page }) => {
+test("a running recording ignores Escape; the review asks before Retake or Delete", async ({ page }) => {
   await mountFixture(page, "");
   await openVideoSetup(page);
   await page.locator(".tm-video-start").click();
@@ -271,37 +296,83 @@ test("a running recording ignores Escape and needs a second step to discard or r
   await page.keyboard.press("Escape");
   await expect(page.locator(".tm-video-recorder")).toBeVisible();
 
+  // The microphone mutes without stopping; pausing turns the frame into a quiet dashed one.
+  const microphone = page.getByRole("button", { name: "Microphone" });
+  await microphone.click();
+  await expect(microphone).toHaveAttribute("aria-pressed", "false");
+  expect(await page.evaluate(() => window.__mediaStreams.flatMap((stream) => stream.getAudioTracks()).some((track) => track.readyState === "live" && !track.enabled))).toBe(true);
+  await microphone.click();
+  await expect(microphone).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Pause recording" }).click();
   await expect(page.locator(".tm-video-recorder")).toContainText("Paused");
+  await expect(page.locator(".tm-video-frame")).toHaveClass(/is-paused/);
   await page.getByRole("button", { name: "Resume recording" }).click();
+  await page.waitForTimeout(1100);
+  await page.locator(".tm-recording-stop").click();
 
-  await page.getByRole("button", { name: "Restart recording" }).click();
-  await expect(page.locator(".tm-video-recorder")).toContainText("Restart from the beginning?");
-  await page.getByRole("button", { name: "Keep recording" }).click();
-  await expect(page.locator(".tm-video-recorder__clock")).toBeVisible();
+  // Esc asks first, and the safe choice has focus.
+  const review = page.locator(".tm-video-review");
+  await expect(review).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(review).toContainText("Delete this video?");
+  await expect(page.getByRole("button", { name: "Keep it" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(review).not.toContainText("Delete this video?");
 
-  await page.getByRole("button", { name: "Discard recording" }).click();
-  await expect(page.locator(".tm-video-recorder")).toContainText("Discard this recording?");
-  await page.locator(".tm-video-danger").click();
-  await expect(page.locator(".tm-video-recorder")).toHaveCount(0);
+  await page.getByRole("button", { name: "Retake" }).click();
+  await expect(review).toContainText("Record it again?");
+  await page.locator(".tm-video-review .tm-video-danger").click();
+  await expect(page.locator(".tm-video-setup")).toBeVisible();
+  await expect(page.locator(".tm-video-start")).toBeEnabled();
+  await page.locator(".tm-video-start").click();
+  await page.waitForTimeout(1100);
+  await page.locator(".tm-recording-stop").click();
+
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(review).toContainText("Delete this video?");
+  await page.locator(".tm-video-review .tm-video-danger").click();
+  await expect(review).toHaveCount(0);
   await expect(page.locator(".tm-modebar")).toBeVisible();
   expect(await allCapturedTracksEnded(page)).toBe(true);
   expect(await page.evaluate(() => window.__threadmarkFeedback.length)).toBe(0);
 });
 
-test("dismissing an unposted video asks first, and the duration limit stops the recording", async ({ page }) => {
+test("a 3-2-1 countdown runs before recording, and Esc cancels it", async ({ page }) => {
+  await mountFixture(page, "countdown=2");
+  await openVideoSetup(page);
+  await page.locator(".tm-video-start").click();
+  const count = page.getByRole("timer");
+  await expect(count).toHaveText("2");
+  await expect(page.locator(".tm-video-setup")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(count).toHaveCount(0);
+  await expect(page.locator(".tm-video-setup")).toBeVisible();
+  await expect(page.locator(".tm-video-recorder")).toHaveCount(0);
+
+  await page.locator(".tm-video-start").click();
+  await expect(count).toHaveText("2");
+  await expect(count).toHaveText("1");
+  await expect(page.locator(".tm-video-recorder")).toBeVisible({ timeout: 3000 });
+  await expect(count).toHaveCount(0);
+});
+
+test("the review trims the ends, and the duration limit stops the recording", async ({ page }) => {
   await mountFixture(page, "videomax=5000");
   await openVideoSetup(page);
   await expect(page.locator(".tm-video-setup__limit")).toHaveText("Up to 0:05");
   await page.locator(".tm-video-start").click();
-  await expect(page.locator(".tm-video-recorder__limit")).toHaveText("/ 0:05");
-  await expect(page.locator(".tm-popover")).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator(".tm-video-preview")).toContainText("0:0");
+  await expect(page.locator(".tm-video-review")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".tm-video-review__length")).toHaveText(/0:0[45]/);
 
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".tm-delete-confirm")).toContainText("Discard this video?");
-  await page.getByRole("button", { name: "Keep editing" }).click();
-  await expect(page.locator(".tm-video-preview")).toBeVisible();
+  const startHandle = page.getByRole("slider", { name: "Start of the video" });
+  await startHandle.focus();
+  for (let step = 0; step < 10; step += 1) await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".tm-video-trim__labels span").first()).toHaveText("0:01");
+
+  await postFromReview(page);
+  const saved = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
+  expect(saved.video.trim).toEqual({ startMs: 1000, endMs: saved.video.durationMs });
+  expect(saved.comment).toMatch(/walkthrough$/);
 });
 
 test("hosts can turn video feedback off", async ({ page }) => {
@@ -456,10 +527,9 @@ test("tab videos blur what the site marked private and what the reviewer picks, 
   await page.waitForTimeout(500);
 
   await page.locator(".tm-recording-stop").click();
-  await expect(page.locator(".tm-popover")).toBeVisible();
+  await expect(page.locator(".tm-video-review")).toBeVisible();
   await expect(blurBoxes).toHaveCount(0);
-  await setComment(page, "The numbers are blurred.");
-  await submitComposer(page);
+  await postFromReview(page, "The numbers are blurred.");
   const saved = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
   expect(saved.video.drawings).toHaveLength(1);
   expect(saved.video.drawings[0].points.length).toBeGreaterThan(3);

@@ -47,12 +47,15 @@ const RECORDER_CANDIDATES = {
 
 /** `videoRecording` prop → effective options. `false` turns the capability off. */
 export function resolveVideoRecordingOptions(value) {
-  if (value === false) return { enabled: false, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS };
+  if (value === false) return { enabled: false, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS, countdownSeconds: 3 };
   const requested = Number(value && typeof value === "object" ? value.maxDurationMs : NaN);
   const maxDurationMs = Number.isFinite(requested)
     ? Math.round(Math.min(MAX_VIDEO_DURATION_MS, Math.max(MIN_VIDEO_DURATION_MS, requested)))
     : DEFAULT_VIDEO_MAX_DURATION_MS;
-  return { enabled: true, maxDurationMs };
+  // Three seconds to get ready once the tab is shared (board 02, 7c). 0 starts straight away.
+  const countdown = Number(value && typeof value === "object" ? value.countdownSeconds : NaN);
+  const countdownSeconds = Number.isFinite(countdown) ? Math.round(Math.min(5, Math.max(0, countdown))) : 3;
+  return { enabled: true, maxDurationMs, countdownSeconds };
 }
 
 /** What this browser can record. Tab capture needs getDisplayMedia, which phones do not offer. */
@@ -465,4 +468,11 @@ export async function readRecordingMetadata(blob, { fallbackDurationMs = 0, docu
     element.removeAttribute("src");
     URL.revokeObjectURL(url);
   }
+}
+
+/** "Sign-up walkthrough" from the page title, or the route when the page has none (7e). */
+export function suggestVideoTitle(title, route = "/") {
+  const name = String(title || "").split(/\s[|–—·-]\s/)[0].trim().slice(0, 60);
+  const place = name || (route === "/" ? "Home" : String(route).split("/").filter(Boolean).pop()?.replace(/[-_]+/g, " ") || "Page");
+  return `${place[0].toUpperCase()}${place.slice(1)} walkthrough`;
 }
