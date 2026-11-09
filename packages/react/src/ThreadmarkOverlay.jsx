@@ -802,9 +802,6 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           {nextSteps && <button type="button" role="tab" aria-selected={tab === "next-steps"} onClick={() => onTabChange("next-steps")}>
             <NextStepsIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />Next steps <span className="tm-sr-only">{nextSteps.steps.filter((step) => !step.completed).length}</span>
           </button>}
-          {pageVersions.length > 0 && <button type="button" role="tab" aria-selected={tab === "versions"} onClick={() => onTabChange("versions")}>
-            Versions <span className="tm-sr-only">{pageVersions.length}</span>
-          </button>}
         </div>
         <div className="tm-comments-actions">
           {tab === "comments" && <><button ref={searchToggleRef} type="button" className={controls === "search" || query ? "is-active" : undefined}
@@ -889,7 +886,6 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
         onOpen={(item) => { if (!item.read) onNotificationsSeen?.([item.id]); onOpenNotification?.(item); }}
         onMarkAllRead={onNotificationsSeen ? () => onNotificationsSeen(unreadNotifications.map((item) => item.id)) : null} />
         : tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
-        : tab === "versions" ? <PageVersionList versions={pageVersions} onSelect={onSelectPageVersion} />
         : openSurveyId && surveys?.some((survey) => survey.id === openSurveyId) ? (() => {
           const survey = surveys.find((item) => item.id === openSurveyId);
           return <SurveyResultsView survey={survey} results={surveyResults[survey.id]} onBack={() => onOpenSurvey(null)}
@@ -1141,42 +1137,6 @@ function VersionState({ version }) {
   if (version.current) return <span className="tm-version-state tm-version-state--current">Current</span>;
   if (version.state === "ready") return null;
   return <span className={`tm-version-state tm-version-state--${version.state}`}>{version.state}</span>;
-}
-
-function PageVersionList({ versions, onSelect }) {
-  return (
-    <div className="tm-version-tab" role="tabpanel" aria-label="Page versions">
-      <div className="tm-version-list">
-        {versions.map((version) => {
-          const canOpen = !version.current && version.state === "ready";
-          return (
-            <article className="tm-version-row" key={version.id}>
-              <div className="tm-version-row__body">
-                <div className="tm-version-row__title">
-                  <strong>{version.label}</strong>
-                  <VersionState version={version} />
-                </div>
-                <span className="tm-version-row__meta"><GitBranch {...iconProps} />{versionMeta(version)}</span>
-                <time dateTime={version.createdAt || undefined}>{formatVersionDate(version.createdAt)}</time>
-              </div>
-              <div className="tm-version-row__actions">
-                <span className="tm-version-feedback" title="Feedback on this deployment">
-                  <MessageSquare {...iconProps} />
-                  {version.feedbackCount}
-                </span>
-                {canOpen && (
-                  <button type="button" className="tm-version-open" onClick={() => onSelect(version)}>
-                    Open <ExternalLink {...iconProps} />
-                  </button>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </div>
-      <p className="tm-version-panel__note">Routes open on immutable deployment URLs. Data and feature flags may still differ.</p>
-    </div>
-  );
 }
 
 const MARKUP_COLORS = [
@@ -2715,8 +2675,8 @@ function Overlay({
       {allCommentsOpen && ["picking", "selected"].includes(mode) && (
         <AllCommentsPanel annotations={projectAnnotations} restorations={annotationRestorations} reviewer={reviewer}
           route={pageVersionRoute} hidden={mode !== "picking"} onClose={onCloseAllComments} onOpen={onOpenListedAnnotation}
-          tab={inboxOpen && notifications ? "inbox" : versionHistoryOpen && pageVersions.length ? "versions" : nextStepsOpen && nextSteps ? "next-steps" : "comments"}
-          onTabChange={(tab) => { setInboxOpen(tab === "inbox"); onShowVersions(tab === "versions"); onShowNextSteps(tab === "next-steps"); }}
+          tab={inboxOpen && notifications ? "inbox" : nextStepsOpen && nextSteps ? "next-steps" : "comments"}
+          onTabChange={(tab) => { setInboxOpen(tab === "inbox"); onShowNextSteps(tab === "next-steps"); }}
           pageVersions={pageVersions} onSelectPageVersion={onSelectPageVersion}
           nextSteps={nextSteps} canTickNextSteps={canTickNextSteps} onNextStepDone={onNextStepDone}
           onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps}

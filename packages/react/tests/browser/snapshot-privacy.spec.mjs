@@ -146,41 +146,18 @@ test("picking a custom text control does not invoke its host pointer handlers", 
   await expect.poll(() => page.evaluate(() => window.__threadmarkHostEvents)).toEqual([]);
 });
 
-test("shows host-supplied page versions and carries a comment only when requested", async ({ page }) => {
+// The Versions tab is gone from the panel; host-supplied versions still power Carry forward.
+test("carries a comment to another page version only when requested", async ({ page }) => {
   await mountPickingFixture(page);
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot
       .querySelector('button[aria-label="Feedback panel"]').click();
   });
-  await page.getByRole("tab", { name: /^Versions/ }).click();
-
-  await expect.poll(() => page.evaluate(() => {
-    const shadow = document.querySelector("[data-threadmark-root]")?.shadowRoot;
-    return {
-      labels: [...shadow.querySelectorAll(".tm-version-row__title strong")].map((node) => node.textContent),
-      current: shadow.querySelector(".tm-version-state--current")?.textContent,
-      feedback: [...shadow.querySelectorAll(".tm-version-feedback")].map((node) => node.textContent.trim()),
-      openActions: shadow.querySelectorAll(".tm-version-open").length,
-    };
-  })).toEqual({
-    labels: ["Current preview", "Previous preview", "Expired preview"],
-    current: "Current",
-    feedback: ["0", "3", "2"],
-    openActions: 1,
-  });
-
+  await expect(page.getByRole("tab", { name: /^Versions/ })).toHaveCount(0);
   await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-version-open").click();
+    document.querySelector("[data-threadmark-root]").shadowRoot
+      .querySelector('button[aria-label="Feedback panel"]').click();
   });
-  await expect.poll(() => page.evaluate(() => window.__threadmarkVersionSelections.map((item) => ({
-    id: item.version.id,
-    route: item.context.route,
-    url: item.context.url,
-  })))).toEqual([{
-    id: "fixture-previous",
-    route: "/picking-events",
-    url: "http://localhost/picking-events",
-  }]);
 
   await page.locator("#custom-target").click({ position: { x: 80, y: 25 } });
   await waitForComposer(page);
@@ -237,9 +214,6 @@ test("Feedback is a solid dark panel in every tab, with a high-contrast fallback
     selectedTabColor: "rgb(251, 250, 246)",
     withinViewport: true,
   };
-  await expect.poll(panelStyle).toEqual(expected);
-  await panel.getByRole("tab", { name: /^Versions/ }).click();
-  await expect(panel.getByRole("tabpanel", { name: "Page versions" })).toBeVisible();
   await expect.poll(panelStyle).toEqual(expected);
   await page.setViewportSize({ width: 320, height: 640 });
   await expect.poll(panelStyle).toEqual(expected);
@@ -1645,9 +1619,7 @@ test("comment filters float over the list, retain search, and dismiss accessibly
   expect(popupBounds.x).toBeGreaterThanOrEqual(panelBounds.x);
   expect(popupBounds.x + popupBounds.width).toBeLessThanOrEqual(panelBounds.x + panelBounds.width);
   expect(popupBounds.y + popupBounds.height).toBeLessThanOrEqual(panelBounds.y + panelBounds.height);
-  await panel.getByRole('tab', { name: /^Versions/ }).focus();
-  await expect(popup).toHaveCount(0);
-  await panel.getByRole('tab', { name: /^Versions/ }).click();
+  await panel.getByRole('tab', { name: /^Activity/ }).focus();
   await expect(popup).toHaveCount(0);
   await panel.getByRole('tab', { name: /^Activity/ }).click();
   await expect(popup).toHaveCount(0);

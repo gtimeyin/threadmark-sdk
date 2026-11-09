@@ -54,7 +54,8 @@ test("without next steps from the host, the Feedback panel has no Next steps tab
   await page.locator(".tm-launcher").click();
   await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Feedback", exact: true });
-  await expect(panel.getByRole("tab", { name: /^Versions/ })).toBeVisible();
+  await expect(panel.getByRole("tab", { name: /^Activity/ })).toBeVisible();
+  await expect(panel.getByRole("tab", { name: /^Versions/ })).toHaveCount(0);
   await expect(panel.getByRole("tab", { name: /^Next steps/ })).toHaveCount(0);
 });
 
