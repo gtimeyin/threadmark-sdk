@@ -226,3 +226,68 @@ test("deleting a comment nobody replied to is instant, and Undo creates it again
   expect(await page.evaluate(() => window.__threadmarkFeedback.length)).toBe(created + 1);
   expect(restored.comment).toBe("Delete me, then bring me back");
 });
+
+test("the Inbox shows Unread or All, grouped by day; opening an item and Mark all read clear it", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "inbox=1");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const panel = page.locator("#tm-all-comments");
+  await page.waitForTimeout(300);
+  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("tab", { name: /Inbox/ }).click();
+
+  const views = panel.getByRole("radiogroup", { name: "Show" });
+  await expect(views.getByRole("radio", { name: /Unread/ })).toHaveAttribute("aria-checked", "true");
+  await expect(views.getByRole("radio", { name: /Unread/ })).toContainText("3");
+  await expect(panel.locator(".tm-inbox-group")).toHaveCount(1);
+  await expect(panel.locator(".tm-inbox-group h3")).toHaveText("Today");
+  await expect(panel.locator(".tm-inbox-item").filter({ hasText: "Maya mentioned you" })).toContainText("/signup · Field · Company");
+  await expect(panel.locator(".tm-inbox-item").filter({ hasText: "Sam replied to your comment" })).toBeVisible();
+  // Maya's face comes from the project's members.
+  await expect(panel.locator(".tm-inbox-item").filter({ hasText: "Maya" }).locator("img")).toHaveCount(1);
+
+  await views.getByRole("radio", { name: "All" }).click();
+  await expect(panel.locator(".tm-inbox-group h3")).toHaveText(["Today", "Earlier"]);
+  await expect(panel.locator(".tm-inbox-item")).toHaveCount(4);
+
+  await panel.locator(".tm-inbox-item").filter({ hasText: "Kai assigned you" }).click();
+  await expect.poll(() => page.evaluate(() => window.__threadmarkNotificationsRead)).toEqual(["n-assigned"]);
+  await expect(page.getByRole("tab", { name: /Inbox/ })).toContainText("2");
+
+  await panel.getByRole("button", { name: "Mark all read" }).click();
+  await views.getByRole("radio", { name: /Unread/ }).click();
+  await expect(panel.locator(".tm-inbox-empty")).toContainText("You’re all caught up");
+  await panel.getByRole("button", { name: "Show all" }).click();
+  await expect(panel.locator(".tm-inbox-item")).toHaveCount(4);
+  expect(pageErrors).toEqual([]);
+});
+
+test("an empty Inbox says what will show up there (19a)", async ({ page }) => {
+  await mountFixture(page, "inbox=empty");
+  const panel = page.locator("#tm-all-comments");
+  await page.waitForTimeout(300);
+  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("tab", { name: /Inbox/ }).click();
+  await expect(panel.locator(".tm-inbox-empty")).toContainText("Nothing needs you");
+  await expect(panel.locator(".tm-inbox-empty")).toContainText("Mentions, replies to your comments and things assigned to you");
+});
+
+test("an Inbox item opens its thread in the panel, with a way back to the Inbox (17c)", async ({ page }) => {
+  await mountFixture(page, "inbox=empty");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const panel = page.locator("#tm-all-comments");
+  await page.locator("#secondary-target").click();
+  await page.locator("#tm-comment").fill("Can we drop the company field?");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".tm-toast")).toContainText("Comment added");
+  const id = await page.evaluate(() => window.__threadmarkFeedback.at(-1).id);
+  await page.evaluate((annotationId) => window.__threadmarkSetNotifications([{ id: "n1", kind: "mention", actor: { id: "maya", displayName: "Maya Patel" },
+    text: "@Emily can we drop the company field here?", annotationId, route: "/picking-events", createdAt: new Date().toISOString() }]), id);
+  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("tab", { name: /Inbox/ }).click();
+  await panel.locator(".tm-inbox-item").first().click();
+  const thread = page.locator(".tm-popover--docked");
+  await expect(thread).toBeVisible();
+  await expect(thread.locator(".tm-thread-back button")).toHaveText("Inbox");
+  await thread.locator(".tm-thread-back button").click();
+  await expect(panel.getByRole("tab", { name: /Inbox/ })).toHaveAttribute("aria-selected", "true");
+});

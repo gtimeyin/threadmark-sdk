@@ -91,8 +91,25 @@ function record(name) {
   return () => window.__threadmarkHostEvents.push(name);
 }
 
+// `?inbox=1` gives the reviewer an Inbox (board 05, 17b); `?inbox=empty` an empty one (19a).
+const inboxMode = fixtureParams.get("inbox");
+const FIXTURE_MEMBERS = [
+  { id: "maya", displayName: "Maya Patel", email: "maya@studio.co", role: "edit", avatarUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Crect width='20' height='20' fill='%23f15722'/%3E%3C/svg%3E" },
+];
+function fixtureNotifications() {
+  const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+  return [
+    { id: "n-mention", kind: "mention", actor: { id: "maya", displayName: "Maya Patel" }, text: "@Emily can we drop the company field here?", route: "/signup", target: "Field · Company", createdAt: ago(2) },
+    { id: "n-reply", kind: "reply", actor: { id: "sam", displayName: "Sam Okafor" }, text: "Agree, Forest reads calmer.", route: "/picking-events", target: "Button · Start free", createdAt: ago(1) },
+    { id: "n-assigned", kind: "assigned", actor: { id: "kai", displayName: "Kai" }, text: "Move the chart legend below on phones", route: "/picking-events", createdAt: ago(3) },
+    { id: "n-old", kind: "reply", actor: { id: "jo", displayName: "Jo" }, text: "Fixed on staging, can you check?", route: "/about", target: "Image · Team", createdAt: ago(3 * 24 * 60), read: true },
+  ];
+}
+
 function Fixture() {
   const [buildId, setBuildId] = useState("fixture-build-current");
+  const [notifications, setNotifications] = useState(() => (inboxMode === "1" ? fixtureNotifications() : []));
+  useEffect(() => { window.__threadmarkSetNotifications = setNotifications; }, []);
   const [annotations, setAnnotations] = useState([]);
   const [targetVersion, setTargetVersion] = useState(0);
   const [showSecondary, setShowSecondary] = useState(true);
@@ -189,6 +206,14 @@ function Fixture() {
         reviewer={{ id: "fixture_reviewer", displayName: "Emily R." }}
         styleNonce={styleNonce}
         reviewers={[{ id: "fixture_reviewer", displayName: "Emily R." }, { id: "sam", displayName: "Sam Okafor" }]}
+        {...(inboxMode ? {
+          notifications,
+          members: FIXTURE_MEMBERS,
+          onNotificationsRead: (ids) => {
+            window.__threadmarkNotificationsRead = [...(window.__threadmarkNotificationsRead || []), ...ids];
+            setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)));
+          },
+        } : {})}
         buildId={buildId}
         videoRecording={videoRecording}
         sessionReplay={sessionReplay}

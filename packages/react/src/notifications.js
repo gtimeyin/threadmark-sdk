@@ -36,6 +36,8 @@ export function normalizeNotifications(list) {
       text: body,
       annotationId: text(item.annotationId, 160) || null,
       route: text(item.route, 512) || null,
+      // What on the page it is about, e.g. "Field · Company" (board 05, 17b).
+      target: text(item.target, 120) || null,
       createdAt: Number.isFinite(created) ? new Date(created).toISOString() : null,
       read: item.read === true,
     });
@@ -50,4 +52,28 @@ export function notificationHeadline(notification) {
   if (!notification) return "";
   const first = notification.actor.displayName.split(/\s+/)[0];
   return `${first} ${VERBS[notification.kind] || "left a note"}`;
+}
+
+// The longer form for Inbox rows (board 05, 17b): "Sam replied to your comment".
+const INBOX_VERBS = {
+  reply: "replied to your comment",
+  mention: "mentioned you",
+  resolved: "resolved your comment",
+  reaction: "reacted to your comment",
+  assigned: "assigned you",
+  question: "asked you a question",
+};
+
+/** What happened, after the person's first name: "mentioned you", "replied to your comment"… */
+export function notificationVerb(notification) {
+  return INBOX_VERBS[notification?.kind] || "left a note";
+}
+
+/** "Today" or "Earlier", by the reader's own calendar day. */
+export function notificationDay(notification, now = new Date()) {
+  const at = Date.parse(notification?.createdAt || "");
+  if (!Number.isFinite(at)) return "Earlier";
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  return at >= start.getTime() ? "Today" : "Earlier";
 }

@@ -52,6 +52,7 @@ import { pageBrightness } from "./barPrefs.js";
 import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
 import { Avatar, EmptyState, Key } from "./ui/primitives.jsx";
+import { notificationDay, notificationVerb } from "./notifications.js";
 import { ArrowLeftIcon, MentionIcon } from "./icons.jsx";
 import { BarHint, IdleBar } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
@@ -599,40 +600,94 @@ export function routeLabel(route) {
   return route === "/" ? "Home" : route;
 }
 
-function InboxList({ notifications, onOpen, onMarkAllRead }) {
-  if (!notifications.length) {
-    return <EmptyState icon={InboxIcon} title="Nothing new">Replies and mentions for you show up here.</EmptyState>;
-  }
+/**
+ * The Inbox (board 05, 17b and 19a): only what involves you, across every page. Unread or All, grouped
+ * into Today and Earlier, each row saying who did what, the words, and where.
+ */
+function InboxList({ notifications, members = [], onOpen, onMarkAllRead, onOpenSettings }) {
   const unread = notifications.filter((item) => !item.read).length;
+  const [view, setView] = useState(unread ? "unread" : "all");
+  if (!notifications.length) {
+    return (
+      <div className="tm-inbox-empty">
+        <span className="tm-inbox-empty__icon"><Check size={18} aria-hidden="true" focusable="false" /></span>
+        <strong>Nothing needs you</strong>
+        <p>Mentions, replies to your comments and things assigned to you will show up here.</p>
+        {onOpenSettings && <button type="button" onClick={onOpenSettings}>Notification settings</button>}
+      </div>
+    );
+  }
+  const shown = view === "unread" ? notifications.filter((item) => !item.read) : notifications;
+  const groups = ["Today", "Earlier"].map((day) => [day, shown.filter((item) => notificationDay(item) === day)]).filter(([, items]) => items.length);
+  // Faces come from the project's members when the host didn't send one with the notification.
+  const face = (actor) => actor.avatarUrl || members.find((member) => member.id && member.id === actor.id)?.avatarUrl || null;
   return (
     <>
-    <p className="tm-comments-count tm-inbox-head"><span>{unread ? `${unread} unread` : "All read"}</span>
-      {unread > 0 && onMarkAllRead && <button type="button" className="tm-inbox-markall" onClick={onMarkAllRead}>Mark all read</button>}</p>
-    <ul className="tm-inbox" aria-label="Inbox">
-      {notifications.map((item) => (
-        <li key={item.id}>
-          <button type="button" className={`tm-inbox-item${item.read ? "" : " is-unread"}`} onClick={() => onOpen?.(item)}>
-            <Avatar name={item.actor.displayName} src={item.actor.avatarUrl} size={20} />
-            <span className="tm-inbox-item__body">
-              <span className="tm-inbox-item__meta">
-                <strong>{item.actor.displayName}</strong>
-                {item.createdAt && <time dateTime={item.createdAt}>{formatMessageTime(item.createdAt)}</time>}
-                {!item.read && <span className="tm-inbox-item__dot"><span className="tm-sr-only">Unread</span></span>}
-              </span>
-              <span className="tm-inbox-item__text">{item.text}</span>
-              {item.route && <span className="tm-inbox-item__route">{routeLabel(item.route)}</span>}
-            </span>
+      <div className="tm-inbox-head">
+        <div className="tm-inbox-views" role="radiogroup" aria-label="Show">
+          <button type="button" role="radio" aria-checked={view === "unread"} className={view === "unread" ? "is-active" : ""} onClick={() => setView("unread")}>
+            Unread{unread > 0 && <span className="tm-inbox-views__count">{unread}</span>}
           </button>
-        </li>
-      ))}
-    </ul>
+          <button type="button" role="radio" aria-checked={view === "all"} className={view === "all" ? "is-active" : ""} onClick={() => setView("all")}>All</button>
+        </div>
+        {unread > 0 && onMarkAllRead && <button type="button" className="tm-inbox-markall" onClick={onMarkAllRead}>Mark all read</button>}
+      </div>
+      {!shown.length ? (
+        <div className="tm-inbox-empty tm-inbox-empty--caught-up">
+          <span className="tm-inbox-empty__icon"><Check size={18} aria-hidden="true" focusable="false" /></span>
+          <strong>You’re all caught up</strong>
+          <button type="button" onClick={() => setView("all")}>Show all</button>
+        </div>
+      ) : (
+        <div className="tm-inbox" aria-label="Inbox">
+          {groups.map(([day, items]) => (
+            <section key={day} className="tm-inbox-group" aria-label={day}>
+              <h3>{day}</h3>
+              <ul>
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <button type="button" className={`tm-inbox-item${item.read ? "" : " is-unread"}`} onClick={() => onOpen?.(item)}>
+                      <Avatar name={item.actor.displayName} src={face(item.actor)} size={20} />
+                      <span className="tm-inbox-item__body">
+                        <span className="tm-inbox-item__meta">
+                          <span className="tm-inbox-item__line"><strong>{item.actor.displayName.split(/\s+/)[0]}</strong> {notificationVerb(item)}</span>
+                          {item.createdAt && <time dateTime={item.createdAt}>{formatShortAge(item.createdAt)}</time>}
+                          {!item.read && <span className="tm-inbox-item__dot"><span className="tm-sr-only">Unread</span></span>}
+                        </span>
+                        <span className="tm-inbox-item__text">{item.text}</span>
+                        {(item.route || item.target) && (
+                          <span className="tm-inbox-item__route">{[item.route && routeLabel(item.route), item.target].filter(Boolean).join(" · ")}</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
     </>
   );
 }
 
+/** "2m", "1h", "2d", then the date: the Inbox's quiet timestamps (17b). */
+function formatShortAge(iso, now = Date.now()) {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return "";
+  const minutes = Math.max(0, Math.round((now - at) / 60000));
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
   nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
-  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null }) {
+  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null, members = [] }) {
   const [halfSheet, setHalfSheet] = useState(false);
   const searchToggleRef = useRef(null);
   // Items are marked read when opened (board 05, 17c), or all at once with Mark all read; never just by looking.
@@ -822,7 +877,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           <button type="button" aria-label="Close feedback panel" onClick={onClose}><X size={18} /></button>
         </div>
       </header>
-      {tab === "inbox" && notifications ? <InboxList notifications={notifications}
+      {tab === "inbox" && notifications ? <InboxList notifications={notifications} members={members} onOpenSettings={onOpenYou}
         onOpen={(item) => { if (!item.read) onNotificationsSeen?.([item.id]); onOpenNotification?.(item); }}
         onMarkAllRead={onNotificationsSeen ? () => onNotificationsSeen(unreadNotifications.map((item) => item.id)) : null} />
         : tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
@@ -2642,7 +2697,7 @@ function Overlay({
           onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps}
           notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen}
           surveys={surveys} surveyResults={surveyResults} openSurveyId={openSurveyId} onOpenSurvey={setOpenSurveyId} onSurveyEnd={onSurveyEnd}
-          onOpenYou={canEditYou ? () => setYouOpen(true) : null} onOpenShare={canShare ? () => setShareOpen(true) : null} />
+          onOpenYou={canEditYou ? () => setYouOpen(true) : null} onOpenShare={canShare ? () => setShareOpen(true) : null} members={members} />
       )}
 
       {replayViewer && (
@@ -2710,9 +2765,9 @@ function Overlay({
             /* 18c: a thread opened from the panel opens in the panel, with a way back to the list. */
             <div className="tm-thread-back">
               <button type="button" onClick={onRequestDismiss} disabled={submitting}>
-                <ArrowLeftIcon size={14} aria-hidden="true" focusable="false" />All comments
+                <ArrowLeftIcon size={14} aria-hidden="true" focusable="false" />{inboxOpen && notifications ? "Inbox" : "All comments"}
               </button>
-              <span>{targetName(primaryTarget)}</span>
+              <span>{[editingAnnotation.payload.route && editingAnnotation.payload.route !== pageVersionRoute ? routeLabel(editingAnnotation.payload.route) : null, targetName(primaryTarget)].filter(Boolean).join(" · ")}</span>
             </div>
           )}
           {editingAnnotation ? (

@@ -22,3 +22,20 @@ test("the bar headline names the person and what they did", () => {
   const [item] = normalizeNotifications([{ id: "x", actor: { displayName: "Maya Patel" }, text: "hi", kind: "mention" }]);
   assert.equal(notificationHeadline(item), "Maya mentioned you");
 });
+
+test("Inbox rows say what happened, where, and on which day (board 05, 17b)", async () => {
+  const { notificationVerb, notificationDay } = await import("../src/notifications.js");
+  const [reply, assigned] = normalizeNotifications([
+    { id: "r", kind: "reply", actor: { displayName: "Sam" }, text: "Agree", target: "  Button · Start free  ", createdAt: "2026-11-09T09:00:00" },
+    { id: "a", kind: "assigned", actor: { displayName: "Kai" }, text: "Move it", createdAt: "2026-11-07T09:00:00" },
+  ]);
+  assert.equal(notificationVerb(reply), "replied to your comment");
+  assert.equal(notificationVerb(assigned), "assigned you");
+  assert.equal(notificationVerb({ kind: "other" }), "left a note");
+  assert.equal(reply.target, "Button · Start free");
+  assert.equal(assigned.target, null);
+  const now = new Date("2026-11-09T18:00:00");
+  assert.equal(notificationDay(reply, now), "Today");
+  assert.equal(notificationDay(assigned, now), "Earlier");
+  assert.equal(notificationDay({ createdAt: null }, now), "Earlier");
+});

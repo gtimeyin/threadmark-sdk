@@ -78,9 +78,14 @@ export const panelStyles = `
 
   .tm-comments-panel .tm-comments-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; padding-left: 12px; }
   .tm-comments-panel .tm-comments-filter-menu button { width: 100%; height: auto; }
-  .tm-inbox-head { display: flex; align-items: center; justify-content: space-between; }
-  .tm-inbox-markall { padding: 0; border: 0; background: none; color: var(--tm-lime); font: 500 12px/16px var(--tm-font); cursor: pointer; }
-  .tm-inbox-markall:hover { text-decoration: underline; }
+  .tm-inbox-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px 6px; }
+  .tm-inbox-markall { padding: 2px 0; border: 0; background: none; color: var(--tm-text-muted); font: 500 12px/16px var(--tm-font); cursor: pointer; }
+  .tm-inbox-markall:hover { color: var(--tm-text-primary); }
+  .tm-inbox-views { display: inline-flex; gap: 2px; }
+  .tm-inbox-views button { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 0; border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-muted); cursor: pointer; font: 500 12px/16px var(--tm-font); }
+  .tm-inbox-views button.is-active { background: var(--tm-raised); color: var(--tm-text-primary); }
+  .tm-inbox-views button:hover { color: var(--tm-text-primary); }
+  .tm-inbox-views__count { font-variant-numeric: tabular-nums; }
   .tm-comments-panel .tm-comments-actions > button, .tm-comments-panel .tm-comments-actions > * > button:not([role="menuitemcheckbox"]):not([role="menuitem"]):not([role="menuitemradio"]) {
     width: 28px;
     height: 28px;
@@ -184,31 +189,36 @@ export const panelStyles = `
   .tm-comments-panel .tm-comments-filter-menu button:hover { background: rgba(251, 250, 246, .06); }
   .tm-comments-panel .tm-comments-filter-menu select { border-color: rgba(251, 250, 246, .18); background: var(--tm-raised); color: var(--tm-text-primary); }
 
-  /* Inbox rows. */
-  .tm-inbox { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+  /* Inbox rows (board 05, 17b): grouped by day; unread rows sit on a slightly raised band with a Lime dot. */
+  .tm-inbox { overflow: auto; flex: 1; padding-bottom: 8px; }
+  .tm-inbox-group h3 { margin: 0; padding: 10px 16px 6px; color: var(--tm-text-muted); font: 500 12px/16px var(--tm-font); }
+  .tm-inbox-group ul { list-style: none; margin: 0; padding: 0; }
   .tm-inbox-item {
-    display: grid;
-    grid-template-columns: 20px minmax(0, 1fr);
-    gap: 8px;
-    width: 100%;
-    padding: 10px 16px;
-    border: 0;
-    border-bottom: 1px solid rgba(251, 250, 246, .08);
-    background: transparent;
-    color: var(--tm-text-primary);
-    text-align: left;
-    cursor: pointer;
+    display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; width: 100%; padding: 8px 16px 10px;
+    border: 0; background: transparent; color: var(--tm-text-muted); text-align: left; cursor: pointer;
   }
-  .tm-inbox-item:hover,
-  .tm-inbox-item:focus-visible { background: rgba(251, 250, 246, .04); }
-  .tm-inbox-item.is-unread { background: rgba(251, 250, 246, .03); }
-  .tm-inbox-item__body { display: grid; gap: 4px; min-width: 0; }
+  .tm-inbox-item:hover { background: rgba(251, 250, 246, .04); }
+  .tm-inbox-item:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: -2px; }
+  .tm-inbox-item.is-unread { background: var(--tm-surface); color: var(--tm-text-primary); }
+  .tm-inbox-item.is-unread:hover { background: var(--tm-raised); }
+  .tm-inbox-item__body { display: grid; gap: 3px; min-width: 0; }
   .tm-inbox-item__meta { display: flex; align-items: center; gap: 8px; min-height: 20px; }
-  .tm-inbox-item__meta strong { font: 600 13px/18px var(--tm-font); }
-  .tm-inbox-item__meta time { color: var(--tm-text-secondary); font: 500 11px/14px var(--tm-font); }
-  .tm-inbox-item__dot { width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--tm-action-primary); }
-  .tm-inbox-item__text { font: 400 14px/20px var(--tm-font); }
-  .tm-inbox-item__route { color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font-mono); }
+  .tm-inbox-item__line { flex: 1; min-width: 0; overflow: hidden; color: inherit; font: 400 12px/16px var(--tm-font); text-overflow: ellipsis; white-space: nowrap; }
+  .tm-inbox-item__line strong { font-weight: 500; }
+  .tm-inbox-item__meta time { flex: none; color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font); }
+  .tm-inbox-item__dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--tm-lime); }
+  .tm-inbox-item__text { color: inherit; font: 400 14px/20px var(--tm-font); overflow-wrap: anywhere; }
+  .tm-inbox-item.is-unread .tm-inbox-item__text { color: var(--tm-text-primary); }
+  .tm-inbox-item__route { color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font-mono); }
+
+  /* 19a: an empty Inbox in a good way, saying what will show up here. */
+  .tm-inbox-empty { flex: 1; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 32px 32px 64px; text-align: center; }
+  .tm-inbox-empty__icon { width: 40px; height: 40px; display: grid; place-items: center; margin-bottom: 6px; border-radius: var(--tm-radius-panel); background: var(--tm-raised); color: var(--tm-lime); }
+  .tm-inbox-empty strong { color: var(--tm-text-primary); font: 600 13px/18px var(--tm-font); }
+  .tm-inbox-empty p { max-width: 300px; margin: 0; color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font); }
+  .tm-inbox-empty button { margin-top: 4px; padding: 2px 4px; border: 0; background: none; color: var(--tm-text-muted); cursor: pointer; font: 500 13px/18px var(--tm-font); }
+  .tm-inbox-empty button:hover { color: var(--tm-text-primary); }
+  .tm-inbox-empty button:focus-visible, .tm-inbox-views button:focus-visible, .tm-inbox-markall:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
 
   /* Wide screens: the panel runs full height and the bar centres in the space that is left.
      Narrower screens: the panel stops above the bar so both stay usable. */

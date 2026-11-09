@@ -163,8 +163,8 @@ export function App() {
   const answerCounts = useMemo(() => Object.fromEntries(Object.entries(surveyResults).map(([id, result]) => [id, result.total])), [surveyResults]);
   // Notifications are host-owned. This stand-in shows the Inbox tab and the bar's New reply mood.
   const [notifications, setNotifications] = useState(() => [
-    { id: "demo-mention", kind: "mention", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "@You can we keep the word launch in the headline?", route: "/", createdAt: new Date(Date.now() - 4 * 60000).toISOString() },
-    { id: "demo-reply", kind: "reply", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "Changed it on the preview, have a look.", route: "/", createdAt: new Date(Date.now() - 50 * 60000).toISOString(), read: true },
+    { id: "demo-mention", kind: "mention", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "@You can we keep the word launch in the headline?", route: "/", target: "Heading · Launch", createdAt: new Date(Date.now() - 4 * 60000).toISOString() },
+    { id: "demo-reply", kind: "reply", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "Changed it on the preview, have a look.", route: "/", target: "Button · Start free", createdAt: new Date(Date.now() - 50 * 60000).toISOString(), read: true },
   ]);
   const handleReactionChange = useMemo(() => createLocalReactionHandler({ store: feedbackStore, reviewer: REVIEWER, onRecords: setAnnotations }), []);
   const [status, setStatus] = useState("booting");

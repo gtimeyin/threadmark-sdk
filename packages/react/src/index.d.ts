@@ -543,12 +543,15 @@ export declare function collectPageReview(options?: { documentRef?: Document; ro
 export interface ThreadmarkNotification {
   id: string;
   kind?: "reply" | "mention" | "resolved" | "reaction" | "assigned" | "question" | "other";
+  /** Without an avatarUrl, the Inbox uses the face of the member with the same id from `members`. */
   actor: { id?: string; displayName: string; avatarUrl?: string | null };
   /** The line shown in the Inbox, e.g. the reply text. */
   text: string;
   /** Opens this thread when it is on the current project. */
   annotationId?: string | null;
   route?: string | null;
+  /** What on the page it is about, shown after the route, e.g. "Field · Company". */
+  target?: string | null;
   createdAt?: string;
   read?: boolean;
 }
