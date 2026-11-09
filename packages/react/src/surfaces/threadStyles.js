@@ -235,4 +235,54 @@ export const threadStyles = `
   .tm-popover .tm-poll--results .tm-poll-option.is-leading .tm-poll-option__bar { background: var(--tm-action-primary); }
   .tm-popover .tm-poll--results .tm-poll-option.is-chosen { border: 0; }
   .tm-popover .tm-poll__hint { color: var(--tm-text-secondary); font: 400 11px/14px var(--tm-font); }
+
+  /* Board 01, 2c: the composer is one quiet card — what you picked, the words, then Esc, @, + and a Lime send.
+     No inner frame. */
+  .tm-popover.tm-popover--compose { width: min(320px, calc(100vw - 24px)); padding: 12px 12px 8px; border-radius: var(--tm-radius-panel); background: var(--tm-ground); }
+  .tm-popover--compose .tm-composer__header { align-items: center; gap: 8px; min-height: 20px; margin-bottom: 8px; }
+  .tm-composer__target { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; margin: 0; color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font-mono); }
+  .tm-composer__target > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tm-composer__target svg { flex: none; width: 13px; height: 13px; color: var(--tm-lime); }
+  .tm-composer__kind { flex: none; padding: 1px 6px; border-radius: 4px; background: rgba(224, 243, 84, .14); color: var(--tm-lime); font: 500 11px/16px var(--tm-font); }
+  .tm-popover.tm-popover--compose .tm-form,
+  .tm-popover.tm-popover--compose .tm-popover__header + .tm-form { margin: 0; gap: 10px; padding: 0; border: 0; border-radius: 0; background: none; }
+  .tm-popover--compose .tm-field textarea { min-height: 40px; resize: none; font: 400 14px/20px var(--tm-font); }
+  .tm-composer__actions { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+  .tm-popover .tm-composer__esc { min-height: 28px; padding: 0; border: 0; background: none; cursor: pointer; }
+  .tm-popover .tm-composer__esc .tm-ui-key { color: var(--tm-text-muted); }
+  .tm-composer__esc:hover .tm-ui-key { color: var(--tm-text-primary); }
+  .tm-composer__tools { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
+  .tm-composer__tool { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-muted); cursor: pointer; }
+  .tm-composer__tool:hover:not(:disabled), .tm-composer__tool.is-active { background: rgba(251, 250, 246, .08); color: var(--tm-text-primary); }
+  .tm-composer__tool svg { width: 16px; height: 16px; }
+  .tm-popover .tm-submit.tm-composer__send { width: 28px; min-height: 28px; height: 28px; margin-left: 4px; display: grid; place-items: center; padding: 0; border: 0; background: var(--tm-lime); color: var(--tm-ground); }
+  .tm-popover .tm-submit.tm-composer__send:disabled { background: rgba(251, 250, 246, .1); color: var(--tm-text-secondary); }
+  .tm-composer__send .tm-tool-icon { width: 15px; height: 15px; }
+  .tm-composer__send .tm-spin { animation: tm-spin 900ms linear infinite; }
+  .tm-composer__more { position: relative; display: inline-flex; }
+  .tm-composer__menu { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 2; padding: 4px; border-radius: var(--tm-radius-panel); background: var(--tm-raised); box-shadow: 0 10px 28px rgba(0, 0, 0, .35), 0 0 0 1px rgba(251, 250, 246, .08); }
+  .tm-composer__menu .tm-ask-switch { margin: 0; }
+  .tm-popover--compose .tm-composer__actions button:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
+
+  /* 2c: the bar stays visible while you write. */
+  .tm-modebar.tm-modebar--writing { pointer-events: none; padding: 8px 10px; }
+
+  /* Board 05, 18c: a thread opened while the panel is open takes the panel's place, with a way back. */
+  @media (min-width: 600px) {
+    .tm-popover.tm-popover--docked {
+      top: 8px; right: 8px; bottom: 8px; left: auto; width: min(380px, calc(100vw - 16px)); max-height: none;
+      display: flex; flex-direction: column; padding: 0 8px 8px; border-radius: var(--tm-radius-panel); background: var(--tm-ground); animation: none;
+    }
+    .tm-popover.tm-popover--docked > * { flex: none; }
+    .tm-popover.tm-popover--docked .tm-popover__header--thread { border-bottom: 0; padding-bottom: 4px; }
+    .tm-popover.tm-popover--docked .tm-popover__header--thread + .tm-form {
+      flex: 1 1 auto; display: flex; flex-direction: column; margin: 0; border: 0; border-radius: 0; background: none;
+    }
+    .tm-popover.tm-popover--docked .tm-reply { margin-top: auto; }
+  }
+  .tm-thread-back { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -8px 4px; padding: 10px 16px; border-bottom: 1px solid var(--tm-line); }
+  .tm-thread-back button { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px; margin-left: -4px; border: 0; border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-muted); cursor: pointer; font: 500 12px/16px var(--tm-font); }
+  .tm-thread-back button:hover { color: var(--tm-text-primary); }
+  .tm-thread-back button:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
+  .tm-thread-back > span { min-width: 0; overflow: hidden; color: var(--tm-text-muted); font: 400 11px/16px var(--tm-font-mono); text-overflow: ellipsis; white-space: nowrap; }
 `;

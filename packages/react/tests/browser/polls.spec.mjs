@@ -54,6 +54,7 @@ test("without a vote handler, the composer posts plain comments only", async ({ 
   await page.locator(".tm-launcher").click();
   await page.locator("#secondary-target").click();
   await expect(page.locator("#tm-comment")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask a question or run a poll" })).toHaveCount(0);
   await expect(page.getByRole("radiogroup", { name: "What are you posting?" })).toHaveCount(0);
 });
 
@@ -63,9 +64,13 @@ test("designers ask questions and run polls; reviewers vote and change their vot
   // A poll pinned to an element.
   await page.locator(".tm-launcher").click();
   await page.locator("#secondary-target").click();
+  // 2c: + holds Question and Poll; the composer starts as a plain comment.
+  await page.getByRole("button", { name: "Ask a question or run a poll" }).click();
   const kinds = page.getByRole("radiogroup", { name: "What are you posting?" });
   await expect(kinds.getByRole("radio", { name: "Comment" })).toHaveAttribute("aria-checked", "true");
   await kinds.getByRole("radio", { name: "Poll" }).click();
+  await expect(kinds).toHaveCount(0);
+  await expect(page.locator(".tm-composer__kind")).toHaveText("Poll");
   await setComment(page, "Which label reads better for this button?");
   const submit = page.locator(".tm-submit");
   await expect(submit).toHaveText("Post poll");
@@ -108,6 +113,7 @@ test("designers ask questions and run polls; reviewers vote and change their vot
 
   // A question is answered with replies.
   await page.locator("#custom-target").click();
+  await page.getByRole("button", { name: "Ask a question or run a poll" }).click();
   await page.getByRole("radio", { name: "Question" }).click();
   await setComment(page, "Should this open in a new tab?");
   await expect(page.locator(".tm-submit")).toHaveText("Ask");

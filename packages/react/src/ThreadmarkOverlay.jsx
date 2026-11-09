@@ -51,7 +51,8 @@ import { AiPageReview, AskAiCard } from "./surfaces/AiReview.jsx";
 import { pageBrightness } from "./barPrefs.js";
 import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
-import { Avatar, EmptyState } from "./ui/primitives.jsx";
+import { Avatar, EmptyState, Key } from "./ui/primitives.jsx";
+import { ArrowLeftIcon, MentionIcon } from "./icons.jsx";
 import { BarHint, IdleBar } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
 import {
@@ -2023,6 +2024,9 @@ function Overlay({
   const [popoverPosition, setPopoverPosition] = useState(null);
   const [editingEvidencePreview, setEditingEvidencePreview] = useState(null);
   const [workflowMoreOpen, setWorkflowMoreOpen] = useState(false);
+  // The + menu in the composer: Comment, Question or Poll (2c).
+  const [kindMenuOpen, setKindMenuOpen] = useState(false);
+  useEffect(() => { setKindMenuOpen(false); }, [mode, editingAnnotation?.id]);
   const [threadPanel, setThreadPanel] = useState(null);
   const [replayingVideo, setReplayingVideo] = useState(false);
   const [replayViewer, setReplayViewer] = useState(null);
@@ -2031,6 +2035,8 @@ function Overlay({
     ? editingAnnotation.runtime?.evidence?.find((item) => item.id === savedReplay.evidenceId)
     : null;
   const activeVideo = editingAnnotation?.payload.video || videoSelection?.video || null;
+  const composingNew = !editingAnnotation && !repinning;
+  const threadDocked = Boolean(editingAnnotation && allCommentsOpen && !repinning);
   const reviewingVideo = Boolean(videoReview && videoSelection && videoReview.id === videoSelection.id && !editingAnnotation);
   const activeVideoEvidence = editingAnnotation
     ? editingAnnotation.runtime?.evidence?.find((item) => item.id === activeVideo?.evidenceId)
@@ -2645,6 +2651,14 @@ function Overlay({
         </Suspense>
       )}
 
+      {mode === "selected" && composingNew && primaryTarget && !reviewingVideo && !replayingVideo && (
+        /* 2c: the bar stays put and says what is happening. */
+        <div className={`tm-modebar tm-modebar--writing tm-bar--at-${barPosition}`} aria-hidden="true"
+          style={toolbarPosition ? { left: toolbarPosition.left, top: toolbarPosition.top, right: "auto", bottom: "auto", margin: 0 } : undefined}>
+          <BarHint>{askKind === "question" ? "Asking a question" : askKind === "poll" ? "Making a poll" : "Writing a comment"}</BarHint>
+        </div>
+      )}
+
       {mode === "selected" && reviewingVideo && (
         <VideoReviewCard
           key={videoReview.id}
@@ -2679,19 +2693,28 @@ function Overlay({
           />
           <aside
             ref={popoverRef}
-            className={`tm-popover${editingAnnotation ? " tm-popover--thread" : ""}`}
+            className={`tm-popover${editingAnnotation ? " tm-popover--thread" : ""}${composingNew ? " tm-popover--compose" : ""}${threadDocked ? " tm-popover--docked" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="tm-popover-title"
             tabIndex={-1}
             onKeyDown={(event) => trapDialogFocus(event, event.currentTarget)}
             data-placement={popoverPosition?.side || "below"}
-            style={{
+            style={threadDocked ? undefined : {
               left: popoverPosition?.left ?? 12,
               top: popoverPosition?.top ?? 12,
               visibility: popoverPosition ? "visible" : "hidden",
             }}
           >
+          {threadDocked && (
+            /* 18c: a thread opened from the panel opens in the panel, with a way back to the list. */
+            <div className="tm-thread-back">
+              <button type="button" onClick={onRequestDismiss} disabled={submitting}>
+                <ArrowLeftIcon size={14} aria-hidden="true" focusable="false" />All comments
+              </button>
+              <span>{targetName(primaryTarget)}</span>
+            </div>
+          )}
           {editingAnnotation ? (
           <div className="tm-popover__header tm-popover__header--thread">
             <h2 id="tm-popover-title">{(() => {
@@ -2700,7 +2723,7 @@ function Overlay({
                 ? `${noun === "poll" ? "Closed" : "Resolved"} ${noun}`
                 : noun === "comment" ? "Thread" : `${noun[0].toUpperCase()}${noun.slice(1)}`;
               const number = annotations.findIndex((item) => item.id === editingAnnotation.id) + 1;
-              return <><span className="tm-sr-only">{status}: </span>{[number > 0 ? `#${number}` : null, composerContext].filter(Boolean).join(" · ")}</>;
+              return <><span className="tm-sr-only">{status}: </span>{[number > 0 ? `#${number}` : null, threadDocked ? null : composerContext].filter(Boolean).join(" · ")}</>;
             })()}</h2>
             <div className="tm-thread-header-actions">
               <button type="button" aria-label="More thread actions" title="More thread actions"
@@ -2746,45 +2769,15 @@ function Overlay({
             </div>
           )}
           {editingAnnotation ? null : (
-          <div className="tm-popover__header">
-            <details className="tm-context-disclosure">
-              <summary>
-                <ChevronDownIcon />
-                <span id="tm-popover-title">
-                  <span className="tm-sr-only">Selected context: </span>{composerContext}
-                </span>
-              </summary>
-              <div className="tm-context-disclosure__content">
-                <strong>
-                  {editingAnnotation
-                    ? `Annotation ${annotations.findIndex((item) => item.id === editingAnnotation.id) + 1}`
-                    : captureKind === "video"
-                      ? `${videoModeLabel(activeVideo?.mode)} recording`
-                    : captureKind === "interaction"
-                      ? `${interactionSelection?.interaction.events.length || 0} interaction steps`
-                    : captureKind === "screenshot"
-                      ? `${primaryTarget.bounds.width} × ${primaryTarget.bounds.height}px marked-up area`
-                      : captureKind === "multi" ? `${targets.length} selected elements` : targetName(primaryTarget)}
-                </strong>
-                <span className="tm-context-tag">
-                  {editingAnnotation
-                    ? targetName(primaryTarget)
-                    : captureKind === "region"
-                    ? `${primaryTarget.bounds.width} × ${primaryTarget.bounds.height}px region`
-                    : captureKind === "screenshot"
-                      ? "marked-up area"
-                    : captureKind === "video"
-                      ? `${formatClock(videoSelection?.video.durationMs)} video · ${videoSelection?.video.events.length || 0} steps`
-                    : captureKind === "interaction"
-                      ? `${formatInteractionDuration(interactionSelection?.interaction.durationMs)} interaction trace`
-                    : captureKind === "multi"
-                      ? "One comment for this group"
-                      : captureKind === "text"
-                        ? "Selected text"
-                        : primaryTarget.role || primaryTarget.tagName}
-                </span>
-              </div>
-            </details>
+          <div className="tm-popover__header tm-composer__header">
+            {/* 2c: what you picked, in one quiet line. */}
+            <p className="tm-composer__target">
+              <MessageSquare size={14} aria-hidden="true" focusable="false" />
+              <span id="tm-popover-title"><span className="tm-sr-only">Commenting on: </span>{composerContext}</span>
+            </p>
+            {composerMode === "new" && askKind !== "comment" && !repinning && (
+              <span className="tm-composer__kind">{askKind === "poll" ? "Poll" : "Question"}</span>
+            )}
             {/* 28a: point at one thing and ask AI about it instead of writing a comment yourself. */}
             {onAskAi && onPostAiComment && captureKind === "element" && lastSelection?.element && (
               <button type="button" className="tm-ask-ai" onClick={() => setAskAiElement(lastSelection.element)}
@@ -2792,7 +2785,7 @@ function Overlay({
                 <AiIcon size={14} aria-hidden="true" focusable="false" /><span>Ask AI</span>
               </button>
             )}
-            <button type="button" aria-label="Cancel comment" onClick={onRequestDismiss} disabled={submitting}><CloseIcon /></button>
+            {repinning && <button type="button" aria-label="Cancel comment" onClick={onRequestDismiss} disabled={submitting}><CloseIcon /></button>}
           </div>
           )}
 
@@ -2933,9 +2926,6 @@ function Overlay({
               ? `This comment covers ${repinTargetCount} elements. Repinning moves it to the one element you chose; the original ${repinTargetCount} targets, screenshot and discussion stay in its history.`
               : "Confirm this new pin location. The original screenshot and discussion will be preserved."}</p>}
             {!editingAnnotation && !repinning && <div className={`tm-field tm-field--${composerMode}`} key={composerMode}>
-              {composerMode === "new" && onAskKindChange && (
-                <AskSwitch value={askKind} onChange={onAskKindChange} pollsEnabled={pollsEnabled} disabled={submitting} />
-              )}
               <label className="tm-sr-only" htmlFor="tm-comment">
                 {composerMode === "reply" ? "Write a reply" : askKind === "question" ? "Your question" : askKind === "poll" ? "Poll question" : "What should change?"}
               </label>
@@ -2951,10 +2941,10 @@ function Overlay({
                     : askKind === "poll" ? "Ask the poll question…" : "Describe the change…"}
                 maxLength={6000}
                 aria-describedby={comment.length >= 5500 ? "tm-comment-limit" : undefined}
-                aria-keyshortcuts="Meta+Enter Control+Enter"
+                aria-keyshortcuts="Enter"
                 onKeyDown={(event) => {
-                  // ⌘↵ / Ctrl+↵ posts; a plain ↵ stays a new line in a new comment.
-                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+                  // 2c: ↵ posts; Shift+↵ starts a new line.
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
                 }}
               />
               {comment.length >= 5500 && (
@@ -3129,6 +3119,71 @@ function Overlay({
                   </div>
                   <button type="button" className="tm-cancel" onClick={onKeepEditing}>Keep editing</button>
                   <button type="button" className="tm-delete-final" onClick={onBack}>Discard</button>
+                </div>
+              ) : composingNew ? (
+                /* 2c: Esc to cancel, then @, + and a Lime send. */
+                <div className="tm-form__actions tm-composer__actions" key="compose-actions">
+                  {submitting && uploadPercent !== null && (
+                    <div className="tm-upload" role="progressbar" aria-label="Uploading" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent}>
+                      <span style={{ transform: `scaleX(${uploadPercent / 100})` }} />
+                    </div>
+                  )}
+                  <button type="button" className="tm-cancel tm-composer__esc" onClick={onRequestDismiss} disabled={submitting} aria-label="Cancel comment" title="Cancel">
+                    <Key>Esc</Key>
+                  </button>
+                  <span className="tm-composer__tools">
+                    {reviewers?.length > 0 && (
+                      <button type="button" className="tm-composer__tool" aria-label="Mention someone" title="Mention someone (@)" disabled={submitting}
+                        onClick={(event) => {
+                          const field = event.currentTarget.form?.querySelector("#tm-comment");
+                          if (!field) return;
+                          field.focus();
+                          const start = field.selectionStart ?? field.value.length;
+                          const before = field.value.slice(0, start);
+                          field.setRangeText(`${before && !/\s$/.test(before) ? " " : ""}@`, start, field.selectionEnd ?? start, "end");
+                          field.dispatchEvent(new Event("input", { bubbles: true }));
+                        }}>
+                        <MentionIcon size={16} aria-hidden="true" focusable="false" />
+                      </button>
+                    )}
+                    {composerMode === "new" && onAskKindChange && (
+                      <span className="tm-composer__more" data-menu-open={kindMenuOpen ? "true" : undefined}
+                        onKeyDown={(event) => { if (event.key === "Escape" && kindMenuOpen) { event.preventDefault(); event.stopPropagation(); setKindMenuOpen(false); } }}>
+                        <button type="button" className={`tm-composer__tool${kindMenuOpen ? " is-active" : ""}`} aria-label="Ask a question or run a poll"
+                          title="Question or poll" aria-expanded={kindMenuOpen} disabled={submitting} onClick={() => setKindMenuOpen((open) => !open)}>
+                          <PlusIcon size={16} aria-hidden="true" focusable="false" />
+                        </button>
+                        {kindMenuOpen && (
+                          <span className="tm-composer__menu">
+                            <AskSwitch value={askKind} pollsEnabled={pollsEnabled} disabled={submitting}
+                              onChange={(kind) => { onAskKindChange(kind); setKindMenuOpen(false); popoverRef.current?.querySelector("#tm-comment")?.focus(); }} />
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    <button
+                      className="tm-submit tm-composer__send"
+                      type="submit"
+                      title={askKind === "question" ? "Ask (↵)" : askKind === "poll" ? "Post poll (↵)" : "Post (↵)"}
+                      disabled={
+                        submitting
+                        || regionSelection?.snapshot?.status === "capturing"
+                        || (screenshotSelection && !screenshotSelection.snapshot?.approved)
+                        || commentSnapshot?.snapshot?.status === "capturing"
+                        || !comment.trim()
+                        || (askKind === "poll" && pollOptions.filter((option) => option.trim()).length < 2)
+                      }
+                    >
+                      {submitting ? <LoaderCircle {...iconProps} className="tm-tool-icon tm-spin" /> : <ArrowUp {...iconProps} />}
+                      <span className="tm-sr-only">
+                        {submitting
+                          ? uploadPercent !== null && uploadPercent < 100 ? `Uploading ${uploadPercent}%` : "Saving…"
+                          : regionSelection?.snapshot?.status === "capturing" || commentSnapshot?.snapshot?.status === "capturing"
+                            ? "Preparing…"
+                            : askKind === "question" ? "Ask" : askKind === "poll" ? "Post poll" : "Post"}
+                      </span>
+                    </button>
+                  </span>
                 </div>
               ) : (!editingAnnotation || repinning) ? (
                 /* Saved threads post replies and edits from their own inline controls. */

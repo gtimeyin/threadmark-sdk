@@ -27,7 +27,7 @@ test('only real screenshots become thumbnails; a playback is never shown as a br
   await expect.poll(() => thread.locator('img').evaluateAll((images) => images.filter((image) => image.complete && image.naturalWidth === 0).length)).toBe(0);
 });
 
-test('panel filter options are readable, Esc closes search before the panel, and delete defaults to keeping', async ({ page }) => {
+test('panel filter options are readable, Esc closes search before the panel, and delete can be undone', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 850 });
   await page.route('http://localhost/**', route => route.fulfill({ contentType: 'text/html', body: '<div id="root"></div><button id="target" data-threadmark-id="target" style="margin:100px">Start free</button>' }));
   await page.goto('http://localhost/');
@@ -45,9 +45,12 @@ test('panel filter options are readable, Esc closes search before the panel, and
   await expect(panel.getByRole('button', { name: 'Show search comments' })).toBeFocused();
   await panel.getByRole('button', { name: /Has a screenshot/ }).click();
   await page.getByRole('button', { name: /^Actions for comment/ }).click();
+  // 23d: nobody replied, so it goes straight away; Undo brings it back in the same place.
   await page.getByRole('menuitem', { name: 'Delete' }).click();
-  await expect(page.getByRole('button', { name: 'Keep it' })).toBeFocused();
-  await page.keyboard.press('Escape');
   await expect(page.locator('.tm-delete-confirm')).toHaveCount(0);
-  await expect(page.locator('.tm-popover--thread')).toBeVisible();
+  await expect(page.locator('.tm-toast')).toContainText('Comment deleted');
+  await page.locator('.tm-toast__action').click();
+  await expect(page.locator('.tm-toast')).toContainText('Comment restored');
+  await expect(panel).toContainText('Has a screenshot');
+  await expect(panel).toContainText('#2 · Start free');
 });

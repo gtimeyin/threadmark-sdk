@@ -317,41 +317,22 @@ test("keeps reviewer identity out of the composer and attributes submitted feedb
   await page.locator("#custom-target").click({ position: { x: 80, y: 25 } });
   await waitForComposer(page);
 
+  // 2c: the composer names what you picked in one mono line, and never shows who you are.
   await expect.poll(() => page.evaluate(() => {
     const shadowRoot = document.querySelector("[data-threadmark-root]")?.shadowRoot;
-    const disclosure = shadowRoot?.querySelector(".tm-context-disclosure");
+    const target = shadowRoot?.querySelector(".tm-composer__target");
     return {
-      contextIsCollapsed: disclosure?.open === false,
-      contextLabel: disclosure?.querySelector("summary")?.textContent,
+      contextLabel: target?.textContent,
+      contextFont: target ? getComputedStyle(target).fontFamily : null,
       hasVisibleReviewer: Boolean(shadowRoot?.querySelector(".tm-reviewer")),
       fieldLabelIsVisuallyHidden: shadowRoot?.querySelector('label[for="tm-comment"]')?.classList.contains("tm-sr-only"),
     };
   })).toEqual({
-    contextIsCollapsed: true,
-    contextLabel: "Selected context: Element · Select this custom text control without activating the host application.",
+    contextLabel: "Commenting on: Element · Select this custom text control without activating the host application.",
+    contextFont: expect.stringContaining("Mono"),
     hasVisibleReviewer: false,
     fieldLabelIsVisuallyHidden: true,
   });
-
-  await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]")
-      ?.shadowRoot.querySelector(".tm-context-disclosure > summary")
-      ?.click();
-  });
-  await expect.poll(() => page.evaluate(() => (
-    document.querySelector("[data-threadmark-root]")
-      ?.shadowRoot.querySelector(".tm-context-disclosure")?.open
-  ))).toBe(true);
-  await expect.poll(() => page.evaluate(() => {
-    const content = document.querySelector("[data-threadmark-root]")
-      ?.shadowRoot.querySelector(".tm-context-disclosure__content");
-    return content ? getComputedStyle(content).paddingBottom : null;
-  })).toBe("11px");
-  await expect.poll(() => page.evaluate(() => {
-    const tag = document.querySelector("[data-threadmark-root]")
-      ?.shadowRoot.querySelector(".tm-context-tag");
-    return tag ? getComputedStyle(tag).fontFamily : null;
-  })).toContain("ui-monospace");
 
   await setComposerComment(page, "Attribute this note to the signed-in reviewer.");
   await submitComposer(page);
@@ -450,21 +431,14 @@ test("replies to a previous comment and confirms reply or annotation deletion wi
   });
   await expect.poll(() => page.evaluate(() => window.__threadmarkFeedback.at(-1)?.replies?.length)).toBe(0);
 
+  // 23d: with no replies left, the comment goes straight away and the toast offers Undo.
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot
       .querySelector('button[aria-label="Delete annotation"]').click();
   });
-  await expect.poll(() => page.evaluate(() => {
-    const bar = document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-delete-confirm");
-    return {
-      impact: bar?.querySelector("span")?.textContent,
-      finalAction: bar?.querySelector(".tm-delete-final")?.textContent.trim(),
-    };
-  })).toEqual({ impact: "Nobody has replied yet. This can’t be undone.", finalAction: "Delete comment" });
-  await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-delete-final").click();
-  });
   await expect.poll(() => page.evaluate(() => window.__threadmarkDeletes.length)).toBe(1);
+  await expect(page.locator(".tm-toast")).toContainText("Comment deleted");
+  expect(await page.evaluate(() => Boolean(document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-delete-confirm")))).toBe(false);
   await expect.poll(() => page.evaluate(() => Boolean(
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-popover"),
   ))).toBe(false);
@@ -975,7 +949,7 @@ test("outside dismiss and Escape confirm before discarding a typed draft", async
   await expect.poll(popoverOpen).toBe(false);
 });
 
-for (const action of ["Cancel", "Cancel comment"]) {
+for (const action of ["Cancel comment"]) {
   test(`${action} confirms before discarding a new comment`, async ({ page }) => {
     await mountPickingFixture(page);
     await page.locator("#custom-target").click({ position: { x: 80, y: 25 } });
@@ -1337,12 +1311,6 @@ test("persisted screenshot annotations survive reload, edit, and delete", async 
   await page.evaluate(() => {
     const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
     shadow.querySelector('button[aria-label="Delete annotation"]').click();
-  });
-  await expect.poll(() => page.evaluate(() => Boolean(
-    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-delete-final"),
-  ))).toBe(true);
-  await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-delete-final").click();
   });
   await expect.poll(() => page.evaluate(() => window.__threadmarkDeletes.length)).toBe(1);
   await page.reload({ waitUntil: "load" });

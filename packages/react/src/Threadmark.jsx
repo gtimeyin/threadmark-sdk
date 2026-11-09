@@ -641,6 +641,7 @@ export function Threadmark({
   const videoPreviewStreamRef = useRef(null);
   const videoPreviewGenerationRef = useRef(0);
   const finishVideoRecordingRef = useRef(null);
+  const removeAnnotationRef = useRef(null);
   const videoCountdownCancelRef = useRef(null);
   const postVideoPendingRef = useRef(null);
   const replayRecorderRef = useRef(null);
@@ -1258,9 +1259,11 @@ export function Threadmark({
     else backToSelection();
   }, [backToSelection, hasUnsavedComment, submitting]);
 
+  // Only clear it when it is showing: an unconditional setState here re-rendered on every keystroke, and
+  // fast typing that wrapped the text could pile those up until React gave up and dropped a key.
   useEffect(() => {
-    setDiscardPending(false);
-  }, [comment, composerMode, editingAnnotationId, mode]);
+    if (discardPending) setDiscardPending(false);
+  }, [comment, composerMode, editingAnnotationId, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openComposer = useCallback(() => {
     const targets = textRef.current
@@ -1453,10 +1456,17 @@ export function Threadmark({
     setComposerMode("reply");
   }, [composerMode, editingIdRef, submitting]);
 
+  // 23d: a comment nobody has replied to goes straight away, with Undo. A thread asks first (23e).
   const requestDelete = useCallback((intent) => {
     if (!intent?.id || !["annotation", "reply"].includes(intent.kind)) return;
+    const annotation = intent.kind === "annotation" ? annotationsRef.current.find((item) => item.id === intent.id) : null;
+    if (annotation && !(annotation.payload.replies || []).length) {
+      setPendingDelete(null);
+      removeAnnotationRef.current?.(intent.id);
+      return;
+    }
     setPendingDelete(intent);
-  }, []);
+  }, [annotationsRef]);
 
   const recheckAnnotation = useCallback((id) => {
     if (!annotationsRef.current.some((annotation) => annotation.id === id)) return;
@@ -1543,9 +1553,29 @@ export function Threadmark({
     editAnnotation(id);
   }, [annotations, callbacks.onOpenChange, editAnnotation, modeRef, observedLocation, portalRoot, safeCall]);
 
-  const removeAnnotation = useCallback(async (id) => {
+  // Undo for a deleted comment (board 07, 23d): it is created again with the same id, text and evidence,
+  // back in its old place in the list.
+  const restoreAnnotation = useCallback(async (snapshot, index) => {
+    if (annotationsRef.current.some((item) => item.id === snapshot.id)) return;
+    try {
+      const evidence = snapshot.runtime?.evidence || [];
+      const accepted = acceptAuthoritative(snapshot.payload, evidence, await callbacks.onFeedbackCreate.current?.(snapshot.payload, { evidence }));
+      const restored = { ...snapshot, id: accepted.payload.id, payload: accepted.payload, runtime: { ...snapshot.runtime, evidence: accepted.evidence } };
+      setAnnotations((current) => {
+        const rest = current.filter((item) => item.id !== restored.id);
+        return [...rest.slice(0, index), restored, ...rest.slice(index)];
+      });
+      showNotice("Comment restored");
+    } catch {
+      showNotice("Couldn’t bring the comment back. Try again.");
+      safeCall(callbacks.onError, { code: "feedback_submit_failed", message: "The feedback callback did not complete successfully." });
+    }
+  }, [annotationsRef, callbacks.onError, callbacks.onFeedbackCreate, safeCall, showNotice]);
+
+  const removeAnnotation = useCallback(async (id, { undoable = true } = {}) => {
     const annotation = annotationsRef.current.find((item) => item.id === id);
     if (!annotation) return false;
+    const index = annotationsRef.current.indexOf(annotation);
     try {
       await callbacks.onFeedbackDelete.current?.(annotation.payload);
     } catch {
@@ -1569,9 +1599,12 @@ export function Threadmark({
       setMode("picking");
       emitStatus("selecting");
     }
-    showNotice("Comment deleted");
+    if (undoable) showNotice("Comment deleted", { label: "Undo", run: () => restoreAnnotation(annotation, index) });
+    else showNotice("Comment removed");
     return true;
-  }, [annotationsRef, callbacks.onError, callbacks.onFeedbackDelete, editingIdRef, emitStatus, modeRef, safeCall, showNotice]);
+  }, [annotationsRef, callbacks.onError, callbacks.onFeedbackDelete, editingIdRef, emitStatus, modeRef, restoreAnnotation, safeCall, showNotice]);
+
+  removeAnnotationRef.current = removeAnnotation;
 
   const removeReply = useCallback(async (annotationId, replyId) => {
     const annotation = annotationsRef.current.find((item) => item.id === annotationId);
@@ -3960,7 +3993,7 @@ export function Threadmark({
       // Board 01, 2d: "Comment added · Undo".
       {
         const addedId = payload.id;
-        showNotice(captureKind === "video" ? "Video posted" : "Comment added", { label: "Undo", run: () => removeAnnotation(addedId) });
+        showNotice(captureKind === "video" ? "Video posted" : "Comment added", { label: "Undo", run: () => removeAnnotation(addedId, { undoable: false }) });
       }
       clearCapture();
       setComment("");
