@@ -168,6 +168,22 @@ export const panelStyles = `
   .tm-comments-panel .tm-comment-copy { color: var(--tm-text-primary); font: 400 14px/20px var(--tm-font); }
   .tm-comments-panel .tm-comment-target { color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font-mono); }
   .tm-comments-panel .tm-comment-meta { color: var(--tm-text-secondary); font: 500 11px/14px var(--tm-font); }
+  /* A poll in the list sits in the same sunken well as the thread's inner panel: 24% black, 8% hairline. */
+  .tm-comments-panel .tm-comment-poll { display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; width: calc(100% - 28px); padding: 10px 12px 12px; border: 1px solid rgba(255, 255, 255, .08); border-radius: var(--tm-radius-button); background: rgba(0, 0, 0, .24); }
+  .tm-comment-poll__header { display: flex; align-items: center; gap: 6px; color: var(--tm-text-secondary); font: 500 11px/14px var(--tm-font); }
+  .tm-comment-poll__header svg { flex: none; color: var(--tm-lime); }
+  .tm-comment-poll__header strong { color: var(--tm-text-primary); font-weight: 600; }
+  .tm-comment-poll__header > span { margin-left: auto; }
+  .tm-comment-poll__option { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 4px; }
+  .tm-comment-poll__label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; color: var(--tm-text-secondary); font: 400 13px/18px var(--tm-font); text-overflow: ellipsis; white-space: nowrap; }
+  .tm-comment-poll__label svg { flex: none; color: var(--tm-lime); }
+  .tm-comment-poll__option.is-leading .tm-comment-poll__label,
+  .tm-comment-poll__option.is-chosen .tm-comment-poll__label { color: var(--tm-text-primary); }
+  .tm-comment-poll__share { color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font); font-variant-numeric: tabular-nums; }
+  .tm-comment-poll__bar { grid-column: 1 / -1; height: 3px; overflow: hidden; border-radius: 2px; background: rgba(255, 255, 255, .08); }
+  .tm-comment-poll__bar > span { display: block; height: 100%; border-radius: inherit; background: rgba(251, 250, 246, .32); }
+  .tm-comment-poll__option.is-leading .tm-comment-poll__bar > span { background: var(--tm-lime); }
+  .tm-comment-poll.is-closed .tm-comment-poll__header svg { color: var(--tm-text-secondary); }
   .tm-comments-panel .tm-comment-repair { color: var(--tm-orange-on-dark); }
 
   .tm-comments-panel .tm-comments-empty { color: var(--tm-text-secondary); }

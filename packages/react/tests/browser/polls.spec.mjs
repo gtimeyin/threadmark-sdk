@@ -109,7 +109,18 @@ test("designers ask questions and run polls; reviewers vote and change their vot
   await card.getByRole("radio", { name: /Get started/ }).click();
   await expect(card).toContainText("0 votes");
   expect(await page.evaluate((id) => window.__threadmarkVotes[id], poll.id)).toEqual({});
+  await card.getByRole("radio", { name: /Try it free/ }).click();
   await page.keyboard.press("Escape");
+
+  // In the Activity list, the poll shows its answers and shares, read-only, in a sunken well.
+  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  const summary = page.locator(".tm-comment-card .tm-comment-poll");
+  await expect(summary).toContainText("1 vote · You voted");
+  await expect(summary.locator(".tm-comment-poll__option")).toHaveCount(3);
+  await expect(summary.locator(".tm-comment-poll__option.is-chosen")).toContainText("Try it free");
+  await expect(summary.locator(".tm-comment-poll__option.is-chosen")).toContainText("100%");
+  expect(await summary.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0.24)");
+  await page.getByRole("button", { name: "Close feedback panel" }).click();
 
   // A question is answered with replies.
   await page.locator("#custom-target").click();

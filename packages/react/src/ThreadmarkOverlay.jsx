@@ -935,6 +935,9 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
                 <time dateTime={feedback.createdAt}>{formatMessageTime(feedback.createdAt)}</time>
               </span>
               <span className="tm-comment-copy">{feedback.comment}</span>
+              {feedback.ask?.kind === "poll" && feedback.ask.options?.length > 0 && (
+                <PollSummary ask={feedback.ask} results={annotation.poll} closed={feedback.workflow?.status === "resolved"} />
+              )}
               <CommentThumbnail annotation={annotation} />
               <span className="tm-comment-target">#{number} · {targetName(feedback.pin?.target || feedback.target)}</span>
               <span className="tm-comment-meta">
@@ -1860,6 +1863,35 @@ function PollCard({ ask, results, closed, onVote }) {
         {closed ? "This poll is closed." : !onVote ? "Votes can’t be saved here." : mine.length ? "You voted. Click an answer to change your vote." : "Click an answer to vote."}
       </small>
     </section>
+  );
+}
+
+/** A poll in the Activity list: the same answers and shares as the thread, read-only, in a sunken well.
+ * It sits inside the card's button, so it is plain text; voting happens in the thread. */
+function PollSummary({ ask, results, closed }) {
+  const total = results?.total || 0;
+  const mine = results?.mine || [];
+  const top = Math.max(0, ...ask.options.map((item) => results?.counts?.[item.id] || 0));
+  return (
+    <span className={`tm-comment-poll${closed ? " is-closed" : ""}`}>
+      <span className="tm-comment-poll__header">
+        <ChartNoAxesColumn size={13} aria-hidden="true" />
+        <strong>{closed ? "Poll · closed" : "Poll"}</strong>
+        <span>{total} {total === 1 ? "vote" : "votes"}{mine.length ? " · You voted" : ""}</span>
+      </span>
+      {ask.options.map((option) => {
+        const count = results?.counts?.[option.id] || 0;
+        const share = total ? Math.round((count / total) * 100) : 0;
+        const chosen = mine.includes(option.id);
+        return (
+          <span key={option.id} className={`tm-comment-poll__option${chosen ? " is-chosen" : ""}${total && count === top ? " is-leading" : ""}`}>
+            <span className="tm-comment-poll__label">{option.label}{chosen && <CircleCheck size={12} aria-label="Your vote" />}</span>
+            <span className="tm-comment-poll__share">{total ? `${share}%` : ""}</span>
+            <span className="tm-comment-poll__bar" aria-hidden="true"><span style={{ width: `${share}%` }} /></span>
+          </span>
+        );
+      })}
+    </span>
   );
 }
 
