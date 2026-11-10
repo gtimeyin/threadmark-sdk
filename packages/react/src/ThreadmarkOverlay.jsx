@@ -43,11 +43,9 @@ import { CloseIcon as X } from "./icons.jsx";
 import { AiIcon, EditIcon, HideIcon, InboxIcon, IntegrationsIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
 import { ShortcutSheet } from "./surfaces/ShortcutSheet.jsx";
 import { FaceSheet, LeaveSheet, YouMenu, YouSheet } from "./surfaces/YouSheet.jsx";
-import { ShareSheet } from "./surfaces/ShareSheet.jsx";
 import { DestinationMark, DestinationsSheet, SendSheet } from "./surfaces/SendSheet.jsx";
 import { AiPageReview, AskAiCard } from "./surfaces/AiReview.jsx";
 import { pageBrightness } from "./barPrefs.js";
-import { SurveyBuilder } from "./surfaces/SurveyBuilder.jsx";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
 import { Avatar, EmptyState, Key } from "./ui/primitives.jsx";
 import { notificationDay, notificationVerb } from "./notifications.js";
@@ -95,6 +93,9 @@ const VideoCountdown = deferred(loadVideo, 'VideoCountdown');
 const VideoReviewCard = deferred(loadVideo, 'VideoReviewCard');
 const VoiceReplay = deferred(loadVideo, 'VoiceReplay');
 const TourPanel = deferred(() => import('./TourPanel.jsx'), 'TourPanel');
+// Share and the survey builder open only on request, so they stay out of the first load.
+const ShareSheet = deferred(() => import('./surfaces/ShareSheet.jsx'), 'ShareSheet');
+const SurveyBuilder = deferred(() => import('./surfaces/SurveyBuilder.jsx'), 'SurveyBuilder');
 
 // rrweb's player is large, so it loads only when someone opens a playback.
 const ReplayPlayer = lazy(() => import("./ReplayPlayer.jsx"));

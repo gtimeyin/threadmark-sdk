@@ -211,7 +211,10 @@ export interface ThreadmarkSaving {
   onUploadProgress: (progress: { evidenceId: string; sentBytes: number; totalBytes: number }) => void;
 }
 
-/** A question answered in replies, or a poll answered by votes. Option ids stay stable. */
+/**
+ * A poll attached to a comment; option ids stay stable. `{ kind: "question" }` comes only from comments
+ * saved before beta.15 and still shows a "Question" label; new comments never carry it.
+ */
 export type ThreadmarkAsk =
   | { kind: "question" }
   | { kind: "poll"; options: { id: string; label: string }[]; multiple: boolean };
@@ -651,12 +654,12 @@ export interface ThreadmarkProps {
     version: ThreadmarkPageVersion,
     context: ThreadmarkPageVersionContext,
   ) => void | Promise<void>;
-  /**
-   * Stores the reviewer's vote on a poll (an empty list takes it back) and returns the poll's new results.
-   * Providing it adds Comment / Question / Poll to the new-comment composer; without it, posts are comments.
-   */
   /** Host authenticates the actor and returns authoritative reactions for the selected message. */
   onReactionChange?: (feedback: ThreadmarkFeedback, change: ThreadmarkReactionChange) => ThreadmarkReaction[] | Promise<ThreadmarkReaction[]>;
+  /**
+   * Stores the reviewer's vote on a poll (an empty list takes it back) and returns the poll's new results.
+   * Providing it adds "Add a poll" to the new-comment composer; without it, posts are plain comments.
+   */
   onPollVote?: (feedback: ThreadmarkFeedback, optionIds: string[]) => ThreadmarkPollResults | Promise<ThreadmarkPollResults>;
   /**
    * Stores a next step as done or not done. The tick shows at once; a rejection puts it back. Supply the

@@ -173,8 +173,6 @@ export const threadStyles = `
   .tm-popover .tm-reply__send .tm-tool-icon { width: 16px; height: 16px; }
   .tm-popover.tm-popover--thread .tm-reply__send:disabled { background: rgba(251, 250, 246, .1); color: var(--tm-text-secondary); border-color: transparent; }
 
-  /* Comment / Question / Poll uses the brand Segmented control. */
-
   /* Attachments sit in the panel as small rows, like the design's Screenshot chip. */
   .tm-popover .tm-replay-attachment,
   .tm-popover .tm-replay-open { border: 0; border-radius: var(--tm-radius-button); padding: 6px 8px; background: rgba(255, 255, 255, .07); }

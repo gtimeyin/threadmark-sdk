@@ -211,12 +211,13 @@ current:
 Threadmark for Chrome and the script tag read the same context from the page: set
 `window.threadmarkMetadata = () => ({ … })` (or a plain object) on your site.
 
-## Questions and polls
+## Polls
 
-Pass `onPollVote` and the new-comment composer offers **Comment**, **Question**, and **Poll**. A question is
-a thread answered with replies; a poll has two to eight answers (optionally several per person) that
-reviewers vote on in the thread. The feedback carries `ask: { kind: "question" }` or
-`ask: { kind: "poll", options: [{ id, label }], multiple }`, and option ids stay stable.
+Pass `onPollVote` and the new-comment composer gets **Add a poll**. A poll is attached to a comment: two to
+eight answers (or several per person with **Pick any**) that reviewers vote on in the thread. Results show
+after you vote, and you can change or take back your vote. The feedback carries
+`ask: { kind: "poll", options: [{ id, label }], multiple }`, and option ids stay stable. Comments saved before
+beta.15 may carry `ask: { kind: "question" }`; they still show a "Question" label, but new comments can't create one.
 
 Votes are host-owned, like everything else Threadmark stores:
 
@@ -803,7 +804,7 @@ export function ReviewLayer({
 | `onFeedbackClear` | `(feedback[]) => void \| Promise<void>` | Removes every persisted annotation; rejection keeps them visible. |
 | `onPageVersionSelect` | `(version, { route, url }) => void \| Promise<void>` | Lets the host navigate to the same route on another ready deployment; without it, Threadmark navigates in-page. |
 | `onFeedbackCarryForward` | `(feedback, version, { route, url }) => void \| Promise<void>` | Explicit host-owned copy into another deployment; providing it enables the carry-forward control. |
-| `onPollVote` | `(feedback, optionIds) => PollResults \| Promise<PollResults>` | Stores a poll vote and returns the results; providing it adds Question and Poll to the composer. |
+| `onPollVote` | `(feedback, optionIds) => PollResults \| Promise<PollResults>` | Stores a poll vote and returns the results; providing it adds **Add a poll** to the composer. |
 | `onNextStepDone` | `(step, done) => void \| Promise<void>` | Stores a next step as done or not done; the tick shows at once and a rejection puts it back. Without it, the checklist is read-only. |
 | `onNextStepsCopy` | `(steps) => void \| Promise<void>` | Adds **Copy for agent** to the Next steps tab; called from the click, so the host can put its own prompt on the clipboard. |
 | `onError` | `(error) => void` | Reports configuration, duplicate-instance, snapshot-capture, submission, or deletion errors. |

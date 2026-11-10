@@ -1,5 +1,5 @@
-// Composer extras that render without the video chunk: the playback attachment, the Comment /
-// Question / Poll switch, the poll editor and posted polls. Moved out of videoStyles.js so they are
+// Composer extras that render without the video chunk: the playback attachment, the poll
+// editor and posted polls. Moved out of videoStyles.js so they are
 // styled the moment the composer opens, not only after a video feature has loaded.
 export const composerExtrasStyles = `
   .tm-replay-attachment,

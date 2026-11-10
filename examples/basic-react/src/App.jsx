@@ -154,6 +154,11 @@ export function App() {
   ]));
   useEffect(() => writeJson("example:members", members), [members]);
   const [linkAccess, setLinkAccess] = useState("comment");
+  // Stand-in for the host's next steps. A real app writes these from its open feedback (with AI or by hand).
+  const [nextSteps, setNextSteps] = useState(() => [
+    { id: "step-hero", title: "Shorten the pricing hero on phones", tag: "polish", source: "ai", completed: false },
+    { id: "step-tax", title: "Show prices with and without tax for EU visitors", tag: "copy", source: "person", completed: false },
+  ]);
   // Surveys and their answers are host-owned too; this example keeps them in localStorage.
   const [surveys, setSurveys] = useState(() => readJson("example:surveys", []));
   const [surveyAnswers, setSurveyAnswers] = useState(() => readJson("example:survey-answers", []));
@@ -401,6 +406,13 @@ export function App() {
         surveyResults={surveyResults}
         onSurveyPublish={(survey) => setSurveys((list) => [...list.filter((item) => item.id !== survey.id), survey])}
         onSurveyEnd={(id) => setSurveys((list) => list.map((item) => (item.id === id ? { ...item, status: "ended" } : item)))}
+        onNotificationOpen={(item) => console.info("[example] opened notification", item.id)}
+        nextSteps={nextSteps}
+        onNextStepDone={(step, done) => setNextSteps((list) => list.map((item) => (item.id === step.id ? { ...item, completed: done, completedVia: done ? "person" : null, completedBy: done ? { displayName: me.displayName } : null } : item)))}
+        onLeaveProject={async () => { window.alert("Your app removes you from the project here."); }}
+        onSignOut={() => window.alert("Your app signs you out here.")}
+        onAiDismiss={(finding, reason) => console.info("[example] dismissed AI finding", finding.id, reason)}
+        onConnectAi={() => window.alert("Your app connects its coding AI here.")}
         onNotificationsRead={(ids) => setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)))}
         tours={tours}
         onTourSave={saveTour}

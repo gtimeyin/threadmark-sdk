@@ -4,12 +4,59 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [0.1.0-beta.15] — 2026-11-10
+
+The review overlay is rebuilt on the November brand, and gains surveys, an Inbox, AI review, sending to other tools, and layouts for phones and tablets. This release also carries the SDK changes from the unpublished beta.14.
+
+### Changed — please read before upgrading
+
+- **New look.** The overlay uses the brand palette (Forest `#035D47`, Orange `#F15722` pins and focus ring, Lime `#E0F354` actions on dark chrome), Geist only, 6 / 8 / 16px radii and the Threadmark icon set. The launcher and toolbar are replaced by one dark **Bar** at the bottom of the page, which says what's waiting (Leave feedback, N new, All caught up, Offline) and carries the tools in comment mode.
+- **Polls are attached to comments.** The composer no longer has Comment / Question / Poll tabs. With `onPollVote`, it shows **Add a poll**; new comments carry `ask: { kind: "poll", … }` or no `ask`. Comments saved with `ask: { kind: "question" }` still load and show a "Question" label.
+- **Polls show results after you vote.** Pick one shows results straight away, Pick any after **Done**, and you can change or take back your vote. The Activity list hides shares until you've voted.
+- The panel's **Versions** tab is gone. `pageVersions` still powers **Carry forward** and **Compare with current page** in a thread's ⋯ menu.
+- `@solar-icons/react` and the Bricolage font are no longer dependencies.
+- Wording says "comment", not "annotation", throughout the overlay.
+
+### Added
+
+- **Composer and threads** (board 01): one dark card with what you picked, the text, @ to mention, the poll tool and a Lime send. ↵ posts, Shift+↵ adds a line. Replies get the same @ button. With the panel open, a thread opens in the panel's place with "← All comments".
+- **Delete with Undo:** a comment without replies goes straight away with "Comment deleted · Undo"; threads with replies, and replies, still ask first. You can edit your own replies.
+- **Side panel** (board 05): Activity, **Inbox** and Next steps in a 380px dark panel. The Inbox takes `notifications`, `onNotificationOpen` and `onNotificationsRead`, with Unread / All, Today and Earlier, and "Sam replied to your comment" lines.
+- **Surveys** (board 03): **Tools → Ask a question** builds a poll, scale or open question for a page. The new production-safe entry `threadmark-react/surveys` (`<ThreadmarkSurveys>`) shows them to visitors and sends answers to `onAnswer`. Results sit at the top of Activity with Export (CSV) and Share results.
+- **Sketching** (board 02): one Capture bar with Box (B), Pen (P), Whole view (W) and three colours. The box resizes and moves until you sketch, and "Esc back to drawing" keeps your strokes.
+- **Video** (board 02): a new setup card, a 3-2-1 countdown (`videoRecording.countdownSeconds`), a recorder bar with Moment, Blur and Draw, and a review step to title, trim and post. Posted videos show Summary, Transcript, Chapters and Steps from host-written `video.notes`.
+- **You** (board 08): a You menu, a face sheet (host-supplied `faces`), Your settings and Leave. New props: `faces`, `notificationSettings`, `projectName`, `onReviewerChange`, `onNotificationSettingsChange`, `onLeaveProject` and `onSignOut`.
+- **The Bar, your way** (board 09): drag it to one of six spots, shrink it to a dot (⌘.) or hide it on a page. Choices are saved per browser. A shortcut sheet opens with ?.
+- **Share** (board 04): copy the review link, set link access, and invite people as chips with a note and roles. New props: `shareUrl`, `linkAccess`, `members`, `inviteSuggestions`, `onInvite`, `onMemberChange`, `onResendInvite` and `onLinkAccessChange`.
+- **Send elsewhere** (board 10): send a comment to GitHub, Linear or Slack. The returned link is kept on `feedback.links`. New props: `destinations`, `onSendTo` and `onConnectDestination`.
+- **Tours** (board 06): a restyled player and Tour mode, a Save sheet with **Send to your AI** (`aiConnection`, `onTourSendToAi`, `onConnectAi`), and a preview bar that follows each step.
+- **AI review** (board 12): "Ask AI to review this page" gives draft findings with AI pins (Post one, Post all, or Dismiss with a reason). **Ask AI** (⌘K) answers about one element. Your host supplies the model through `onAiReview`, `onAskAi` and `onAiDismiss`. Posted findings are marked "From an AI review". The beta.14 `onPageReview` flow is included.
+- **Phones and tablets** (board 11): bottom sheets and 44px targets on phones, and a drawer on touch tablets in portrait.
+- **Live presence and emoji reactions** (`onReactionChange`).
+- From beta.14:
+  - **Upload progress:** `onFeedbackCreate` gets a third argument with `onUploadProgress`, and Post shows "Uploading N%".
+  - **Browser details** on `feedback.device` (turn off with `deviceDetails={false}`).
+  - **App context** through `metadata`.
+  - **Canvases in session replays** (`sessionReplay={{ canvas: true }}`).
+  - **Opt-in request and response bodies**, plus GraphQL errors and timing phases.
+  - **Video blur and drawing.**
+  - Support for other session tools' privacy markers.
+
+### Fixed
+
+- Busy pages no longer hang when review is open (from beta.14).
+- Composer extras such as the poll editor and the playback attachment are styled from the start, not only after a video feature loads.
+- Typing fast in the composer no longer drops a key.
+- Typing in a poll answer no longer jumps to the question when the composer moves.
+- Thumbnails only show real screenshots.
+- Esc closes only the innermost sheet or menu.
+
 ### Security
 
 - Tour steps' `page` and `showTo.path` must be paths on the same site. Protocol-relative values such as `//other.site`, backslashes, and control characters now fail validation (in `validateTour` and `tour.schema.json`), so a tour file can't hand the host's router an off-site address.
 - Tour `theme` values that could load a resource or break out of a CSS value, such as `url()`, `image-set()`, CSS escapes, or comments, are now ignored.
 
-### Fixed
+### Fixed (tours)
 
 - `threadmark-react/tours` works in Next.js App Router Server Components: `threadmarkTarget()`, `validateTour()`, and `defineTour()` are no longer marked `"use client"`. Only the player chunk is, so `<ThreadmarkTours>` still renders from Client Components. The CLI and Vite plugin bundles no longer carry the directive either.
 
@@ -192,7 +239,8 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 - Consumer-owned persistence callbacks, hydration, deep links, and conservative target restoration.
 - Package, SSR, browser interaction, npm tarball, example application, and CI verification.
 
-[Unreleased]: https://github.com/gtimeyin/threadmark-sdk/compare/v0.1.0-beta.11...HEAD
+[Unreleased]: https://github.com/gtimeyin/threadmark-sdk/compare/v0.1.0-beta.15...HEAD
+[0.1.0-beta.15]: https://www.npmjs.com/package/threadmark-react/v/0.1.0-beta.15
 [0.1.0-beta.11]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.11
 [0.1.0-beta.10]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.10
 [0.1.0-beta.9]: https://github.com/gtimeyin/threadmark-sdk/tree/v0.1.0-beta.9
