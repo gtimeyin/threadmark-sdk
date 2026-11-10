@@ -1,6 +1,6 @@
 // Composer and Thread (Figma "Composer" 64:10, "Thread" 64:54, "Comment row" 264:846, "Reaction").
 // Both are a 360px dark card (surface, 8px radius, 4px inset) with a mono context strip on top and a
-// raised inner panel (5% white, 12% hairline, 6px radius). Loaded after the base overlay styles.
+// sunken inner panel (24% black, 8% hairline, 6px radius). Loaded after the base overlay styles.
 export const threadStyles = `
   .tm-popover,
   .tm-popover.tm-popover--thread {
@@ -62,9 +62,9 @@ export const threadStyles = `
     margin-top: 4px;
     gap: 12px;
     padding: 12px 10px 10px 12px;
-    border: 1px solid rgba(255, 255, 255, .12);
+    border: 1px solid rgba(255, 255, 255, .08);
     border-radius: var(--tm-radius-button);
-    background: rgba(255, 255, 255, .05);
+    background: rgba(0, 0, 0, .24);
   }
   .tm-popover.tm-popover--thread .tm-form,
   .tm-popover.tm-popover--thread .tm-popover__header--thread + .tm-form { gap: 0; padding: 0; }
@@ -293,7 +293,7 @@ export const threadStyles = `
     .tm-popover.tm-popover--docked > * { flex: none; }
     .tm-popover.tm-popover--docked .tm-popover__header--thread { border-bottom: 0; padding-bottom: 4px; }
     .tm-popover.tm-popover--docked .tm-popover__header--thread + .tm-form {
-      flex: 1 1 auto; display: flex; flex-direction: column; margin: 0; border: 0; border-radius: 0; background: none;
+      flex: 1 1 auto; display: flex; flex-direction: column; margin: 0;
     }
     .tm-popover.tm-popover--docked .tm-reply { margin-top: auto; }
   }
