@@ -1754,6 +1754,16 @@ function ThreadMessage({
   );
 }
 
+/** The @ button: put an @ at the cursor (with a space before it if needed) so the mention list opens. */
+function startMention(field) {
+  if (!field) return;
+  field.focus();
+  const start = field.selectionStart ?? field.value.length;
+  const before = field.value.slice(0, start);
+  field.setRangeText(`${before && !/\s$/.test(before) ? " " : ""}@`, start, field.selectionEnd ?? start, "end");
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 const MAX_POLL_CHOICES = 8;
 
 /** A poll attached to a comment: 2 to 8 answers, and whether people can pick several. */
@@ -3241,6 +3251,12 @@ function Overlay({
                       placeholder="Reply"
                       maxLength={6000}
                     />
+                    {reviewers?.length > 0 && (
+                      <button type="button" className="tm-reply__tool" aria-label="Mention someone" title="Mention someone (@)" disabled={submitting}
+                        onClick={(event) => startMention(event.currentTarget.form?.querySelector("#tm-comment"))}>
+                        <MentionIcon size={16} aria-hidden="true" focusable="false" />
+                      </button>
+                    )}
                     <button type="submit" className="tm-submit tm-reply__send" disabled={submitting || !comment.trim()}>
                       <ArrowUp {...iconProps} /><span className="tm-sr-only">{submitting ? "Saving…" : "Reply"}</span>
                     </button>
@@ -3307,15 +3323,7 @@ function Overlay({
                   <span className="tm-composer__tools">
                     {reviewers?.length > 0 && (
                       <button type="button" className="tm-composer__tool" aria-label="Mention someone" title="Mention someone (@)" disabled={submitting}
-                        onClick={(event) => {
-                          const field = event.currentTarget.form?.querySelector("#tm-comment");
-                          if (!field) return;
-                          field.focus();
-                          const start = field.selectionStart ?? field.value.length;
-                          const before = field.value.slice(0, start);
-                          field.setRangeText(`${before && !/\s$/.test(before) ? " " : ""}@`, start, field.selectionEnd ?? start, "end");
-                          field.dispatchEvent(new Event("input", { bubbles: true }));
-                        }}>
+                        onClick={(event) => startMention(event.currentTarget.form?.querySelector("#tm-comment"))}>
                         <MentionIcon size={16} aria-hidden="true" focusable="false" />
                       </button>
                     )}

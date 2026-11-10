@@ -155,6 +155,9 @@ export const threadStyles = `
     background: transparent;
   }
   .tm-popover.tm-popover--thread .tm-reply__box textarea { padding: 4px 0; font: 400 14px/20px var(--tm-font); }
+  .tm-popover .tm-reply__tool { flex: none; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--tm-radius-button); background: none; color: var(--tm-text-muted); cursor: pointer; }
+  .tm-popover .tm-reply__tool:hover:not(:disabled) { background: rgba(251, 250, 246, .08); color: var(--tm-text-primary); }
+  .tm-popover .tm-reply__tool svg { width: 16px; height: 16px; }
   .tm-popover .tm-reply__send,
   .tm-popover.tm-popover--thread .tm-reply__send {
     width: 28px;

@@ -95,6 +95,10 @@ test("a poll is attached to a comment; reviewers vote and change their vote", as
 
   // Voting, switching, and taking a vote back.
   await page.locator(".tm-marker").last().click();
+  // The reply box has the same @ button as the composer; it starts a mention at the cursor.
+  await page.locator(".tm-reply").getByRole("button", { name: "Mention someone" }).click();
+  await expect(page.locator("#tm-comment")).toHaveValue("@");
+  await setComment(page, "");
   const card = page.getByRole("region", { name: "Poll" });
   await expect(card).toContainText("0 votes");
   await card.getByRole("radio", { name: /Try it free/ }).click();
