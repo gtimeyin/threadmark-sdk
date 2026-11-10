@@ -6,7 +6,6 @@ import { ReplayIcon as MonitorPlay } from "./icons.jsx";
 import { AgentIcon as Bot } from "./icons.jsx";
 import { NextStepsIcon as ListChecks } from "./icons.jsx";
 import { SpinnerIcon as LoaderCircle } from "./icons.jsx";
-import { ResultsIcon as ChartNoAxesColumn } from "./icons.jsx";
 import { QuestionIcon as CircleHelp } from "./icons.jsx";
 import { AddIcon as PlusIcon } from "./icons.jsx";
 import { CopyIcon as CopyCheck } from "./icons.jsx";
@@ -1812,54 +1811,73 @@ function PollEditor({ options, onChange, multiple, onMultipleChange, onRemove, d
   );
 }
 
-/** A posted poll: answers with live counts; clicking an answer votes (and clicking it again takes it back). */
+/** A posted poll in its thread. Before you vote: answers with a round mark (pick one) or a square mark
+ * (pick any), and no shares, so early votes don’t sway yours. After you vote, or once the poll closes:
+ * results, with a tick on your vote and the Lime bar on the leader. Change vote goes back to the answers. */
 function PollCard({ ask, results, closed, onVote }) {
   const total = results?.total || 0;
   const mine = results?.mine || [];
-  const toggle = (id) => {
+  const [changing, setChanging] = useState(false);
+  const voted = mine.length > 0;
+  const showResults = closed || (voted && !changing);
+  const counts = ask.options.map((item) => results?.counts?.[item.id] || 0);
+  const top = Math.max(0, ...counts);
+  const votes = `${total} ${total === 1 ? "vote" : "votes"}`;
+  const pick = (id) => {
     if (closed || !onVote) return;
-    const next = ask.multiple
-      ? (mine.includes(id) ? mine.filter((item) => item !== id) : [...mine, id])
-      : (mine.includes(id) ? [] : [id]);
-    onVote(next);
+    if (ask.multiple) {
+      // Pick any: each answer toggles; the answers stay up until Done.
+      onVote(mine.includes(id) ? mine.filter((item) => item !== id) : [...mine, id]);
+      setChanging(true);
+    } else {
+      // Pick one: choosing shows the results; choosing your own answer again takes the vote back.
+      onVote(mine.includes(id) ? [] : [id]);
+      setChanging(false);
+    }
   };
+  const link = (label, run) => <button type="button" className="tm-poll__link" onClick={run}>{label}</button>;
   return (
-    <section className={`tm-poll${mine.length || closed ? " tm-poll--results" : ""}`} aria-label="Poll">
+    <section className={`tm-poll${showResults ? " tm-poll--results" : ""}${ask.multiple ? " tm-poll--multiple" : ""}${closed ? " is-closed" : ""}`} aria-label="Poll">
       <div className="tm-poll__header">
-        <ChartNoAxesColumn size={14} aria-hidden="true" />
-        <strong>Poll</strong>
-        {ask.multiple && <span>pick any</span>}
-        <span className="tm-poll__total">{total} {total === 1 ? "vote" : "votes"}</span>
+        <PollIcon size={14} aria-hidden="true" focusable="false" />
+        <strong>{closed ? "Poll · closed" : "Poll"}</strong>
+        <span>{ask.multiple ? "Pick any" : "Pick one"}</span>
       </div>
-      <div role={ask.multiple ? "group" : "radiogroup"} aria-label="Answers" className="tm-poll__options">
-        {ask.options.map((option, index) => {
-          const count = results?.counts?.[option.id] || 0;
-          const share = total ? Math.round((count / total) * 100) : 0;
-          const chosen = mine.includes(option.id);
-          const leading = total > 0 && count === Math.max(...ask.options.map((item) => results?.counts?.[item.id] || 0));
-          const names = (results?.voters || []).filter((voter) => voter.optionIds.includes(option.id)).map((voter) => voter.reviewer.displayName);
-          return (
-            <button
-              key={option.id}
-              type="button"
-              role={ask.multiple ? "checkbox" : "radio"}
-              aria-checked={chosen}
-              className={`tm-poll-option${chosen ? " is-chosen" : ""}${leading ? " is-leading" : ""}`}
-              disabled={closed || !onVote}
-              title={names.length ? names.join(", ") : undefined}
-              onClick={() => toggle(option.id)}
-            >
-              <span className="tm-poll-option__key" aria-hidden="true">{index + 1}</span>
-              <span className="tm-poll-option__label">{option.label}{chosen && <CircleCheck size={14} aria-hidden="true" />}</span>
-              <span className="tm-poll-option__count"><span className="tm-poll-option__votes">{count}{total ? " · " : ""}</span>{total ? `${share}%` : ""}</span>
-              <span className="tm-poll-option__bar" style={{ width: `${share}%` }} aria-hidden="true" />
+      {showResults ? (
+        <ul className="tm-poll__results" aria-label="Results">
+          {ask.options.map((option, index) => {
+            const count = counts[index];
+            const share = total ? Math.round((count / total) * 100) : 0;
+            const chosen = mine.includes(option.id);
+            const names = (results?.voters || []).filter((voter) => voter.optionIds.includes(option.id)).map((voter) => voter.reviewer.displayName);
+            return (
+              <li key={option.id} className={`tm-poll-result${chosen ? " is-chosen" : ""}${total && count === top ? " is-leading" : ""}`}
+                title={names.length ? names.join(", ") : undefined}>
+                <span className="tm-poll-result__label">{option.label}{chosen && <CircleCheck size={14} aria-label="Your vote" />}</span>
+                <span className="tm-poll-result__share">{share}%<span className="tm-sr-only">, {count} {count === 1 ? "vote" : "votes"}</span></span>
+                <span className="tm-poll-result__bar" aria-hidden="true"><span style={{ width: `${share}%` }} /></span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div role={ask.multiple ? "group" : "radiogroup"} aria-label="Answers" className="tm-poll__options">
+          {ask.options.map((option) => (
+            <button key={option.id} type="button" role={ask.multiple ? "checkbox" : "radio"} aria-checked={mine.includes(option.id)}
+              className={`tm-poll-option${mine.includes(option.id) ? " is-chosen" : ""}`} disabled={closed || !onVote} onClick={() => pick(option.id)}>
+              <span className="tm-poll-option__mark" aria-hidden="true" />
+              <span className="tm-poll-option__label">{option.label}</span>
             </button>
-          );
-        })}
-      </div>
-      <small className="tm-poll__hint">
-        {closed ? "This poll is closed." : !onVote ? "Votes can’t be saved here." : mine.length ? "You voted. Click an answer to change your vote." : "Click an answer to vote."}
-      </small>
+          ))}
+        </div>
+      )}
+      <p className="tm-poll__footer">
+        {closed ? `Closed · ${votes}`
+          : !onVote ? <>{votes} · Votes can’t be saved here.</>
+          : showResults ? <>{votes} · {link("Change vote", () => setChanging(true))}</>
+          : voted ? <>{votes} · {link("Done", () => setChanging(false))}</>
+          : <>{votes} · Results show after you vote</>}
+      </p>
     </section>
   );
 }
@@ -1870,22 +1888,24 @@ function PollSummary({ ask, results, closed }) {
   const total = results?.total || 0;
   const mine = results?.mine || [];
   const top = Math.max(0, ...ask.options.map((item) => results?.counts?.[item.id] || 0));
+  // Same rule as the thread: no shares until you have voted (or the poll has closed).
+  const reveal = closed || mine.length > 0;
   return (
     <span className={`tm-comment-poll${closed ? " is-closed" : ""}`}>
       <span className="tm-comment-poll__header">
-        <ChartNoAxesColumn size={13} aria-hidden="true" />
+        <PollIcon size={13} aria-hidden="true" focusable="false" />
         <strong>{closed ? "Poll · closed" : "Poll"}</strong>
-        <span>{total} {total === 1 ? "vote" : "votes"}{mine.length ? " · You voted" : ""}</span>
+        <span>{total} {total === 1 ? "vote" : "votes"}{mine.length ? " · You voted" : closed ? "" : " · Vote in the thread"}</span>
       </span>
       {ask.options.map((option) => {
         const count = results?.counts?.[option.id] || 0;
         const share = total ? Math.round((count / total) * 100) : 0;
         const chosen = mine.includes(option.id);
         return (
-          <span key={option.id} className={`tm-comment-poll__option${chosen ? " is-chosen" : ""}${total && count === top ? " is-leading" : ""}`}>
+          <span key={option.id} className={`tm-comment-poll__option${chosen ? " is-chosen" : ""}${reveal && total && count === top ? " is-leading" : ""}`}>
             <span className="tm-comment-poll__label">{option.label}{chosen && <CircleCheck size={12} aria-label="Your vote" />}</span>
-            <span className="tm-comment-poll__share">{total ? `${share}%` : ""}</span>
-            <span className="tm-comment-poll__bar" aria-hidden="true"><span style={{ width: `${share}%` }} /></span>
+            <span className="tm-comment-poll__share">{reveal && total ? `${share}%` : ""}</span>
+            {reveal && <span className="tm-comment-poll__bar" aria-hidden="true"><span style={{ width: `${share}%` }} /></span>}
           </span>
         );
       })}

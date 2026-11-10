@@ -129,7 +129,6 @@ export const composerExtrasStyles = `
   .tm-poll__header { display: flex; align-items: center; gap: 6px; color: var(--tm-text-secondary); font-size: 11px; }
   .tm-poll__header svg { color: var(--tm-action-primary); }
   .tm-poll__header strong { color: var(--tm-text-primary); }
-  .tm-poll__total { margin-left: auto; }
   .tm-poll__options { display: grid; gap: 5px; }
   .tm-poll-option {
     position: relative;
@@ -151,19 +150,9 @@ export const composerExtrasStyles = `
   .tm-poll-option:hover:not(:disabled) { border-color: var(--tm-line-strong); }
   .tm-poll-option:disabled { cursor: default; }
   .tm-poll-option.is-chosen { border-color: var(--tm-action-primary); }
-  .tm-poll-option__bar {
-    position: absolute;
-    inset: 0 auto 0 0;
-    background: color-mix(in srgb, var(--tm-action-primary) 18%, transparent);
-    transition: width var(--tm-motion-standard) var(--tm-ease-standard);
-  }
-  .tm-poll-option__label,
-  .tm-poll-option__count { position: relative; display: inline-flex; align-items: center; gap: 5px; }
-  .tm-poll-option__label svg { color: var(--tm-action-primary); }
-  .tm-poll-option__count { color: var(--tm-text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tm-poll__hint { color: var(--tm-text-soft); font-size: 10px; }
+  .tm-poll-option__label { position: relative; display: inline-flex; align-items: center; gap: 5px; }
   @media (prefers-reduced-motion: reduce) {
-    .tm-poll, .tm-poll-option__bar { animation: none; transition: none; }
+    .tm-poll, .tm-poll-result__bar > span { animation: none; transition: none; }
   }
 
   /* A saved comment whose screenshot couldn't be taken: one quiet line, not an error box. */

@@ -100,18 +100,30 @@ test("a poll is attached to a comment; reviewers vote and change their vote", as
   await expect(page.locator("#tm-comment")).toHaveValue("@");
   await setComment(page, "");
   const card = page.getByRole("region", { name: "Poll" });
-  await expect(card).toContainText("0 votes");
-  await card.getByRole("radio", { name: /Try it free/ }).click();
-  await expect(card).toContainText("1 vote");
-  await expect(card.getByRole("radio", { name: /Try it free/ })).toHaveAttribute("aria-checked", "true");
-  await expect(card.getByRole("radio", { name: /Try it free/ })).toContainText("1 · 100%");
-  await card.getByRole("radio", { name: /Get started/ }).click();
-  await expect(card.getByRole("radio", { name: /Get started/ })).toHaveAttribute("aria-checked", "true");
-  await expect(card.getByRole("radio", { name: /Try it free/ })).toHaveAttribute("aria-checked", "false");
-  await card.getByRole("radio", { name: /Get started/ }).click();
-  await expect(card).toContainText("0 votes");
+  const answer = (label) => card.getByRole("radio", { name: label, exact: true });
+  const results = card.getByRole("list", { name: "Results" });
+  // Before you vote: round marks, no shares.
+  await expect(card).toContainText("Pick one");
+  await expect(card).toContainText("0 votes · Results show after you vote");
+  await expect(card).not.toContainText("%");
+  await answer("Try it free").click();
+  // After: results, a tick on your vote, the Lime bar on the leader, and a visible Change vote.
+  await expect(card).toContainText("1 vote · Change vote");
+  await expect(results.locator(".tm-poll-result.is-chosen")).toContainText("Try it free");
+  await expect(results.locator(".tm-poll-result.is-chosen")).toContainText("100%");
+  await expect(results.locator(".tm-poll-result.is-leading")).toHaveCount(1);
+  await expect(card.getByRole("radio")).toHaveCount(0);
+  // Change vote goes back to the answers with yours marked; picking another moves the vote.
+  await card.getByRole("button", { name: "Change vote" }).click();
+  await expect(answer("Try it free")).toHaveAttribute("aria-checked", "true");
+  await answer("Get started").click();
+  await expect(results.locator(".tm-poll-result.is-chosen")).toContainText("Get started");
+  // Picking your own answer again takes the vote back.
+  await card.getByRole("button", { name: "Change vote" }).click();
+  await answer("Get started").click();
+  await expect(card).toContainText("0 votes · Results show after you vote");
   expect(await page.evaluate((id) => window.__threadmarkVotes[id], poll.id)).toEqual({});
-  await card.getByRole("radio", { name: /Try it free/ }).click();
+  await answer("Try it free").click();
   await page.keyboard.press("Escape");
 
   // In the Activity list, the poll shows its answers and shares, read-only, in a sunken well.
