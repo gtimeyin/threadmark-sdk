@@ -155,3 +155,29 @@ test("the published JSON Schema lists the same fields as the validator", async (
   assert.equal(schema.additionalProperties, false);
   assert.equal(schema.$defs.step.additionalProperties, false);
 });
+
+test("pages stay on this site, because steps hand them to the host's router", () => {
+  const withPage = (page) => ({ id: "t", title: "T", steps: [{ id: "s", title: "S", style: "modal", page }] });
+  for (const page of ["/", "/team", "/projects/new", "/équipe"]) assert.equal(validateTour(withPage(page)).ok, true, page);
+  for (const page of ["//evil.example/login", "/\\evil.example", "/\\/evil.example", "/a\u0000b", "https://evil.example", "javascript:alert(1)"]) {
+    assert.deepEqual(errorPaths(withPage(page)), ["steps[0].page"], page);
+  }
+  for (const path of ["//evil.example*", "/\\evil.example"]) {
+    assert.ok(errorPaths({ id: "t", title: "T", showTo: { path }, steps: [{ id: "s", title: "S", style: "modal" }] }).includes("showTo.path"), path);
+  }
+});
+
+test("the published JSON schema refuses the same off-site pages", async () => {
+  const schema = JSON.parse(await readFile(new URL("../tour.schema.json", import.meta.url), "utf8"));
+  const patterns = [];
+  JSON.stringify(schema, (key, value) => {
+    if (key === "pattern" && value.startsWith("^/")) patterns.push(new RegExp(value));
+    return value;
+  });
+  assert.equal(patterns.length, 2);
+  for (const pattern of patterns) {
+    assert.equal(pattern.test("/team"), true);
+    assert.equal(pattern.test("//evil.example"), false);
+    assert.equal(pattern.test("/\\evil.example"), false);
+  }
+});

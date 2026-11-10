@@ -26,7 +26,10 @@ export default defineConfig({
       // rrweb stays a runtime dependency; its stylesheet (imported with ?inline) is still bundled.
       external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", /^@solar-icons\/react(?:\/|$)/, /^rrweb$/, /^node:/],
       output: {
-        banner: '"use client";',
+        // Only modules that render or use React are client modules. The rest (the tours entry,
+        // threadmarkTarget, validateTour, the CLI and Vite plugin) stay callable from Server
+        // Components and Node; the tours entry re-exports the player from a "use client" chunk.
+        banner: (chunk) => (chunk.name === "index" || chunk.imports.some((id) => /^react(?:-dom)?(?:\/|$)/.test(id)) ? '"use client";' : ""),
         // Name the code entries share, so no bundle appears to import another entry.
         manualChunks: (id) => {
           if (id.endsWith("/src/targetId.js")) return "targetId";

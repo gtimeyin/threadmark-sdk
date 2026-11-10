@@ -206,3 +206,47 @@ test("reduced motion turns off the player's animation", async ({ page }) => {
   });
   expect(motion).toEqual(["none", "none"]);
 });
+
+// A production page with a strict policy: no inline styles or scripts, no requests anywhere else.
+const STRICT_CSP = "default-src 'none'; script-src 'self'; style-src 'self' 'nonce-tours-test'; img-src 'none'; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'";
+
+async function openStrict(page, query = "") {
+  await page.addInitScript(() => {
+    window.__cspViolations = [];
+    document.addEventListener("securitypolicyviolation", (event) => window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`));
+  });
+  await page.route("http://localhost/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/tours-fixture.js") return route.fulfill({ status: 200, contentType: "text/javascript", body: fixtureBundle });
+    // The fixture's own inline <style> would be blocked too; this test is about the player's styles.
+    const html = fixtureHtml.replace(/<style>[\s\S]*?<\/style>/, "");
+    return route.fulfill({ status: 200, contentType: "text/html", headers: { "content-security-policy": STRICT_CSP }, body: html });
+  });
+  await page.goto(`http://localhost/projects${query}`, { waitUntil: "load" });
+  await expect.poll(() => page.evaluate(() => window.__toursMounted)).toBe(true);
+}
+
+const cardLook = (page) => page.evaluate(() => {
+  const cardElement = document.querySelector("[data-threadmark-tours]").shadowRoot.querySelector(".tmt-card");
+  const style = getComputedStyle(cardElement);
+  return { position: style.position, background: style.backgroundColor, radius: style.borderTopLeftRadius };
+});
+
+test("plays fully styled under a strict Content Security Policy, with nothing blocked", async ({ page }) => {
+  await openStrict(page);
+  await expect(card(page)).toHaveAccessibleName("Start something new");
+  expect(await cardLook(page)).toEqual({ position: "fixed", background: "rgb(255, 255, 255)", radius: "12px" });
+  await card(page).getByRole("button", { name: "Next" }).click();
+  await expect(card(page)).toHaveAccessibleName("Bring your people in");
+  expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
+});
+
+test("without constructable stylesheets, the player's fallback <style> carries the host's nonce", async ({ page }) => {
+  await page.addInitScript(() => {
+    delete ShadowRoot.prototype.adoptedStyleSheets;
+  });
+  await openStrict(page, "?nonce=tours-test");
+  await expect(card(page)).toHaveAccessibleName("Start something new");
+  expect(await cardLook(page)).toEqual({ position: "fixed", background: "rgb(255, 255, 255)", radius: "12px" });
+  expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
+});

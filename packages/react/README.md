@@ -235,13 +235,46 @@ tours.start("welcome");
 
 - **Who and when.** `showTo` takes a `path` (exact, or ending in `*`), a `device`, and `traits` matched against the `user` you pass in. `start` is `"pageLoad"`, a wait after load, `{ "on": "event.name" }` (raise it with `tours.emit()`), or `"manual"`. `repeat` and `afterSkip` decide whether it comes back. By default a visit gets at most one new tour, with a day between tours; change this with `rules={{ perVisit, gap }}`.
 - **Progress.** With no setup, progress stays in this browser. To keep it across devices, pass `progress` (the records you loaded) and `onProgressChange` (save each record; it's awaited). Progress records the step ids people have seen, so reordering or adding steps resumes them at the first step they haven't seen. Finished or skipped beats an older in-progress copy.
-- **Across pages.** Steps continue on the previous step's page unless they set `page`. With `navigate`, Next takes people there; otherwise the tour points them to it. If they wander off, the tour pauses in a small bar.
+- **Across pages.** Steps continue on the previous step's page unless they set `page`. With `navigate`, Next takes people there; otherwise the tour points them to it. If they wander off, the tour pauses in a small bar. A `page` is always a path on your own site: values such as `//other.site` or ones containing a backslash fail validation, so a tour file can never send your router somewhere else.
 - **When the element isn't there.** Each step waits up to `waitFor.timeout` (5s by default) for its target. If it never appears, or more than one element has the ID, the tour doesn't guess: it offers to skip ahead and sends a `targetMissing` event.
 - **Phones and accessibility.** Cards sit beside their target when there's room and become a bottom sheet when there isn't. Focus moves to each step's title and returns where it was afterwards; ← and → move between steps and Esc pauses. Reduced motion and forced colors are respected.
-- **Your look.** Cards inherit your page's font. Set colours, radius, and font with `theme` or the `--tm-tour-*` CSS custom properties. `checkTourTheme(theme)` lists any text pairs below 4.5:1 contrast, with a nearby colour that passes.
+- **Your look.** Cards inherit your page's font. Set colours, radius, and font with `theme` or the `--tm-tour-*` CSS custom properties. Theme values are colours, lengths, and font names; anything that could load a resource, such as `url()` or `image-set()`, is ignored. `checkTourTheme(theme)` lists any text pairs below 4.5:1 contrast, with a nearby colour that passes.
 - **Events and notes.** `onTourEvent` receives `started`, `resumed`, `stepShown`, `stepCompleted`, `targetMissing`, `paused`, `skipped`, and `finished`; send them to your analytics if you like. Passing `onTourNote` adds "Something unclear here?" to each step and hands you the note.
 
+- **Strict Content Security Policies.** Text is always rendered as text, never as HTML, and the player loads nothing. Its styles use constructable stylesheets, which `style-src` doesn't block. In older browsers without them it falls back to a `<style>` element; pass `styleNonce` if your policy needs a nonce for that.
+
 Validate hand-written tours with `defineTour()`, which throws a `TourValidationError` listing every problem by path. Invalid tours never play; `<ThreadmarkTours>` reports them through `onError`. The JSON Schema gives editors autocomplete for `.tour.json` files.
+
+### Tours in the Next.js App Router
+
+`threadmarkTarget()`, `validateTour()`, and `defineTour()` work in Server Components, so you can tag server-rendered elements directly. `<ThreadmarkTours>` and `useThreadmarkTours()` are client code: mount the player from a Client Component, usually in your root layout, and pass it Next's router:
+
+```tsx
+// app/tours.tsx
+"use client";
+
+import { usePathname, useRouter } from "next/navigation";
+import { ThreadmarkTours } from "threadmark-react/tours";
+import welcome from "./welcome.tour.json";
+
+export function Tours({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  return (
+    <ThreadmarkTours tours={[welcome]} path={usePathname()} navigate={(to) => router.push(to)}>
+      {children}
+    </ThreadmarkTours>
+  );
+}
+```
+
+```tsx
+// app/projects/page.tsx (a Server Component)
+import { threadmarkTarget } from "threadmark-react/tours";
+
+export default function Projects() {
+  return <button {...threadmarkTarget("projects.new")}>New project</button>;
+}
+```
 
 ### Build tours in Tour mode
 

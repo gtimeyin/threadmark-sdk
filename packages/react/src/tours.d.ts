@@ -31,7 +31,7 @@ export type ThreadmarkTourPlacement = "auto" | "top" | "bottom" | "left" | "righ
 export interface ThreadmarkTourStep {
   /** Stable step id. Progress remembers step ids, so steps can be reordered safely. */
   id: string;
-  /** Page this step is on. Steps without one continue on the previous step's page. */
+  /** Path on this site this step is on, e.g. "/team". Steps without one continue on the previous step's page. */
   page?: string;
   /** A threadmarkTarget() id. Optional only for modal steps. */
   target?: string;
@@ -117,6 +117,7 @@ export interface ThreadmarkTourNote {
   path: string;
 }
 
+/** Colours, lengths and font names. Values that could load a resource, such as url(), are ignored. */
 export interface ThreadmarkTourTheme {
   accent?: string;
   accentText?: string;

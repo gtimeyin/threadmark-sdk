@@ -12,6 +12,7 @@ import {
   normalizeProgressRecord,
   resumeStepIndex,
 } from "./progress.js";
+import { getMountedTourPlayer as getActive, setMountedTourPlayer as setActive } from "./playerRegistry.js";
 import { parseDuration, validateTour } from "./schema.js";
 import { tourStyles } from "./styles.js";
 import { themeToCssVariables } from "./theme.js";
@@ -19,8 +20,6 @@ import { themeToCssVariables } from "./theme.js";
 const VISIT_KEY = "threadmark:tours:visit";
 const SLOW_NOTICE_MS = 400;
 const SPOT_PADDING = 6;
-
-import { getMountedTourPlayer as getActive, setMountedTourPlayer as setActive } from './playerRegistry.js';
 
 function readVisit() {
   try {

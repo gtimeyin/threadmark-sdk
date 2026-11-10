@@ -19,6 +19,10 @@ const MAX_BODY = 600;
 const MAX_WAIT_MS = 30_000;
 const DEFAULT_WAIT_MS = 5_000;
 const UNITS = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+// Same-site paths only. Steps hand `page` to the host's router, so "//host" (protocol-relative),
+// backslashes (which browsers read as "/") and control characters are refused.
+const PAGE_PATTERN = /^\/(?![/\\])[^\s?#\\\u0000-\u001f\u007f]*$/;
+const SHOW_TO_PATH_PATTERN = /^\/(?![/\\])[^\s?#\\\u0000-\u001f\u007f]*\*?$/;
 
 export class TourValidationError extends TypeError {
   constructor(errors) {
@@ -68,7 +72,7 @@ function checker(errors) {
     },
     page(value, path) {
       if (value === undefined) return undefined;
-      if (typeof value !== "string" || !/^\/[^\s?#]*$/.test(value)) return fail(path, 'must be a path like "/projects" (no query or hash)');
+      if (typeof value !== "string" || !PAGE_PATTERN.test(value)) return fail(path, 'must be a path on this site like "/projects" (no query or hash)');
       return value;
     },
   };
@@ -96,7 +100,7 @@ function normalizeShowTo(showTo, check) {
   if (showTo === undefined) return { device: "any" };
   if (!isPlainObject(showTo)) return check.fail("showTo", "must be an object");
   check.keys(showTo, SHOW_TO_KEYS, "showTo");
-  if (showTo.path !== undefined && (typeof showTo.path !== "string" || !/^\/[^\s?#]*\*?$/.test(showTo.path))) {
+  if (showTo.path !== undefined && (typeof showTo.path !== "string" || !SHOW_TO_PATH_PATTERN.test(showTo.path))) {
     check.fail("showTo.path", 'must be a path like "/projects", or end in "*" to match a prefix');
   }
   if (showTo.when !== undefined && typeof showTo.when !== "function") {

@@ -50,6 +50,7 @@ function App() {
       tours={params.has("invalid") ? [broken, welcome, help] : [welcome, help]}
       navigate={go}
       rules={{ gap: "0ms" }}
+      styleNonce={params.get("nonce") || undefined}
       onTourEvent={(event) => window.__tourEvents.push(event)}
       onTourNote={params.has("notes") ? async (note) => { window.__tourNotes.push(note); } : undefined}
       onError={(error) => window.__tourErrors.push({ code: error.code, tourId: error.tourId, paths: error.errors?.map((item) => item.path) })}

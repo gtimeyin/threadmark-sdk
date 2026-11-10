@@ -21,11 +21,15 @@ export const DEFAULT_THEME = Object.freeze({
   border: "#deddd7",
 });
 
+// Theme values are colours, lengths and font names. Anything that could load a resource (url(),
+// image-set(), @import), escape out of the value, or hide either behind a CSS escape is dropped.
+const UNSAFE_THEME_VALUE = /[;{}<>\\@]|\/\*|(?:url|image|image-set|-webkit-image-set|cross-fade|element|src|env|attr)\s*\(/i;
+
 export function themeToCssVariables(theme = {}) {
   const variables = {};
   for (const [key, property] of Object.entries(THEME_PROPERTIES)) {
-    const value = theme[key];
-    if (typeof value === "string" && value.trim() && !/[;{}<>]/.test(value)) variables[property] = value.trim();
+    const value = theme?.[key];
+    if (typeof value === "string" && value.trim() && value.length <= 200 && !UNSAFE_THEME_VALUE.test(value)) variables[property] = value.trim();
     else if (key === "radius" && Number.isFinite(value)) variables[property] = `${value}px`;
   }
   return variables;
