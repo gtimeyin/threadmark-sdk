@@ -1762,6 +1762,15 @@ function PollEditor({ options, onChange, multiple, onMultipleChange, onRemove, d
   return (
     <fieldset className="tm-poll-editor" disabled={disabled}>
       <legend className="tm-sr-only">Poll</legend>
+      <div className="tm-poll-editor__header">
+        <PollIcon size={14} aria-hidden="true" focusable="false" />
+        <span>Poll</span>
+        {onRemove && (
+          <button type="button" className="tm-poll-editor__remove" aria-label="Remove poll" title="Remove poll" onClick={onRemove}>
+            <X size={13} aria-hidden="true" />
+          </button>
+        )}
+      </div>
       {options.map((option, index) => (
         <div className="tm-poll-editor__row" key={index}>
           <input
@@ -1788,7 +1797,6 @@ function PollEditor({ options, onChange, multiple, onMultipleChange, onRemove, d
           <input type="checkbox" checked={multiple} onChange={(event) => onMultipleChange(event.target.checked)} />
           Pick any
         </label>
-        {onRemove && <button type="button" className="tm-poll-editor__remove" onClick={onRemove}>Remove poll</button>}
       </div>
     </fieldset>
   );
