@@ -1754,35 +1754,14 @@ function ThreadMessage({
   );
 }
 
-const ASK_KINDS = [["comment", "Comment"], ["question", "Question"], ["poll", "Poll"]];
 const MAX_POLL_CHOICES = 8;
 
-/** Whether a new post is a comment, a question to answer in replies, or a poll to vote on. */
-function AskSwitch({ value, onChange, pollsEnabled, disabled }) {
-  return (
-    <div className="tm-ask-switch" role="radiogroup" aria-label="What are you posting?">
-      {ASK_KINDS.filter(([kind]) => kind !== "poll" || pollsEnabled).map(([kind, label]) => (
-        <button
-          key={kind}
-          type="button"
-          role="radio"
-          aria-checked={value === kind}
-          className={value === kind ? "is-active" : ""}
-          disabled={disabled}
-          onClick={() => onChange(kind)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function PollEditor({ options, onChange, multiple, onMultipleChange, disabled }) {
+/** A poll attached to a comment: 2 to 8 answers, and whether people can pick several. */
+function PollEditor({ options, onChange, multiple, onMultipleChange, onRemove, disabled }) {
   const update = (index, value) => onChange(options.map((option, at) => (at === index ? value : option)));
   return (
     <fieldset className="tm-poll-editor" disabled={disabled}>
-      <legend className="tm-sr-only">Poll answers</legend>
+      <legend className="tm-sr-only">Poll</legend>
       {options.map((option, index) => (
         <div className="tm-poll-editor__row" key={index}>
           <input
@@ -1807,8 +1786,9 @@ function PollEditor({ options, onChange, multiple, onMultipleChange, disabled })
         )}
         <label className="tm-poll-editor__multiple">
           <input type="checkbox" checked={multiple} onChange={(event) => onMultipleChange(event.target.checked)} />
-          Allow several answers
+          Pick any
         </label>
+        {onRemove && <button type="button" className="tm-poll-editor__remove" onClick={onRemove}>Remove poll</button>}
       </div>
     </fieldset>
   );
@@ -2130,10 +2110,8 @@ function Overlay({
   const [pinThreadId, setPinThreadId] = useState(null);
   const openPinThread = useCallback((id) => { setPinThreadId(id); onEditAnnotation(id); }, [onEditAnnotation]);
   // The + menu in the composer: Comment, Question or Poll (2c).
-  const [kindMenuOpen, setKindMenuOpen] = useState(false);
   // The sketch colour stays the same from boxing to drawing (board 02, 6a-6c).
   const [captureColor, setCaptureColor] = useState(MARKUP_COLORS[0].value);
-  useEffect(() => { setKindMenuOpen(false); }, [mode, editingAnnotation?.id]);
   const [threadPanel, setThreadPanel] = useState(null);
   const [replayingVideo, setReplayingVideo] = useState(false);
   const [replayViewer, setReplayViewer] = useState(null);
@@ -2822,7 +2800,7 @@ function Overlay({
         /* 2c: the bar stays put and says what is happening. */
         <div className={`tm-modebar tm-modebar--writing tm-bar--at-${barPosition}`} aria-hidden="true"
           style={toolbarPosition ? { left: toolbarPosition.left, top: toolbarPosition.top, right: "auto", bottom: "auto", margin: 0 } : undefined}>
-          <BarHint>{askKind === "question" ? "Asking a question" : askKind === "poll" ? "Making a poll" : "Writing a comment"}</BarHint>
+          <BarHint>{askKind === "poll" ? "Writing a comment with a poll" : "Writing a comment"}</BarHint>
         </div>
       )}
 
@@ -2958,9 +2936,6 @@ function Overlay({
                 <MessageSquare size={14} aria-hidden="true" focusable="false" />
                 <span id="tm-popover-title"><span className="tm-sr-only">Commenting on: </span>{composerContext}</span>
               </p>
-            )}
-            {composerMode === "new" && askKind !== "comment" && !repinning && (
-              <span className="tm-composer__kind">{askKind === "poll" ? "Poll" : "Question"}</span>
             )}
             {/* 28a: point at one thing and ask AI about it instead of writing a comment yourself. */}
             {onAskAi && onPostAiComment && captureKind === "element" && lastSelection?.element && (
@@ -3111,7 +3086,7 @@ function Overlay({
               : "Confirm this new pin location. The original screenshot and discussion will be preserved."}</p>}
             {!editingAnnotation && !repinning && <div className={`tm-field tm-field--${composerMode}`} key={composerMode}>
               <label className="tm-sr-only" htmlFor="tm-comment">
-                {composerMode === "reply" ? "Write a reply" : askKind === "question" ? "Your question" : askKind === "poll" ? "Poll question" : "What should change?"}
+                {composerMode === "reply" ? "Write a reply" : askKind === "poll" ? "What should people vote on?" : "What should change?"}
               </label>
               <MentionTextarea
                 reviewers={reviewers}
@@ -3120,9 +3095,7 @@ function Overlay({
                 onValueChange={setComment}
                 placeholder={composerMode === "reply"
                   ? "Write a reply…"
-                  : askKind === "question"
-                    ? "What do you want to ask about this?"
-                    : askKind === "poll" ? "Ask the poll question…" : "Describe the change…"}
+                  : askKind === "poll" ? "What should people vote on?" : "Describe the change…"}
                 maxLength={6000}
                 aria-describedby={comment.length >= 5500 ? "tm-comment-limit" : undefined}
                 aria-keyshortcuts="Enter"
@@ -3142,6 +3115,7 @@ function Overlay({
                   onChange={onPollOptionsChange}
                   multiple={pollMultiple}
                   onMultipleChange={onPollMultipleChange}
+                  onRemove={onAskKindChange ? () => { onAskKindChange("comment"); popoverRef.current?.querySelector("#tm-comment")?.focus(); } : undefined}
                   disabled={submitting}
                 />
               )}
@@ -3337,25 +3311,21 @@ function Overlay({
                         <MentionIcon size={16} aria-hidden="true" focusable="false" />
                       </button>
                     )}
-                    {composerMode === "new" && onAskKindChange && (
-                      <span className="tm-composer__more" data-menu-open={kindMenuOpen ? "true" : undefined}
-                        onKeyDown={(event) => { if (event.key === "Escape" && kindMenuOpen) { event.preventDefault(); event.stopPropagation(); setKindMenuOpen(false); } }}>
-                        <button type="button" className={`tm-composer__tool${kindMenuOpen ? " is-active" : ""}`} aria-label="Ask a question or run a poll"
-                          title="Question or poll" aria-expanded={kindMenuOpen} disabled={submitting} onClick={() => setKindMenuOpen((open) => !open)}>
-                          <PlusIcon size={16} aria-hidden="true" focusable="false" />
-                        </button>
-                        {kindMenuOpen && (
-                          <span className="tm-composer__menu">
-                            <AskSwitch value={askKind} pollsEnabled={pollsEnabled} disabled={submitting}
-                              onChange={(kind) => { onAskKindChange(kind); setKindMenuOpen(false); popoverRef.current?.querySelector("#tm-comment")?.focus(); }} />
-                          </span>
-                        )}
-                      </span>
+                    {composerMode === "new" && onAskKindChange && pollsEnabled && (
+                      /* A poll is something you attach to a comment, like a screenshot. */
+                      <button type="button" className={`tm-composer__tool${askKind === "poll" ? " is-active" : ""}`} aria-label="Add a poll"
+                        aria-pressed={askKind === "poll"} title={askKind === "poll" ? "Remove poll" : "Add a poll"} disabled={submitting}
+                        onClick={() => {
+                          onAskKindChange(askKind === "poll" ? "comment" : "poll");
+                          if (askKind !== "poll") requestAnimationFrame(() => popoverRef.current?.querySelector(comment.trim() ? '[aria-label="Answer 1"]' : "#tm-comment")?.focus());
+                        }}>
+                        <PollIcon {...iconProps} />
+                      </button>
                     )}
                     <button
                       className="tm-submit tm-composer__send"
                       type="submit"
-                      title={askKind === "question" ? "Ask (↵)" : askKind === "poll" ? "Post poll (↵)" : "Post (↵)"}
+                      title="Post (↵)"
                       disabled={
                         submitting
                         || regionSelection?.snapshot?.status === "capturing"
@@ -3371,7 +3341,7 @@ function Overlay({
                           ? uploadPercent !== null && uploadPercent < 100 ? `Uploading ${uploadPercent}%` : "Saving…"
                           : regionSelection?.snapshot?.status === "capturing" || commentSnapshot?.snapshot?.status === "capturing"
                             ? "Preparing…"
-                            : askKind === "question" ? "Ask" : askKind === "poll" ? "Post poll" : "Post"}
+                            : "Post"}
                       </span>
                     </button>
                   </span>
@@ -3406,7 +3376,7 @@ function Overlay({
                           ? "Save"
                           : regionSelection?.snapshot?.status === "capturing" || commentSnapshot?.snapshot?.status === "capturing"
                             ? "Preparing…"
-                            : askKind === "question" ? "Ask" : askKind === "poll" ? "Post poll" : "Post"}
+                            : "Post"}
                   </button>
                 </div>
               ) : null}

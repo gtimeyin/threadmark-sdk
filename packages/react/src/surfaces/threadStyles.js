@@ -170,9 +170,6 @@ export const threadStyles = `
   .tm-popover.tm-popover--thread .tm-reply__send:disabled { background: rgba(251, 250, 246, .1); color: var(--tm-text-secondary); border-color: transparent; }
 
   /* Comment / Question / Poll uses the brand Segmented control. */
-  .tm-popover .tm-ask-switch { margin: 0; border: 0; padding: 2px; border-radius: var(--tm-radius-button); background: rgba(251, 250, 246, .06); }
-  .tm-popover .tm-ask-switch button { height: 26px; padding: 0 10px; border-radius: 4px; font: 500 11px/14px var(--tm-font); }
-  .tm-popover .tm-ask-switch button.is-active { background: rgba(251, 250, 246, .10); color: var(--tm-text-primary); }
 
   /* Attachments sit in the panel as small rows, like the design's Screenshot chip. */
   .tm-popover .tm-replay-attachment,
@@ -187,6 +184,8 @@ export const threadStyles = `
   .tm-popover.tm-popover--thread .tm-form > .tm-poll { margin: 0 12px 12px 50px; padding: 0; border: 0; background: transparent; gap: 8px; }
   .tm-popover { overflow-x: hidden; }
   .tm-popover .tm-poll__header { font: 500 11px/14px var(--tm-font); }
+  .tm-popover .tm-poll-editor__multiple { margin: 0; color: var(--tm-text-secondary); font: 500 11px/14px var(--tm-font); }
+  .tm-popover .tm-poll-editor__multiple input { width: 13px; height: 13px; margin: 0; accent-color: var(--tm-lime); }
   .tm-popover .tm-poll__options { gap: 6px; }
   .tm-popover .tm-poll-option {
     display: grid;
@@ -243,7 +242,6 @@ export const threadStyles = `
   .tm-composer__target { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; margin: 0; color: var(--tm-text-muted); font: 400 12px/16px var(--tm-font-mono); }
   .tm-composer__target > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tm-composer__target svg { flex: none; width: 13px; height: 13px; color: var(--tm-lime); }
-  .tm-composer__kind { flex: none; padding: 1px 6px; border-radius: 4px; background: rgba(224, 243, 84, .14); color: var(--tm-lime); font: 500 11px/16px var(--tm-font); }
   .tm-popover.tm-popover--compose .tm-form,
   .tm-popover.tm-popover--compose .tm-popover__header + .tm-form { margin: 0; gap: 10px; padding: 0; border: 0; border-radius: 0; background: none; }
   .tm-popover--compose .tm-field textarea { min-height: 40px; resize: none; font: 400 14px/20px var(--tm-font); }
@@ -259,9 +257,6 @@ export const threadStyles = `
   .tm-popover .tm-submit.tm-composer__send:disabled { background: rgba(251, 250, 246, .1); color: var(--tm-text-secondary); }
   .tm-composer__send .tm-tool-icon { width: 15px; height: 15px; }
   .tm-composer__send .tm-spin { animation: tm-spin 900ms linear infinite; }
-  .tm-composer__more { position: relative; display: inline-flex; }
-  .tm-composer__menu { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 2; padding: 4px; border-radius: var(--tm-radius-panel); background: var(--tm-raised); box-shadow: 0 10px 28px rgba(0, 0, 0, .35), 0 0 0 1px rgba(251, 250, 246, .08); }
-  .tm-composer__menu .tm-ask-switch { margin: 0; }
   .tm-popover--compose .tm-composer__actions button:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
 
   /* 6d: the sketch rides along as a small chip; Esc goes back to drawing. */

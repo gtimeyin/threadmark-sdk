@@ -58,28 +58,7 @@ export const composerExtrasStyles = `
   .tm-replay-open:hover:not(:disabled) { border-color: var(--tm-line-strong); background: #24332d; }
   .tm-replay-open:disabled { cursor: default; opacity: .6; }
 
-  /* Questions and polls --------------------------------------------------------------------------- */
-  .tm-ask-switch {
-    display: inline-flex;
-    gap: 2px;
-    margin-bottom: 8px;
-    border: 1px solid var(--tm-line);
-    border-radius: var(--tm-radius-button);
-    padding: 2px;
-  }
-  .tm-ask-switch button {
-    height: 24px;
-    border: 0;
-    border-radius: var(--tm-radius-button);
-    padding: 0 9px;
-    background: transparent;
-    color: var(--tm-text-secondary);
-    font: 600 11px/1 var(--tm-font);
-    cursor: pointer;
-    transition: background var(--tm-motion-fast) var(--tm-ease-standard), color var(--tm-motion-fast) var(--tm-ease-standard);
-  }
-  .tm-ask-switch button:hover { color: var(--tm-text-primary); }
-  .tm-ask-switch button.is-active { background: var(--tm-raised); color: var(--tm-text-primary); }
+  /* Polls on a comment, and older question tags --------------------------------------------------------------------------- */
   .tm-poll-editor { display: grid; gap: 6px; margin: 8px 0 0; border: 0; padding: 0; min-width: 0; }
   .tm-poll-editor__row { display: flex; gap: 6px; }
   .tm-poll-editor__row input {
@@ -95,7 +74,8 @@ export const composerExtrasStyles = `
   }
   .tm-poll-editor__row input:focus { outline: 2px solid var(--tm-focus); outline-offset: 1px; }
   .tm-poll-editor__row button,
-  .tm-poll-editor__add {
+  .tm-poll-editor__add,
+  .tm-poll-editor__remove {
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -109,8 +89,10 @@ export const composerExtrasStyles = `
     cursor: pointer;
   }
   .tm-poll-editor__row button:hover,
-  .tm-poll-editor__add:hover { background: rgba(255,255,255,.06); color: var(--tm-text-primary); }
+  .tm-poll-editor__add:hover,
+  .tm-poll-editor__remove:hover { background: rgba(255,255,255,.06); color: var(--tm-text-primary); }
   .tm-poll-editor__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+  .tm-poll-editor__remove { margin-left: auto; }
   .tm-poll-editor__multiple { display: inline-flex; align-items: center; gap: 6px; color: var(--tm-text-secondary); font-size: 11px; }
   .tm-ask-tag {
     display: inline-flex;

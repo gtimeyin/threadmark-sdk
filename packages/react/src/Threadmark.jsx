@@ -624,7 +624,7 @@ export function Threadmark({
   const [comment, setComment] = useState("");
   const [composerMode, setComposerMode] = useState("new");
   const [editingReplyId, setEditingReplyId] = useState(null);
-  // A new comment can instead ask a question (answered in replies) or run a poll (answered by votes).
+  // A new comment can carry a poll (answered by votes). Older comments may hold `ask: { kind: "question" }`; they still show as questions.
   const [askKind, setAskKind] = useState("comment");
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [pollMultiple, setPollMultiple] = useState(false);
@@ -3940,7 +3940,7 @@ export function Threadmark({
               multiple: pollMultiple,
               options: pollOptions.map((label) => label.trim()).filter(Boolean).map((label, index) => ({ id: `option-${index + 1}`, label })),
             }
-            : askKind === "question" ? { kind: "question" } : undefined,
+            : undefined,
         tourStep: editing ? editing.payload.tourStep : tourCommentRef.current?.tourStep,
         target: targets[0],
         targets,

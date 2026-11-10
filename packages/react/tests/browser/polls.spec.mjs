@@ -54,26 +54,24 @@ test("without a vote handler, the composer posts plain comments only", async ({ 
   await page.locator(".tm-launcher").click();
   await page.locator("#secondary-target").click();
   await expect(page.locator("#tm-comment")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Ask a question or run a poll" })).toHaveCount(0);
-  await expect(page.getByRole("radiogroup", { name: "What are you posting?" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add a poll" })).toHaveCount(0);
 });
 
-test("designers ask questions and run polls; reviewers vote and change their vote", async ({ page }) => {
+test("a poll is attached to a comment; reviewers vote and change their vote", async ({ page }) => {
   const pageErrors = await mountFixture(page, "?polls=1");
 
   // A poll pinned to an element.
   await page.locator(".tm-launcher").click();
   await page.locator("#secondary-target").click();
-  // 2c: + holds Question and Poll; the composer starts as a plain comment.
-  await page.getByRole("button", { name: "Ask a question or run a poll" }).click();
-  const kinds = page.getByRole("radiogroup", { name: "What are you posting?" });
-  await expect(kinds.getByRole("radio", { name: "Comment" })).toHaveAttribute("aria-checked", "true");
-  await kinds.getByRole("radio", { name: "Poll" }).click();
-  await expect(kinds).toHaveCount(0);
-  await expect(page.locator(".tm-composer__kind")).toHaveText("Poll");
+  // Every post is a comment; a poll is attached to it from the composer's tools.
+  const addPoll = page.getByRole("button", { name: "Add a poll" });
+  await expect(addPoll).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByLabel("Answer 1", { exact: true })).toHaveCount(0);
+  await addPoll.click();
+  await expect(addPoll).toHaveAttribute("aria-pressed", "true");
   await setComment(page, "Which label reads better for this button?");
   const submit = page.locator(".tm-submit");
-  await expect(submit).toHaveText("Post poll");
+  await expect(submit).toHaveText("Post");
   await expect(submit).toBeDisabled();
   await page.getByLabel("Answer 1", { exact: true }).fill("Start free trial");
   await page.getByLabel("Answer 2", { exact: true }).fill("Try it free");
@@ -122,15 +120,17 @@ test("designers ask questions and run polls; reviewers vote and change their vot
   expect(await summary.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0.24)");
   await page.getByRole("button", { name: "Close feedback panel" }).click();
 
-  // A question is answered with replies.
+  // Removing the poll leaves a plain comment; there is no separate Question kind.
   await page.locator("#custom-target").click();
-  await page.getByRole("button", { name: "Ask a question or run a poll" }).click();
-  await page.getByRole("radio", { name: "Question" }).click();
+  await page.getByRole("button", { name: "Add a poll" }).click();
+  await page.getByLabel("Answer 1", { exact: true }).fill("Yes");
+  await page.getByRole("button", { name: "Remove poll" }).click();
+  await expect(page.getByLabel("Answer 1", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add a poll" })).toHaveAttribute("aria-pressed", "false");
   await setComment(page, "Should this open in a new tab?");
-  await expect(page.locator(".tm-submit")).toHaveText("Ask");
   await page.locator(".tm-submit").click();
   await expect(page.locator(".tm-popover")).toHaveCount(0);
-  expect(await page.evaluate(() => window.__threadmarkFeedback.at(-1).ask)).toEqual({ kind: "question" });
+  expect(await page.evaluate(() => window.__threadmarkFeedback.at(-1).ask)).toBeUndefined();
 
   expect(pageErrors).toEqual([]);
 });
