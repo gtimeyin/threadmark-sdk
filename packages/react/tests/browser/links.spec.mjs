@@ -33,7 +33,7 @@ test('the Bar and panel link to the dashboard only when the host gives a safe ad
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'More actions' }).click();
   await expect(page.getByRole('menuitem', { name: 'Open the dashboard' })).toBeVisible();
-  for (const name of ['Share', 'Send feedback to…', 'Your settings']) await expect(page.getByRole('menuitem', { name })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: 'Send feedback to…' })).toHaveCount(0);
 
   await load(page, 'javascript:alert(1)');
   await page.keyboard.press('Escape');

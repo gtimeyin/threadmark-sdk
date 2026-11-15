@@ -4,7 +4,8 @@
 // In comment mode the same bar carries the hint ("Click anything, or select text  Esc") and the tools.
 import { useEffect, useRef, useState } from "react";
 import { AddIcon, CommentIcon, ResolveIcon } from "../icons.jsx";
-import { Key } from "../ui/primitives.jsx";
+import { Avatar, Key } from "../ui/primitives.jsx";
+import { notificationHeadline } from "../notifications.js";
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 export const openShortcutLabel = () => (isMac() ? "⌘⇧F" : "Ctrl⇧F");
@@ -76,16 +77,23 @@ export function useScrollAway(enabled = true) {
 }
 
 /** The idle bar. `onOpen` opens the review (and the panel when there is something to read). */
-export function IdleBar({ annotations = [], route, launcherRef, onOpen, onOpenTools, position = "bottom-center", shrunk = false, onShrink }) {
+export function IdleBar({ annotations = [], notifications = null, route, launcherRef, onOpen, onOpenTools, position = "bottom-center", shrunk = false, onShrink }) {
   const online = useOnline();
   const away = useScrollAway(!shrunk);
   const count = annotations.length;
   const questions = annotations.filter((annotation) => annotation?.payload?.ask && !annotation?.payload?.resolvedAt && annotation?.runtime?.status !== "resolved").length;
   const [seen, setSeen] = useState(() => readSeen(route));
   useEffect(() => setSeen(readSeen(route)), [route]);
-  const { mood, primary, secondary } = barMood({ count, questions, seen, online });
+  const unread = (notifications || []).filter((item) => !item.read);
+  const latest = online ? unread[0] : null;
+  const base = barMood({ count, questions, seen, online });
+  const { mood, primary, secondary } = latest
+    ? { mood: "reply", primary: notificationHeadline(latest), secondary: latest.route ? `on ${latest.route === "/" ? "Home" : latest.route}` : unread.length > 1 ? `${unread.length} new` : "" }
+    : base;
   const shortcut = openShortcutLabel();
-  const label = count
+  const label = latest
+    ? `Open inbox: ${primary}${unread.length > 1 ? `, ${unread.length} unread` : ""}`
+    : count
       ? `Open feedback, ${plural(count, "comment")}${mood === "waiting" ? `, ${primary}` : ""}`
       : "Leave feedback";
 
@@ -94,7 +102,7 @@ export function IdleBar({ annotations = [], route, launcherRef, onOpen, onOpenTo
       markFeedbackSeen(route, count);
       setSeen(count);
     }
-    onOpen?.(count > 0);
+    onOpen?.(count > 0, Boolean(latest));
   };
 
   // Shrinking or restoring moves focus to the control that's now there, rather than dropping it.
@@ -106,7 +114,7 @@ export function IdleBar({ annotations = [], route, launcherRef, onOpen, onOpenTo
 
   // Shrunk to a dot (board 09, 29b): the count stays so nothing new slips past.
   if (shrunk) {
-    const waiting = Math.max(0, count - seen);
+    const waiting = latest ? unread.length : Math.max(0, count - seen);
     return (
       <div className={`tm-bar tm-bar--shrunk tm-bar--at-${position}`} role="group" aria-label="Threadmark">
         <button ref={launcherRef} type="button" className="tm-launcher tm-bar__main"
@@ -121,7 +129,7 @@ export function IdleBar({ annotations = [], route, launcherRef, onOpen, onOpenTo
 
   return (
     <div className={`tm-bar tm-bar--idle tm-bar--${mood} tm-bar--at-${position}${away ? " is-away" : ""}`} role="group" aria-label="Threadmark">
-      {count > 0 && (
+      {(count > 0 || latest) && (
         <>
           <button type="button" className="tm-bar__tools" aria-label="Comment on the page" title="Comment on the page (C)" onClick={onOpenTools}>
             <AddIcon aria-hidden="true" focusable="false" />
@@ -132,7 +140,8 @@ export function IdleBar({ annotations = [], route, launcherRef, onOpen, onOpenTo
       <button ref={launcherRef} type="button" className="tm-launcher tm-bar__main" aria-label={label} aria-keyshortcuts="Meta+Shift+F Control+Shift+F" onClick={open}>
         {mood === "nothing" && <AddIcon aria-hidden="true" focusable="false" className="tm-bar__lead-icon" />}
         {mood === "caught-up" && <ResolveIcon aria-hidden="true" focusable="false" className="tm-bar__lead-icon tm-bar__lead-icon--lime" />}
-        {(mood === "waiting" || mood === "offline") && <span className={`tm-bar__dot tm-bar__dot--${mood}`} aria-hidden="true" />}
+        {(mood === "waiting" || mood === "offline" || mood === "reply") && <span className={`tm-bar__dot tm-bar__dot--${mood}`} aria-hidden="true" />}
+        {mood === "reply" && <Avatar name={latest.actor.displayName} src={latest.actor.avatarUrl} size={20} />}
         <span className="tm-bar__primary">{primary}</span>
         {secondary && <span className="tm-bar__sep" aria-hidden="true">·</span>}
         {secondary && <span className="tm-bar__secondary">{secondary}</span>}

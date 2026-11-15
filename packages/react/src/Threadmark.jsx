@@ -1,3 +1,4 @@
+import { normalizeNotifications } from "./notifications.js";
 import { nearestBarPosition, readBarPrefs, readHiddenPages, writeBarPrefs, writeHiddenPages } from "./barPrefs.js";
 import { normalizeSurveys, surveyPageMatches } from "./surveys/schema.js";
 import { normalizeReactions } from "./reactions.js";
@@ -522,8 +523,12 @@ export function Threadmark({
   pageVersions,
   dashboardUrl,
   nextSteps,
+  notifications,
   surveys,
   surveyResults,
+  faces,
+  notificationSettings,
+  projectName,
   videoRecording,
   sessionReplay,
   deviceDetails = true,
@@ -548,8 +553,22 @@ export function Threadmark({
   onAiDismiss,
   onNextStepDone,
   onNextStepsCopy,
+  onNotificationOpen,
+  onNotificationsRead,
   onSurveyPublish,
   onSurveyEnd,
+  onReviewerChange,
+  onNotificationSettingsChange,
+  onLeaveProject,
+  onSignOut,
+  inviteSuggestions,
+  shareUrl,
+  linkAccess,
+  members,
+  onInvite,
+  onMemberChange,
+  onResendInvite,
+  onLinkAccessChange,
   tours,
   onTourSave,
   aiConnection,
@@ -667,6 +686,7 @@ export function Threadmark({
   const clientHintsRef = useRef(null);
   const metadataRef = useLatest(metadata);
 
+  const normalizedNotifications = useMemo(() => normalizeNotifications(notifications), [notifications]);
   const normalizedSurveys = useMemo(() => normalizeSurveys(surveys), [surveys]);
   const callbacks = {
     onReady: useLatest(onReady),
@@ -683,6 +703,8 @@ export function Threadmark({
     onReactionChange: useLatest(onReactionChange),
     onNextStepDone: useLatest(onNextStepDone),
     onNextStepsCopy: useLatest(onNextStepsCopy),
+    onNotificationOpen: useLatest(onNotificationOpen),
+    onNotificationsRead: useLatest(onNotificationsRead),
     onSurveyPublish: useLatest(onSurveyPublish),
     onSurveyEnd: useLatest(onSurveyEnd),
     onTourSave: useLatest(onTourSave),
@@ -4287,6 +4309,19 @@ export function Threadmark({
       onCopyAnnotationLink={copyAnnotationLink}
       onSelectPageVersion={selectPageVersion}
       nextSteps={shownNextSteps}
+      notifications={Array.isArray(notifications) ? normalizedNotifications : null}
+      onOpenNotification={(notification) => {
+        safeCall(callbacks.onNotificationOpen, notification);
+        if (notification.annotationId && projectAnnotations.some((item) => item.id === notification.annotationId)) {
+          openListedAnnotation(notification.annotationId);
+        } else if (notification.route && notification.route !== activeRoute) {
+          // The host's onNotificationOpen navigates; without one, at least say where it is.
+          if (!callbacks.onNotificationOpen.current) showNotice(`That’s on ${notification.route === "/" ? "Home" : notification.route}.`);
+        } else {
+          showNotice("That comment isn’t on this page any more.");
+        }
+      }}
+      onNotificationsSeen={(ids) => { if (ids.length) safeCall(callbacks.onNotificationsRead, ids); }}
       surveys={Array.isArray(surveys) ? normalizedSurveys.filter((survey) => survey.pages.some((page) => surveyPageMatches(page, activeRoute))) : null}
       surveyResults={surveyResults && typeof surveyResults === "object" ? surveyResults : {}}
       onSurveyPublish={onSurveyPublish ? async (survey) => {
@@ -4295,7 +4330,22 @@ export function Threadmark({
       } : null}
       onSurveyEnd={onSurveyEnd ? (survey) => safeCall(callbacks.onSurveyEnd, survey.id) : null}
       surveyRoute={activeRoute}
-      dashboardUrl={safeDashboardUrl(dashboardUrl)}
+      faces={Array.isArray(faces) ? faces.filter((face) => face && typeof face.url === "string") : []}
+      reviewerEmail={typeof reviewer?.email === "string" ? reviewer.email : null}
+      notificationSettings={notificationSettings}
+      projectName={typeof projectName === "string" ? projectName : null}
+      onReviewerChange={onReviewerChange}
+      onNotificationSettingsChange={onNotificationSettingsChange}
+      onLeaveProject={onLeaveProject}
+      onSignOut={onSignOut}
+      inviteSuggestions={Array.isArray(inviteSuggestions) ? inviteSuggestions : undefined}
+      shareUrl={typeof shareUrl === "string" && shareUrl ? shareUrl : null}
+      linkAccess={["comment", "view", "off"].includes(linkAccess) ? linkAccess : null}
+      members={Array.isArray(members) ? members.filter((member) => member && member.id != null && (member.displayName || member.email)) : []}
+      onInvite={onInvite}
+      onMemberChange={onMemberChange}
+      onResendInvite={onResendInvite}
+      onLinkAccessChange={onLinkAccessChange}
       nextStepsOpen={nextStepsOpen}
       onShowNextSteps={setNextStepsOpen}
       canTickNextSteps={Boolean(shownNextSteps?.canEdit && callbacks.onNextStepDone.current)}
@@ -4326,6 +4376,7 @@ export function Threadmark({
       pollsEnabled={Boolean(callbacks.onPollVote.current)}
       onVote={votePoll}
       onReactionChange={callbacks.onReactionChange.current ? changeReaction : undefined}
+      dashboardUrl={safeDashboardUrl(dashboardUrl)}
       onStartHostedReview={onPageReview ? () => setHostedReviewOpen(true) : undefined}
       onAiReview={onAiReview}
       onAskAi={onAskAi}

@@ -41,12 +41,14 @@ import { DeleteIcon as Trash2 } from "./icons.jsx";
 import { WarningIcon as TriangleAlert } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { AiIcon, HideIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { AiIcon, EditIcon, HideIcon, InboxIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
 import { ShortcutSheet } from "./surfaces/ShortcutSheet.jsx";
+import { FaceSheet, LeaveSheet, YouMenu, YouSheet } from "./surfaces/YouSheet.jsx";
 import { AiPageReview, AskAiCard } from "./surfaces/AiReview.jsx";
 import { pageBrightness } from "./barPrefs.js";
 import { SurveyList, SurveyResultsView } from "./surfaces/SurveyResults.jsx";
-import { Key } from "./ui/primitives.jsx";
+import { Avatar, EmptyState, Key } from "./ui/primitives.jsx";
+import { notificationDay, notificationVerb } from "./notifications.js";
 import { surveyResultsCsv, surveyResultsText } from "./surveys/schema.js";
 import { ArrowLeftIcon, CaptureIcon, CropIcon, MentionIcon, RegionIcon, SketchIcon } from "./icons.jsx";
 import { BarHint, BarStatus, IdleBar } from "./surfaces/Bar.jsx";
@@ -92,6 +94,7 @@ const VideoReviewCard = deferred(loadVideo, 'VideoReviewCard');
 const VoiceReplay = deferred(loadVideo, 'VoiceReplay');
 const TourPanel = deferred(() => import('./TourPanel.jsx'), 'TourPanel');
 // Share and the survey builder open only on request, so they stay out of the first load.
+const ShareSheet = deferred(() => import('./surfaces/ShareSheet.jsx'), 'ShareSheet');
 const SurveyBuilder = deferred(() => import('./surfaces/SurveyBuilder.jsx'), 'SurveyBuilder');
 
 // rrweb's player is large, so it loads only when someone opens a playback.
@@ -605,6 +608,78 @@ export function routeLabel(route) {
   return route === "/" ? "Home" : route;
 }
 
+/**
+ * The Inbox (board 05, 17b and 19a): only what involves you, across every page. Unread or All, grouped
+ * into Today and Earlier, each row saying who did what, the words, and where.
+ */
+function InboxList({ notifications, members = [], onOpen, onMarkAllRead, onOpenSettings }) {
+  const unread = notifications.filter((item) => !item.read).length;
+  const [view, setView] = useState(unread ? "unread" : "all");
+  if (!notifications.length) {
+    return (
+      <div className="tm-inbox-empty">
+        <span className="tm-inbox-empty__icon"><Check size={18} aria-hidden="true" focusable="false" /></span>
+        <strong>Nothing needs you</strong>
+        <p>Mentions, replies to your comments and things assigned to you will show up here.</p>
+        {onOpenSettings && <button type="button" onClick={onOpenSettings}>Notification settings</button>}
+      </div>
+    );
+  }
+  const shown = view === "unread" ? notifications.filter((item) => !item.read) : notifications;
+  const groups = ["Today", "Earlier"].map((day) => [day, shown.filter((item) => notificationDay(item) === day)]).filter(([, items]) => items.length);
+  // Faces come from the project's members when the host didn't send one with the notification.
+  const face = (actor) => actor.avatarUrl || members.find((member) => member.id && member.id === actor.id)?.avatarUrl || null;
+  return (
+    <>
+      <div className="tm-inbox-head">
+        <div className="tm-inbox-views" role="radiogroup" aria-label="Show">
+          <button type="button" role="radio" aria-checked={view === "unread"} className={view === "unread" ? "is-active" : ""} onClick={() => setView("unread")}>
+            Unread{unread > 0 && <span className="tm-inbox-views__count">{unread}</span>}
+          </button>
+          <button type="button" role="radio" aria-checked={view === "all"} className={view === "all" ? "is-active" : ""} onClick={() => setView("all")}>All</button>
+        </div>
+        {unread > 0 && onMarkAllRead && <button type="button" className="tm-inbox-markall" onClick={onMarkAllRead}>Mark all read</button>}
+      </div>
+      {!shown.length ? (
+        <div className="tm-inbox-empty tm-inbox-empty--caught-up">
+          <span className="tm-inbox-empty__icon"><Check size={18} aria-hidden="true" focusable="false" /></span>
+          <strong>You’re all caught up</strong>
+          <button type="button" onClick={() => setView("all")}>Show all</button>
+        </div>
+      ) : (
+        <div className="tm-inbox" aria-label="Inbox">
+          {groups.map(([day, items]) => (
+            <section key={day} className="tm-inbox-group" aria-label={day}>
+              <h3>{day}</h3>
+              <ul>
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <button type="button" className={`tm-inbox-item${item.read ? "" : " is-unread"}`} onClick={() => onOpen?.(item)}>
+                      <Avatar name={item.actor.displayName} src={face(item.actor)} size={20} />
+                      <span className="tm-inbox-item__body">
+                        <span className="tm-inbox-item__meta">
+                          <span className="tm-inbox-item__line"><strong>{item.actor.displayName.split(/\s+/)[0]}</strong> {notificationVerb(item)}</span>
+                          {item.createdAt && <time dateTime={item.createdAt}>{formatShortAge(item.createdAt)}</time>}
+                          {!item.read && <span className="tm-inbox-item__dot"><span className="tm-sr-only">Unread</span></span>}
+                        </span>
+                        <span className="tm-inbox-item__text">{item.text}</span>
+                        {(item.route || item.target) && (
+                          <span className="tm-inbox-item__route">{[item.route && routeLabel(item.route), item.target].filter(Boolean).join(" · ")}</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** "2m", "1h", "2d", then the date: the Inbox's quiet timestamps (17b). */
 function formatShortAge(iso, now = Date.now()) {
   const at = Date.parse(iso);
   if (!Number.isFinite(at)) return "";
@@ -619,10 +694,14 @@ function formatShortAge(iso, now = Date.now()) {
 }
 
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
-  nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps,
-  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, dashboardUrl = null, onNotice = null }) {
+  nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
+  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null, members = [], youMenu = null, dashboardUrl = null, onNotice = null }) {
   const [halfSheet, setHalfSheet] = useState(false);
+  const [youMenuOpen, setYouMenuOpen] = useState(false);
+  const youButtonRef = useRef(null);
   const searchToggleRef = useRef(null);
+  // Items are marked read when opened (board 05, 17c), or all at once with Mark all read; never just by looking.
+  const unreadNotifications = notifications ? notifications.filter((item) => !item.read) : [];
   const [controls, setControls] = useState("collapsed");
   const [filterOpen, setFilterOpen] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState(false);
@@ -724,6 +803,10 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           <button type="button" role="tab" aria-selected={tab === "comments"} onClick={() => onTabChange("comments")}>
             Activity <span className="tm-sr-only">{annotations.length}</span>
           </button>
+          {notifications && <button type="button" role="tab" aria-selected={tab === "inbox"} onClick={() => onTabChange("inbox")}>
+            <InboxIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />Inbox
+            {unreadNotifications.length > 0 && <span className="tm-panel-tabs__badge">{unreadNotifications.length}<span className="tm-sr-only"> unread</span></span>}
+          </button>}
           {nextSteps && <button type="button" role="tab" aria-selected={tab === "next-steps"} onClick={() => onTabChange("next-steps")}>
             <NextStepsIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />Next steps <span className="tm-sr-only">{nextSteps.steps.filter((step) => !step.completed).length}</span>
           </button>}
@@ -794,10 +877,25 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
           </button>}
           {dashboardUrl && <a className="tm-comments-dashboard" href={dashboardUrl} target="_blank" rel="noopener noreferrer"
             aria-label="Open the dashboard (opens in a new tab)" title="Open the dashboard"><ExternalLink size={16} aria-hidden="true" focusable="false" /></a>}
+          {onOpenShare && <button type="button" className="tm-comments-share" aria-label="Share" title="Share" onClick={onOpenShare}>
+            <ShareIcon size={16} aria-hidden="true" focusable="false" />
+          </button>}
+          {youMenu && <span className="tm-comments-you-wrap">
+            <button ref={youButtonRef} type="button" className="tm-comments-you" aria-label="You" title="You" aria-haspopup="menu" aria-expanded={youMenuOpen}
+              onClick={() => setYouMenuOpen((open) => !open)}>
+              <Avatar name={reviewer?.displayName} src={reviewer?.avatarUrl} size={20} />
+            </button>
+            {youMenuOpen && <YouMenu reviewer={reviewer} email={youMenu.email} onFace={youMenu.onFace} onSettings={youMenu.onSettings}
+              onShortcuts={youMenu.onShortcuts} onHide={youMenu.onHide} onSignOut={youMenu.onSignOut}
+              onClose={() => { setYouMenuOpen(false); requestAnimationFrame(() => youButtonRef.current?.focus()); }} />}
+          </span>}
           <button type="button" aria-label="Close feedback panel" onClick={onClose}><X size={18} /></button>
         </div>
       </header>
-      {tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
+      {tab === "inbox" && notifications ? <InboxList notifications={notifications} members={members} onOpenSettings={onOpenYou}
+        onOpen={(item) => { if (!item.read) onNotificationsSeen?.([item.id]); onOpenNotification?.(item); }}
+        onMarkAllRead={onNotificationsSeen ? () => onNotificationsSeen(unreadNotifications.map((item) => item.id)) : null} />
+        : tab === "next-steps" && nextSteps ? <NextStepsTab nextSteps={nextSteps} canTick={canTickNextSteps} onDone={onNextStepDone} onOpenSource={onOpenNextStepSource} />
         : openSurveyId && surveys?.some((survey) => survey.id === openSurveyId) ? (() => {
           const survey = surveys.find((item) => item.id === openSurveyId);
           return <SurveyResultsView survey={survey} results={surveyResults[survey.id]} onBack={() => onOpenSurvey(null)}
@@ -1960,12 +2058,31 @@ function Overlay({
   onSelectPageVersion,
   nextSteps = null,
   dashboardUrl = null,
+  notifications = null,
+  onOpenNotification,
+  onNotificationsSeen,
   surveys = null,
   surveyResults = {},
   onSurveyPublish = null,
   onSurveyEnd = null,
   surveyRoute = "/",
+  faces = [],
+  reviewerEmail = null,
+  onSignOut,
   onBackToDrawing,
+  inviteSuggestions = [],
+  notificationSettings,
+  projectName = null,
+  onReviewerChange,
+  onNotificationSettingsChange,
+  onLeaveProject,
+  shareUrl = null,
+  linkAccess = null,
+  members = [],
+  onInvite,
+  onMemberChange,
+  onResendInvite,
+  onLinkAccessChange,
   onAiReview,
   onStartHostedReview,
   onAskAi,
@@ -2116,7 +2233,13 @@ function Overlay({
   });
   const carryForwardVersions = pageVersions.filter((version) => !version.current && version.state === "ready");
   const [toolbarMenu, setToolbarMenu] = useState(null);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [surveyBuilderOpen, setSurveyBuilderOpen] = useState(false);
+  // Board 08: "menu" (27a), "face" (27b), "settings" (28a) or "leave" (28b).
+  const [youOpen, setYouOpen] = useState(false);
+  const canEditYou = Boolean(onReviewerChange || onNotificationSettingsChange || onLeaveProject);
+  const hasYouMenu = Boolean(canEditYou || onSignOut);
+  const [shareOpen, setShareOpen] = useState(false);
   const [aiReviewOpen, setAiReviewOpen] = useState(false);
   const [askAiElement, setAskAiElement] = useState(null);
   // Phones: the composer and thread are bottom sheets, so keep what they're about in view above them (35b-c).
@@ -2142,7 +2265,10 @@ function Overlay({
     addEventListener("keydown", onKey, true);
     return () => removeEventListener("keydown", onKey, true);
   }, [askAiTarget]);
+  useReturnFocus(youOpen);
+  useReturnFocus(shareOpen);
   useReturnFocus(askAiElement);
+  const canShare = Boolean(shareUrl || onInvite);
   // A dark host page gets a faint paper edge around the bar and panel (board 09, 32a/b).
   const [darkPage, setDarkPage] = useState(false);
   useEffect(() => {
@@ -2303,9 +2429,11 @@ function Overlay({
           annotations={annotations}
           route={typeof window === "undefined" ? "/" : window.location.pathname}
           launcherRef={launcherRef}
-          onOpen={(hasComments) => {
+          notifications={notifications}
+          onOpen={(hasComments, toInbox) => {
             onStart();
-            if (hasComments && !allCommentsOpen) onToggleAllComments();
+            setInboxOpen(Boolean(toInbox));
+            if ((hasComments || toInbox) && !allCommentsOpen) onToggleAllComments();
           }}
           onOpenTools={() => { onStart(); setToolbarMenu("tools"); }}
         />
@@ -2561,8 +2689,12 @@ function Overlay({
                   shortcut="⌘." keyshortcuts="Meta+." onClick={runToolbarItem(() => { onBarShrink(true); onExit(); })} />}
                 {onBarHide && <ToolbarMenuItem icon={<HideIcon {...iconProps} />} label="Hide on this page"
                   onClick={runToolbarItem(onBarHide)} />}
+                {canShare && <ToolbarMenuItem icon={<ShareIcon {...iconProps} />} label="Share"
+                  onClick={runToolbarItem(() => setShareOpen(true))} />}
                 {dashboardUrl && <ToolbarMenuItem icon={<ExternalLink {...iconProps} />} label="Open the dashboard"
                   onClick={runToolbarItem(() => window.open(dashboardUrl, "_blank", "noopener,noreferrer"))} />}
+                {canEditYou && <ToolbarMenuItem icon={<EditIcon {...iconProps} />} label="Your settings"
+                  onClick={runToolbarItem(() => setYouOpen("settings"))} />}
                 {onShortcutsOpenChange && <ToolbarMenuItem icon={<InfoIcon {...iconProps} />} label="Keyboard shortcuts"
                   shortcut="?" keyshortcuts="Shift+?" onClick={runToolbarItem(() => onShortcutsOpenChange(true))} />}
                 <div className="tm-toolbar-menu__separator" role="separator" />
@@ -2610,6 +2742,26 @@ function Overlay({
 
       {shortcutsOpen && <ShortcutSheet videoEnabled={videoEnabled} aiEnabled={Boolean(onAskAi && onPostAiComment)} onClose={() => onShortcutsOpenChange?.(false)} />}
 
+      {youOpen === "face" && onReviewerChange && (
+        <FaceSheet reviewer={reviewer} faces={faces} onReviewerChange={onReviewerChange} onClose={() => setYouOpen(false)}
+          onDone={() => { setYouOpen(false); onAiNotice?.("Your face is set"); }} />
+      )}
+      {youOpen === "settings" && canEditYou && (
+        <YouSheet reviewer={reviewer ? { ...reviewer, email: reviewerEmail } : null} notificationSettings={notificationSettings}
+          projectName={projectName} onReviewerChange={onReviewerChange} onNotificationSettingsChange={onNotificationSettingsChange}
+          onLeave={onLeaveProject ? () => setYouOpen("leave") : null} onClose={() => setYouOpen(false)} />
+      )}
+      {youOpen === "leave" && onLeaveProject && (
+        <LeaveSheet projectName={projectName} onLeaveProject={onLeaveProject} onClose={() => setYouOpen("settings")}
+          onDone={() => { setYouOpen(false); onAiNotice?.(`You left ${projectName || "the project"}`); }} />
+      )}
+
+      {shareOpen && canShare && (
+        <ShareSheet projectName={projectName} shareUrl={shareUrl} linkAccess={linkAccess} members={members} inviteSuggestions={inviteSuggestions}
+          onInvite={onInvite} onMemberChange={onMemberChange} onResendInvite={onResendInvite}
+          onLinkAccessChange={onLinkAccessChange} onClose={() => setShareOpen(false)} />
+      )}
+
       {onAiReview && onPostAiComment && (
         <AiPageReview open={aiReviewOpen} onOpenChange={setAiReviewOpen} route={aiRoute} buildId={aiBuildId}
           ignoredSelectors={aiIgnoredSelectors} onAiReview={onAiReview} onAiDismiss={onAiDismiss}
@@ -2628,7 +2780,6 @@ function Overlay({
           }}
           onClose={() => setAskAiElement(null)} />
       )}
-
       {mode === "tour" && (
         <>
           <Outline rect={hoverRect} hover />
@@ -2667,13 +2818,23 @@ function Overlay({
       {allCommentsOpen && ["picking", "selected"].includes(mode) && (
         <AllCommentsPanel annotations={projectAnnotations} restorations={annotationRestorations} reviewer={reviewer}
           route={pageVersionRoute} hidden={mode !== "picking"} onClose={onCloseAllComments} onOpen={onOpenListedAnnotation}
-          tab={nextStepsOpen && nextSteps ? "next-steps" : "comments"}
-          onTabChange={(tab) => onShowNextSteps(tab === "next-steps")}
+          tab={inboxOpen && notifications ? "inbox" : nextStepsOpen && nextSteps ? "next-steps" : "comments"}
+          onTabChange={(tab) => { setInboxOpen(tab === "inbox"); onShowNextSteps(tab === "next-steps"); }}
           pageVersions={pageVersions} onSelectPageVersion={onSelectPageVersion}
           nextSteps={nextSteps} canTickNextSteps={canTickNextSteps} onNextStepDone={onNextStepDone}
           onOpenNextStepSource={onOpenNextStepSource} onCopyNextSteps={onCopyNextSteps}
+          notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen}
           surveys={surveys} surveyResults={surveyResults} openSurveyId={openSurveyId} onOpenSurvey={setOpenSurveyId} onSurveyEnd={onSurveyEnd}
-          dashboardUrl={dashboardUrl} onNotice={onAiNotice} />
+          onOpenYou={canEditYou ? () => setYouOpen("settings") : null} onOpenShare={canShare ? () => setShareOpen(true) : null} members={members}
+          dashboardUrl={dashboardUrl} onNotice={onAiNotice}
+          youMenu={hasYouMenu ? {
+            email: reviewerEmail,
+            onFace: onReviewerChange ? () => setYouOpen("face") : null,
+            onSettings: canEditYou ? () => setYouOpen("settings") : null,
+            onShortcuts: onShortcutsOpenChange ? () => onShortcutsOpenChange(true) : null,
+            onHide: onBarHide || null,
+            onSignOut: onSignOut || null,
+          } : null} />
       )}
 
       {replayViewer && (
@@ -2750,7 +2911,7 @@ function Overlay({
             /* 18c: a thread opened from the panel opens in the panel, with a way back to the list. */
             <div className="tm-thread-back">
               <button type="button" onClick={onRequestDismiss} disabled={submitting}>
-                <ArrowLeftIcon size={14} aria-hidden="true" focusable="false" />All comments
+                <ArrowLeftIcon size={14} aria-hidden="true" focusable="false" />{inboxOpen && notifications ? "Inbox" : "All comments"}
               </button>
               <span>{[editingAnnotation.payload.route && editingAnnotation.payload.route !== pageVersionRoute ? routeLabel(editingAnnotation.payload.route) : null, targetName(primaryTarget)].filter(Boolean).join(" · ")}</span>
             </div>

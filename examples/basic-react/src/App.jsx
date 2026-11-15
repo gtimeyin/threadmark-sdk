@@ -59,6 +59,8 @@ const EXAMPLE_AI_TEXT = {
   "small-text": { category: "accessibility", title: "Text is very small", detail: "Under 12px is hard to read for many people." },
   "horizontal-overflow": { category: "layout", title: "Runs off the side", detail: "This sticks out past the edge at this width." },
 };
+const EXAMPLE_FACES = ["maya", "jo", "ade", "kemi", "sam", "ojie", "kai", "tobi"].map((id) => ({ id, name: id[0].toUpperCase() + id.slice(1), url: `/faces/${id}.jpg` }));
+
 const REVIEWER = {
   id: "user_emily_r",
   displayName: "Emily R.",
@@ -136,7 +138,16 @@ function FeedbackLog({ entries, onClear }) {
 export function App() {
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [annotations, setAnnotations] = useState([]);
-  const me = REVIEWER;
+  // Your face, name and notification settings: host-owned too. Faces are served from public/faces.
+  const [me, setMe] = useState(() => readJson("example:me", REVIEWER));
+  const [notificationSettings, setNotificationSettings] = useState(() => readJson("example:notification-settings", { myPages: false, digest: "daily" }));
+  // People with access and the share link: host-owned. A real app would call its server here.
+  const [members, setMembers] = useState(() => readJson("example:members", [
+    { id: "example-sam", displayName: "Sam Okafor", email: "sam@studio.co", avatarUrl: "/faces/sam.jpg", role: "comment" },
+    { id: "example-karin", displayName: "Karin", role: "view", guest: true, note: "link expires in 7 days" },
+  ]));
+  useEffect(() => writeJson("example:members", members), [members]);
+  const [linkAccess, setLinkAccess] = useState("comment");
   // Stand-in for the host's next steps. A real app writes these from its open feedback (with AI or by hand).
   const [nextSteps, setNextSteps] = useState(() => [
     { id: "step-hero", title: "Shorten the pricing hero on phones", tag: "polish", source: "ai", completed: false },
@@ -149,6 +160,11 @@ export function App() {
   useEffect(() => writeJson("example:survey-answers", surveyAnswers), [surveyAnswers]);
   const surveyResults = useMemo(() => Object.fromEntries(surveys.map((survey) => [survey.id, summarizeSurveyAnswers(survey, surveyAnswers)])), [surveys, surveyAnswers]);
   const answerCounts = useMemo(() => Object.fromEntries(Object.entries(surveyResults).map(([id, result]) => [id, result.total])), [surveyResults]);
+  // Notifications are host-owned. This stand-in shows the Inbox tab and the bar's New reply mood.
+  const [notifications, setNotifications] = useState(() => [
+    { id: "demo-mention", kind: "mention", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "@You can we keep the word launch in the headline?", route: "/", target: "Heading · Launch", createdAt: new Date(Date.now() - 4 * 60000).toISOString() },
+    { id: "demo-reply", kind: "reply", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "Changed it on the preview, have a look.", route: "/", target: "Button · Start free", createdAt: new Date(Date.now() - 50 * 60000).toISOString(), read: true },
+  ]);
   const handleReactionChange = useMemo(() => createLocalReactionHandler({ store: feedbackStore, reviewer: REVIEWER, onRecords: setAnnotations }), []);
   const [status, setStatus] = useState("booting");
   // Tour mode's "Save to code" writes the tour file through threadmark-react/vite; the new version also
@@ -322,8 +338,11 @@ export function App() {
         }}
         projectKey={PROJECT_KEY}
         reviewer={me}
-        // Inbox, sharing, your settings and sending to trackers live in your dashboard; the overlay links there.
-        dashboardUrl="https://app.example.com/parcel"
+        faces={EXAMPLE_FACES}
+        projectName="Parcel"
+        notificationSettings={notificationSettings}
+        onReviewerChange={(change) => { const next = { ...me, ...change }; setMe(next); writeJson("example:me", next); }}
+        onNotificationSettingsChange={(settings) => { setNotificationSettings(settings); writeJson("example:notification-settings", settings); }}
         // AI review stand-ins. A real app calls its model here; this example turns the built-in page checks into findings.
         onAiReview={async ({ page, report }) => {
           report({ checked: 0, total: page.findings.length });
@@ -337,6 +356,19 @@ export function App() {
             ? { points: [`(Example answer) Your model would answer “${question}” about ${label} here.`] }
             : { points: [`(Example) Your model would look at ${label} here.`, "Connect one through onAskAi."], fix: "Pass onAskAi to <Threadmark> and call your AI provider." };
         }}
+        // Sending to trackers lives in your dashboard; the overlay links there.
+        dashboardUrl="https://app.example.com/parcel"
+        shareUrl={`${window.location.origin}/r/parcel`}
+        linkAccess={linkAccess}
+        onLinkAccessChange={setLinkAccess}
+        members={[{ ...me, role: "owner", you: true }, ...members]}
+        inviteSuggestions={[
+          { id: "jo", displayName: "Jo Bello", email: "jo@studio.co", note: "in your studio" },
+          { id: "joanna", displayName: "Joanna Reid", email: "joanna@client.com", note: "worked on Pricing" },
+        ]}
+        onInvite={({ entries, role }) => setMembers((list) => [...entries.map((entry) => ({ id: `invite-${entry}`, displayName: entry.includes("@") ? undefined : entry, email: entry.includes("@") ? entry : undefined, role, pending: true })), ...list])}
+        onMemberChange={(id, change) => setMembers((list) => change.remove ? list.filter((member) => member.id !== id) : list.map((member) => member.id === id ? { ...member, role: change.role } : member))}
+        onResendInvite={() => {}}
         reviewers={[REVIEWER, { id: "example-sam", displayName: "Sam Okafor" }]}
         enabled
         environment="local"
@@ -354,14 +386,19 @@ export function App() {
         onPageVersionSelect={(version) => setActiveBuildId(version.buildId || CURRENT_BUILD_ID)}
         onFeedbackCarryForward={handleCarryForward}
         onPollVote={handlePollVote}
+        notifications={notifications}
         surveys={surveys}
         surveyResults={surveyResults}
         onSurveyPublish={(survey) => setSurveys((list) => [...list.filter((item) => item.id !== survey.id), survey])}
         onSurveyEnd={(id) => setSurveys((list) => list.map((item) => (item.id === id ? { ...item, status: "ended" } : item)))}
+        onNotificationOpen={(item) => console.info("[example] opened notification", item.id)}
         nextSteps={nextSteps}
         onNextStepDone={(step, done) => setNextSteps((list) => list.map((item) => (item.id === step.id ? { ...item, completed: done, completedVia: done ? "person" : null, completedBy: done ? { displayName: me.displayName } : null } : item)))}
+        onLeaveProject={async () => { window.alert("Your app removes you from the project here."); }}
+        onSignOut={() => window.alert("Your app signs you out here.")}
         onAiDismiss={(finding, reason) => console.info("[example] dismissed AI finding", finding.id, reason)}
         onConnectAi={() => window.alert("Your app connects its coding AI here.")}
+        onNotificationsRead={(ids) => setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)))}
         tours={tours}
         onTourSave={saveTour}
         // A stand-in for a connected coding AI. A real app hands the file to its AI here.

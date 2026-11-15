@@ -6,14 +6,13 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [0.1.0-beta.15] — 2026-11-10
 
-The review overlay is rebuilt on the November brand, and gains surveys, AI review, a link to your dashboard, and layouts for phones and tablets. This release also carries the SDK changes from the unpublished beta.14.
+The review overlay is rebuilt on the November brand, and gains surveys, an Inbox, sharing, AI review, a link to your dashboard, and layouts for phones and tablets. This release also carries the SDK changes from the unpublished beta.14.
 
 ### Changed — please read before upgrading
 
 - **New look.** The overlay uses the brand palette (Forest `#035D47`, Orange `#F15722` pins and focus ring, Lime `#E0F354` actions on dark chrome), Geist only, 6 / 8 / 16px radii and the Threadmark icon set. The launcher and toolbar are replaced by one dark **Bar** at the bottom of the page, which says what's waiting (Leave feedback, N new, All caught up, Offline) and carries the tools in comment mode.
 - **Polls are attached to comments.** The composer no longer has Comment / Question / Poll tabs. With `onPollVote`, it shows **Add a poll**; new comments carry `ask: { kind: "poll", … }` or no `ask`. Comments saved with `ask: { kind: "question" }` still load and show a "Question" label.
 - **Polls show results after you vote.** Pick one shows results straight away, Pick any after **Done**, and you can change or take back your vote. The Activity list hides shares until you've voted.
-- **The overlay keeps only what needs the page.** The Inbox, Share, the You menu and Your settings, and Send to trackers live in your dashboard, not the overlay. Pass `dashboardUrl` to add **Open the dashboard** to the More menu and the side panel. These props are gone: `notifications`, `onNotificationOpen`, `onNotificationsRead`, `faces`, `notificationSettings`, `projectName`, `onReviewerChange`, `onNotificationSettingsChange`, `onLeaveProject`, `onSignOut`, `shareUrl`, `linkAccess`, `members`, `inviteSuggestions`, `onInvite`, `onMemberChange`, `onResendInvite`, `onLinkAccessChange`, `destinations`, `onSendTo` and `onConnectDestination`. Links your backend adds to `feedback.links` (such as "GitHub #482 · Open") still show on the thread.
 - The panel's **Versions** tab is gone. `pageVersions` still powers **Carry forward** and **Compare with current page** in a thread's ⋯ menu.
 - `@solar-icons/react` and the Bricolage font are no longer dependencies.
 - Wording says "comment", not "annotation", throughout the overlay.
@@ -22,11 +21,14 @@ The review overlay is rebuilt on the November brand, and gains surveys, AI revie
 
 - **Composer and threads** (board 01): one dark card with what you picked, the text, @ to mention, the poll tool and a Lime send. ↵ posts, Shift+↵ adds a line. Replies get the same @ button. With the panel open, a thread opens in the panel's place with "← All comments".
 - **Delete with Undo:** a comment without replies goes straight away with "Comment deleted · Undo"; threads with replies, and replies, still ask first. You can edit your own replies.
-- **Side panel** (board 05): Activity and Next steps in a 380px dark panel.
+- **Side panel** (board 05): Activity, **Inbox** and Next steps in a 380px dark panel. The Inbox takes `notifications`, `onNotificationOpen` and `onNotificationsRead`, with Unread / All, Today and Earlier, and "Sam replied to your comment" lines.
 - **Surveys** (board 03): **Tools → Ask a question** builds a poll, scale or open question for a page. The new production-safe entry `threadmark-react/surveys` (`<ThreadmarkSurveys>`) shows them to visitors and sends answers to `onAnswer`. Results sit at the top of Activity with Export (CSV) and Share results.
 - **Sketching** (board 02): one Capture bar with Box (B), Pen (P), Whole view (W) and three colours. The box resizes and moves until you sketch, and "Esc back to drawing" keeps your strokes.
 - **Video** (board 02): a new setup card, a 3-2-1 countdown (`videoRecording.countdownSeconds`), a recorder bar with Moment, Blur and Draw, and a review step to title, trim and post. Posted videos show Summary, Transcript, Chapters and Steps from host-written `video.notes`.
+- **You** (board 08): a You menu, a face sheet (host-supplied `faces`), Your settings and Leave. New props: `faces`, `notificationSettings`, `projectName`, `onReviewerChange`, `onNotificationSettingsChange`, `onLeaveProject` and `onSignOut`.
 - **The Bar, your way** (board 09): drag it to one of six spots, shrink it to a dot (⌘.) or hide it on a page. Choices are saved per browser. A shortcut sheet opens with ?.
+- **Share** (board 04): copy the review link, set link access, and invite people as chips with a note and roles. New props: `shareUrl`, `linkAccess`, `members`, `inviteSuggestions`, `onInvite`, `onMemberChange`, `onResendInvite` and `onLinkAccessChange`.
+- **Your dashboard** (`dashboardUrl`): **Open the dashboard** in the More menu and the panel header. Sending a comment to GitHub, Linear or Slack lives there, not in the overlay. Links your backend adds to `feedback.links` (such as "GitHub #482 · Open") show on the thread.
 - **Tours** (board 06): a restyled player and Tour mode, a Save sheet with **Send to your AI** (`aiConnection`, `onTourSendToAi`, `onConnectAi`), and a preview bar that follows each step.
 - **AI review** (board 12): "Ask AI to review this page" gives draft findings with AI pins (Post one, Post all, or Dismiss with a reason). **Ask AI** (⌘K) answers about one element. Your host supplies the model through `onAiReview`, `onAskAi` and `onAiDismiss`. Posted findings are marked "From an AI review". The beta.14 `onPageReview` flow is included.
 - **Phones and tablets** (board 11): bottom sheets and 44px targets on phones, and a drawer on touch tablets in portrait.

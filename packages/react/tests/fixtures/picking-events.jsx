@@ -91,10 +91,44 @@ function record(name) {
   return () => window.__threadmarkHostEvents.push(name);
 }
 
-const me = { id: "fixture_reviewer", displayName: "Emily R." };
+// `?inbox=1` gives the reviewer an Inbox (board 05, 17b); `?inbox=empty` an empty one (19a).
+const inboxMode = fixtureParams.get("inbox");
+const FIXTURE_MEMBERS = [
+  { id: "maya", displayName: "Maya Patel", email: "maya@studio.co", role: "edit", avatarUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Crect width='20' height='20' fill='%23f15722'/%3E%3C/svg%3E" },
+];
+function fixtureNotifications() {
+  const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+  return [
+    { id: "n-mention", kind: "mention", actor: { id: "maya", displayName: "Maya Patel" }, text: "@Emily can we drop the company field here?", route: "/signup", target: "Field · Company", createdAt: ago(2) },
+    { id: "n-reply", kind: "reply", actor: { id: "sam", displayName: "Sam Okafor" }, text: "Agree, Forest reads calmer.", route: "/picking-events", target: "Button · Start free", createdAt: ago(1) },
+    { id: "n-assigned", kind: "assigned", actor: { id: "kai", displayName: "Kai" }, text: "Move the chart legend below on phones", route: "/picking-events", createdAt: ago(3) },
+    { id: "n-old", kind: "reply", actor: { id: "jo", displayName: "Jo" }, text: "Fixed on staging, can you check?", route: "/about", target: "Image · Team", createdAt: ago(3 * 24 * 60), read: true },
+  ];
+}
+
+// `?people=1` turns on You (board 08) and Share (board 04) with stand-in people and faces.
+const peopleMode = fixtureParams.get("people") === "1";
+// Reviewer avatars must be http(s) or same-origin paths (they travel with comments), so faces are paths.
+const face = (color) => `/faces/${color}.svg`;
+const FIXTURE_FACES = [{ id: "f1", name: "Lime face", url: face("e0f354") }, { id: "f2", name: "Orange face", url: face("f15722") }, { id: "f3", name: "Forest face", url: face("035d47") }];
+const FIXTURE_PEOPLE = [
+  { id: "fixture_reviewer", displayName: "Emily R.", email: "emily@studio.co", role: "owner", you: true },
+  { id: "maya", displayName: "Maya", email: "maya@studio.co", role: "comment" },
+  { id: "sam", displayName: "Sam", email: "sam@studio.co", role: "comment" },
+  { id: "karin", displayName: "Karin", role: "view", guest: true, note: "link expires in 7 days" },
+];
+const FIXTURE_SUGGESTIONS = [
+  { id: "jo", displayName: "Jo Bello", email: "jo@studio.co", note: "in Emily’s studio" },
+  { id: "joanna", displayName: "Joanna Reid", email: "joanna@studio.co", note: "in Emily’s studio" },
+];
 
 function Fixture() {
   const [buildId, setBuildId] = useState("fixture-build-current");
+  const [me, setMe] = useState({ id: "fixture_reviewer", displayName: "Emily R.", ...(peopleMode ? { email: "emily@studio.co" } : {}) });
+  const [people, setPeople] = useState(FIXTURE_PEOPLE);
+  const [linkAccess, setLinkAccess] = useState("comment");
+  const [notifications, setNotifications] = useState(() => (inboxMode === "1" ? fixtureNotifications() : []));
+  useEffect(() => { window.__threadmarkSetNotifications = setNotifications; }, []);
   const [annotations, setAnnotations] = useState([]);
   const [targetVersion, setTargetVersion] = useState(0);
   const [showSecondary, setShowSecondary] = useState(true);
@@ -189,8 +223,39 @@ function Fixture() {
         environment="local"
         projectKey="privacy-browser-fixture"
         reviewer={me}
+        {...(peopleMode ? {
+          projectName: "Marketing site",
+          shareUrl: "https://threadmark.app/r/mkt-site/pricing",
+          linkAccess,
+          onLinkAccessChange: setLinkAccess,
+          members: people,
+          inviteSuggestions: FIXTURE_SUGGESTIONS,
+          faces: FIXTURE_FACES,
+          notificationSettings: { myPages: false, digest: "daily" },
+          onNotificationSettingsChange: (settings) => { window.__threadmarkNotificationSettings = settings; },
+          onReviewerChange: (next) => { window.__threadmarkReviewerChanges = [...(window.__threadmarkReviewerChanges || []), next]; setMe((current) => ({ ...current, ...next })); },
+          onLeaveProject: () => { window.__threadmarkLeft = true; },
+          onSignOut: () => { window.__threadmarkSignedOut = true; },
+          onInvite: (invite) => {
+            window.__threadmarkInvites = [...(window.__threadmarkInvites || []), invite];
+            setPeople((list) => [...list, ...invite.entries.map((entry) => ({ id: `invite-${entry}`, email: entry, role: invite.role, pending: true }))]);
+          },
+          onResendInvite: () => {},
+          onMemberChange: (id, change) => {
+            window.__threadmarkMemberChanges = [...(window.__threadmarkMemberChanges || []), { id, change }];
+            setPeople((list) => (change.remove ? list.filter((item) => item.id !== id) : list.map((item) => (item.id === id ? { ...item, role: change.role } : item))));
+          },
+        } : {})}
         styleNonce={styleNonce}
         reviewers={[{ id: "fixture_reviewer", displayName: "Emily R." }, { id: "sam", displayName: "Sam Okafor" }]}
+        {...(inboxMode ? {
+          notifications,
+          members: FIXTURE_MEMBERS,
+          onNotificationsRead: (ids) => {
+            window.__threadmarkNotificationsRead = [...(window.__threadmarkNotificationsRead || []), ...ids];
+            setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)));
+          },
+        } : {})}
         buildId={buildId}
         videoRecording={videoRecording}
         sessionReplay={sessionReplay}
