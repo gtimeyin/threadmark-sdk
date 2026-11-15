@@ -41,7 +41,7 @@ import { DeleteIcon as Trash2 } from "./icons.jsx";
 import { WarningIcon as TriangleAlert } from "./icons.jsx";
 import { VideoIcon as Video } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
-import { AiIcon, EditIcon, HideIcon, InboxIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, TourIcon } from "./icons.jsx";
+import { AiIcon, EditIcon, HideIcon, InboxIcon, ShareIcon, InfoIcon, NextStepsIcon, PollIcon, ResolveIcon, SurveyIcon, TourIcon } from "./icons.jsx";
 import { ShortcutSheet } from "./surfaces/ShortcutSheet.jsx";
 import { FaceSheet, LeaveSheet, YouMenu, YouSheet } from "./surfaces/YouSheet.jsx";
 import { AiPageReview, AskAiCard } from "./surfaces/AiReview.jsx";
@@ -51,7 +51,7 @@ import { Avatar, EmptyState, Key } from "./ui/primitives.jsx";
 import { notificationDay, notificationVerb } from "./notifications.js";
 import { surveyResultsCsv, surveyResultsText } from "./surveys/schema.js";
 import { ArrowLeftIcon, CaptureIcon, CropIcon, MentionIcon, RegionIcon, SketchIcon } from "./icons.jsx";
-import { BarHint, BarStatus, IdleBar } from "./surfaces/Bar.jsx";
+import { BarHint, BarStatus, IdleBar, markFeedbackSeen } from "./surfaces/Bar.jsx";
 import { computePopoverPosition } from "./popover.js";
 import {
   addMarkupStroke,
@@ -807,9 +807,9 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
         <h2 className="tm-sr-only">Feedback</h2>
         {/* Icon-only once there's more than one view, so three tabs and the header buttons fit a 360px panel. */}
         <div className={`tm-panel-tabs${notifications || nextSteps ? " is-icon-only" : ""}`} role="tablist" aria-label="Feedback views">
-          <button type="button" role="tab" aria-selected={tab === "comments"} title="Activity" onClick={() => onTabChange("comments")}>
+          <button type="button" role="tab" aria-selected={tab === "comments"} title="Comments" onClick={() => onTabChange("comments")}>
             <MessagesSquare aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />
-            <span className="tm-panel-tabs__label">Activity</span> <span className="tm-sr-only">{annotations.length}</span>
+            <span className="tm-panel-tabs__label">Comments</span> <span className="tm-sr-only">{annotations.length}</span>
           </button>
           {notifications && <button type="button" role="tab" aria-selected={tab === "inbox"} title="Inbox" onClick={() => onTabChange("inbox")}>
             <InboxIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" /><span className="tm-panel-tabs__label">Inbox</span>
@@ -1548,8 +1548,8 @@ const Marker = memo(function Marker({ annotation, number, rect, restoration, onE
         ref={buttonRef}
         className={`tm-marker ${grouped ? "tm-marker--grouped" : ""} ${needsRepair ? "tm-marker--warning" : ""} ${suggested ? "tm-marker--suggested" : ""} ${ghost ? "tm-marker--ghost" : ""} ${resolved ? "tm-marker--resolved" : ""} ${active ? "tm-marker--active" : ""}`}
         style={{ left: rect.left + rect.width, top: rect.top + Math.min(18, rect.height / 2) }}
-        aria-label={`Edit annotation ${number}${resolved ? ", resolved" : ""}${needsRepair ? `, target needs repair${detail}` : ""}`}
-        title={suggested ? "Element changed · confirm location" : ghost ? "Element removed · last known position" : "Open annotation"}
+        aria-label={`Open comment ${number}${resolved ? ", resolved" : ""}${needsRepair ? `, target needs repair${detail}` : ""}`}
+        title={suggested ? "Element changed · confirm location" : ghost ? "Element removed · last known position" : "Open comment"}
         onClick={() => onEdit(annotation.id)}
       >
         {resolved ? <ResolveIcon aria-hidden="true" focusable="false" className="tm-marker__check" /> : number}
@@ -1772,7 +1772,7 @@ function ThreadMessage({
               type="button"
               role="menuitem"
               className="tm-thread-message__delete"
-              aria-label={annotation ? "Delete annotation" : `Delete reply by ${authorName}`}
+              aria-label={annotation ? "Delete comment" : `Delete reply by ${authorName}`}
               onClick={() => choose(() => onDelete(annotation
                 ? { kind: "annotation", id: message.id }
                 : { kind: "reply", id: message.id }))}
@@ -2038,6 +2038,7 @@ function Overlay({
   carryingVersionId,
   reviewer,
   toolbarPosition,
+  projectKey = null,
   toolbarDragging = false,
   barPosition = "bottom-center",
   barShrunk = false,
@@ -2095,12 +2096,10 @@ function Overlay({
   onNotificationSettingsChange,
   onLeaveProject,
   shareUrl = null,
-  linkAccess = null,
   members = [],
   onInvite,
   onMemberChange,
   onResendInvite,
-  onLinkAccessChange,
   onAiReview,
   onStartHostedReview,
   onAskAi,
@@ -2252,9 +2251,16 @@ function Overlay({
   const carryForwardVersions = pageVersions.filter((version) => !version.current && version.state === "ready");
   const [toolbarMenu, setToolbarMenu] = useState(null);
   const [inboxOpen, setInboxOpen] = useState(false);
+  // Opening the Comments panel, however it was opened, marks every comment seen for the Comments badge.
+  const [seenVersion, setSeenVersion] = useState(0);
   const panelTab = inboxOpen && notifications ? "inbox" : nextStepsOpen && nextSteps ? "next-steps" : "comments";
   const panelView = allCommentsOpen ? panelTab : null;
   const unreadInboxCount = notifications ? notifications.filter((item) => !item.read).length : 0;
+  useEffect(() => {
+    if (panelView !== "comments") return;
+    markFeedbackSeen(projectKey, projectAnnotations.map((item) => item.id));
+    setSeenVersion((value) => value + 1);
+  }, [panelView, projectKey, projectAnnotations.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const openPanelView = (view) => {
     if (panelView === view) { onToggleAllComments(); return; }
     setInboxOpen(view === "inbox");
@@ -2456,8 +2462,9 @@ function Overlay({
           position={barPosition}
           shrunk={barShrunk}
           onShrink={onBarShrink}
-          annotations={annotations}
-          route={typeof window === "undefined" ? "/" : window.location.pathname}
+          annotations={projectAnnotations}
+          seenScope={projectKey}
+          seenVersion={seenVersion}
           launcherRef={launcherRef}
           notifications={notifications}
           onOpen={(hasComments, toInbox) => {
@@ -2623,7 +2630,7 @@ function Overlay({
           <div
             className={`tm-modebar tm-bar--at-${barPosition}${toolbarMenu ? " has-open-menu" : ""}`}
             role="toolbar"
-            aria-label="Threadmark annotation tools"
+            aria-label="Threadmark comment tools"
             style={toolbarPosition ? {
               left: toolbarPosition.left,
               top: toolbarPosition.top,
@@ -2635,7 +2642,7 @@ function Overlay({
             <button
               type="button"
               className="tm-drag-handle"
-              aria-label="Move annotation toolbar"
+              aria-label="Move the Threadmark bar"
               title="Drag toolbar"
               onPointerDown={onToolbarPointerDown}
               onPointerMove={onToolbarPointerMove}
@@ -2696,7 +2703,7 @@ function Overlay({
                 )}
                 {onSurveyPublish && (
                   <ToolbarMenuItem role="menuitemradio" aria-checked="false"
-                    icon={<PollIcon {...iconProps} />} label="Ask a question" description="A short poll, scale or question for people on this page"
+                    icon={<SurveyIcon {...iconProps} />} label="Ask a question" description="A choice, a scale or a written answer from people on this page"
                     onClick={runToolbarItem(() => setSurveyBuilderOpen(true))} />
                 )}
                 {onStartHostedReview && (
@@ -2745,7 +2752,7 @@ function Overlay({
                 <div className="tm-toolbar-menu__separator" role="separator" />
                 <ToolbarMenuItem danger icon={<ClearIcon />}
                   label={clearArmed ? "Click again to clear all" : "Clear all comments"}
-                  aria-label={clearArmed ? "Confirm clear annotations (X)" : undefined}
+                  aria-label={clearArmed ? "Confirm clear all comments (X)" : undefined}
                   data-autofocus={clearArmed ? "true" : undefined}
                   disabled={!annotations.length && !selectedCount} shortcut="X" keyshortcuts="X"
                   onClick={clearArmed ? runToolbarItem(onClearAll) : onClearAll} />
@@ -2772,7 +2779,7 @@ function Overlay({
               </button>}
             </div>
             <div className="tm-toolbar-divider" />
-            <ToolButton icon={<CloseIcon />} label="Close annotations (Esc)" onClick={onExit} />
+            <ToolButton icon={<CloseIcon />} label="Stop commenting (Esc)" onClick={onExit} />
           </div>
         </>
       )}
@@ -2800,9 +2807,9 @@ function Overlay({
       )}
 
       {shareOpen && canShare && (
-        <ShareSheet projectName={projectName} shareUrl={shareUrl} linkAccess={linkAccess} members={members} inviteSuggestions={inviteSuggestions}
+        <ShareSheet projectName={projectName} shareUrl={shareUrl} members={members} inviteSuggestions={inviteSuggestions}
           onInvite={onInvite} onMemberChange={onMemberChange} onResendInvite={onResendInvite}
-          onLinkAccessChange={onLinkAccessChange} onClose={() => setShareOpen(false)} />
+          onClose={() => setShareOpen(false)} />
       )}
 
       {onAiReview && onPostAiComment && (
@@ -3073,7 +3080,7 @@ function Overlay({
               </div>
             )}
             {editingAnnotation && (
-              <section className="tm-thread" aria-label="Annotation discussion">
+              <section className="tm-thread" aria-label="Comment thread">
                 <ThreadMessage
                   message={{
                     id: editingAnnotation.payload.id,

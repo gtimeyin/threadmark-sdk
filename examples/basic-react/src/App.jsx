@@ -147,7 +147,6 @@ export function App() {
     { id: "example-karin", displayName: "Karin", role: "view", guest: true, note: "link expires in 7 days" },
   ]));
   useEffect(() => writeJson("example:members", members), [members]);
-  const [linkAccess, setLinkAccess] = useState("comment");
   // Stand-in for the host's next steps. A real app writes these from its open feedback (with AI or by hand).
   const [nextSteps, setNextSteps] = useState(() => [
     { id: "step-hero", title: "Shorten the pricing hero on phones", tag: "polish", source: "ai", completed: false },
@@ -351,8 +350,6 @@ export function App() {
         // Sending to trackers lives in your dashboard; the overlay links there.
         dashboardUrl="https://app.example.com/parcel"
         shareUrl={`${window.location.origin}/r/parcel`}
-        linkAccess={linkAccess}
-        onLinkAccessChange={setLinkAccess}
         members={[{ ...me, role: "owner", you: true }, ...members]}
         inviteSuggestions={[
           { id: "jo", displayName: "Jo Bello", email: "jo@studio.co", note: "in your studio" },

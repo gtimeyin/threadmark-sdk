@@ -596,7 +596,7 @@ export interface ThreadmarkAiPageReview {
 }
 export interface ThreadmarkProps {
   /**
-   * @deprecated Retired in beta.16 and ignored (a console warning says so): it posted AI comments with no person
+   * @deprecated Retired in beta.15 and ignored (a console warning says so): it posted AI comments with no person
    * choosing them. Use `onAiReview`, where people keep or dismiss each suggestion.
    */
   onPageReviewRequested?: (input: ThreadmarkPageReview, context: ThreadmarkPageReviewContext) => Promise<ThreadmarkPageReviewResult>;
@@ -746,24 +746,31 @@ export interface ThreadmarkProps {
   onSignOut?: () => void;
   /** The review link shown in Share with Copy link. */
   shareUrl?: string;
-  /** What anyone with the link can do. */
+  /**
+   * @deprecated Ignored since beta.15. Reviews are private: Share says only invited people can open the link,
+   * after signing in, and there's no public link setting.
+   */
   linkAccess?: ThreadmarkLinkAccess;
   /** People with access, shown in Share. */
   members?: readonly ThreadmarkMember[];
-  /** Invite people by name or email. Passing this (or `shareUrl`) adds Share to the panel and the More menu. */
-  /** `message` is the optional note typed under the invite (board 04, 15b). */
+  /**
+   * Invite people by name or email. Passing this (or `shareUrl`) adds Share to the panel and the More menu.
+   * `message` is the optional note typed under the invite (board 04, 15b).
+   */
   onInvite?: (invite: { entries: string[]; role: ThreadmarkMemberRole; message?: string }) => void | Promise<void>;
   /**
    * People to suggest while typing a name or email in Share, usually your workspace (15b). `note` is the
    * small line after the email, such as "in Ojie's studio". A typed email nobody knows is offered as "new".
    */
   inviteSuggestions?: Array<{ id: string; displayName?: string; email?: string; avatarUrl?: string | null; note?: string }>;
-  /** Change someone's access, or remove it. Passing this makes each person's access editable. */
-  /** `role: "owner"` is offered only to an owner (Make owner, 15f). Remove access asks once first. */
+  /**
+   * Change someone's access, or remove it. Passing this makes each person's access editable.
+   * `role: "owner"` is offered only to an owner (Make owner, 15f). Remove access asks once first.
+   */
   onMemberChange?: (memberId: string, change: { role: ThreadmarkMemberRole | "owner" } | { remove: true }) => void | Promise<void>;
   /** Send a pending invite again. */
   onResendInvite?: (memberId: string) => void | Promise<void>;
-  /** Change what anyone with the link can do. */
+  /** @deprecated Ignored since beta.15; see `linkAccess`. */
   onLinkAccessChange?: (access: ThreadmarkLinkAccess) => void | Promise<void>;
   /**
    * Tours to edit in Tour mode (the same files you pass to <ThreadmarkTours>). Tour mode keeps

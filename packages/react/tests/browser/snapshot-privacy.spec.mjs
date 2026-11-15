@@ -217,7 +217,7 @@ test("Feedback is a solid dark panel in every tab, with a high-contrast fallback
   await expect.poll(panelStyle).toEqual(expected);
   await page.setViewportSize({ width: 320, height: 640 });
   await expect.poll(panelStyle).toEqual(expected);
-  await panel.getByRole("tab", { name: /^Activity/ }).click();
+  await panel.getByRole("tab", { name: /^Comments/ }).click();
   await panel.getByRole("button", { name: "Show search comments" }).click();
   await expect(panel.getByRole("textbox", { name: "Search comments" })).toBeVisible();
   await page.emulateMedia({ forcedColors: "active" });
@@ -412,7 +412,7 @@ test("replies to a previous comment and confirms reply or annotation deletion wi
   // 23d: with no replies left, the comment goes straight away and the toast offers Undo.
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot
-      .querySelector('button[aria-label="Delete annotation"]').click();
+      .querySelector('button[aria-label="Delete comment"]').click();
   });
   await expect.poll(() => page.evaluate(() => window.__threadmarkDeletes.length)).toBe(1);
   await expect(page.locator(".tm-toast")).toContainText("Comment deleted");
@@ -540,7 +540,7 @@ test("toolbar shortcuts pause the page, hide markers, copy feedback, and confirm
   await page.keyboard.press("x");
   await expect.poll(() => page.evaluate(() => Boolean(
     document.querySelector("[data-threadmark-root]")?.shadowRoot
-      .querySelector('[aria-label="Confirm clear annotations (X)"]'),
+      .querySelector('[aria-label="Confirm clear all comments (X)"]'),
   ))).toBe(true);
   await expect(page.locator("#tm-more-menu")).toBeVisible();
   await page.keyboard.press("x");
@@ -549,7 +549,7 @@ test("toolbar shortcuts pause the page, hide markers, copy feedback, and confirm
 
 test("the toolbar groups feedback tools and other actions into keyboard-friendly menus", async ({ page }) => {
   await mountPickingFixture(page);
-  const toolbar = page.getByRole("toolbar", { name: "Threadmark annotation tools" });
+  const toolbar = page.getByRole("toolbar", { name: "Threadmark comment tools" });
   const tools = toolbar.getByRole("button", { name: "Feedback tools: Comment" });
 
   await tools.click();
@@ -1026,7 +1026,7 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
   await mountPickingFixture(page);
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const name of ["Comments", "Close annotations (Esc)"]) {
+    for (const name of ["Comments", "Stop commenting (Esc)"]) {
       const bounds = await page.getByRole("button", { name, exact: true }).boundingBox();
       expect(bounds.x).toBeGreaterThanOrEqual(0);
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
@@ -1035,7 +1035,7 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
   await page.setViewportSize({ width: 320, height: 844 });
   await page.locator("#custom-target").click({ position: { x: 24, y: 25 }, modifiers: ["Meta", "Shift"] });
   await page.locator("#secondary-target").click({ modifiers: ["Meta", "Shift"] });
-  for (const name of ["Comment 2", "Comments", "Close annotations (Esc)"]) {
+  for (const name of ["Comment 2", "Comments", "Stop commenting (Esc)"]) {
     const bounds = await page.getByRole("button", { name, exact: true }).boundingBox();
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
@@ -1043,7 +1043,7 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
   await page.getByRole("button", { name: "Comments", exact: true }).click();
   await expect(page.getByRole("complementary", { name: "Feedback", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close feedback panel", exact: true }).click();
-  await page.getByRole("button", { name: "Close annotations (Esc)", exact: true }).click();
+  await page.getByRole("button", { name: "Stop commenting (Esc)", exact: true }).click();
   await expect(page.getByRole("button", { name: "Leave feedback", exact: true })).toBeVisible();
 });
 
@@ -1128,7 +1128,7 @@ test("pencil markup stays aligned to the selected crop and submits one approved 
   expect(result.blob.size).toBeGreaterThan(0);
 });
 
-test("pencil tools change pen style, undo, clear, and cancel without creating feedback", async ({ page }) => {
+test("the sketch keeps a pen colour, ⌘Z undoes a stroke, and cancel creates no feedback", async ({ page }) => {
   await mountPickingFixture(page);
   await chooseToolbarItem(page, "Feedback tools", "Sketch on a screenshot");
 
@@ -1281,7 +1281,7 @@ test("persisted screenshot annotations survive reload, edit, and delete", async 
 
   await page.evaluate(() => {
     const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
-    shadow.querySelector('button[aria-label="Delete annotation"]').click();
+    shadow.querySelector('button[aria-label="Delete comment"]').click();
   });
   await expect.poll(() => page.evaluate(() => window.__threadmarkDeletes.length)).toBe(1);
   await page.reload({ waitUntil: "load" });
@@ -1557,7 +1557,7 @@ test("all comments lists saved threads, filters, and opens missing targets witho
   await expect(panel.getByRole('dialog', { name: 'Comment filters' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
-  await expect(page.getByRole('toolbar', { name: 'Threadmark annotation tools' })).toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'Threadmark comment tools' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Comments', exact: true })).toBeFocused();
 });
 
@@ -1604,7 +1604,7 @@ test("comment filters float over the list, retain search, and dismiss accessibly
   await expect(panel.getByRole('textbox', { name: 'Search comments' })).toHaveValue('issue');
   await panel.getByRole('button', { name: /^Show comment filters/ }).click();
   await expect(popup.getByRole('button', { name: 'Only your threads', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await panel.getByRole('tab', { name: /^Activity/ }).click();
+  await panel.getByRole('tab', { name: /^Comments/ }).click();
   await expect(popup).toHaveCount(0);
   await expect(panel.locator('.tm-comment-card')).toHaveCount(1);
   await panel.getByRole('button', { name: /^Show comment filters/ }).click();
@@ -1618,9 +1618,9 @@ test("comment filters float over the list, retain search, and dismiss accessibly
   expect(popupBounds.x).toBeGreaterThanOrEqual(panelBounds.x);
   expect(popupBounds.x + popupBounds.width).toBeLessThanOrEqual(panelBounds.x + panelBounds.width);
   expect(popupBounds.y + popupBounds.height).toBeLessThanOrEqual(panelBounds.y + panelBounds.height);
-  await panel.getByRole('tab', { name: /^Activity/ }).focus();
+  await panel.getByRole('tab', { name: /^Comments/ }).focus();
   await expect(popup).toHaveCount(0);
-  await panel.getByRole('tab', { name: /^Activity/ }).click();
+  await panel.getByRole('tab', { name: /^Comments/ }).click();
   await expect(popup).toHaveCount(0);
 });
 

@@ -562,12 +562,12 @@ export function Threadmark({
   onSignOut,
   inviteSuggestions,
   shareUrl,
-  linkAccess,
+  linkAccess: _retiredLinkAccess,
   members,
   onInvite,
   onMemberChange,
   onResendInvite,
-  onLinkAccessChange,
+  onLinkAccessChange: _retiredLinkAccessChange,
   tours,
   onTourSave,
   aiConnection,
@@ -1414,7 +1414,7 @@ export function Threadmark({
       return;
     }
     setClearArmed(true);
-    showNotice("Clear all annotations and the current draft? Repeat Clear to confirm.");
+    showNotice("Clear all comments and the current draft? Repeat Clear to confirm.");
     clearTimeout(clearTimerRef.current);
     clearTimerRef.current = setTimeout(() => setClearArmed(false), 3500);
   }, [annotationsRef, clearAllAnnotations, clearArmed, interactionRef, regionRef, screenshotRef, selectionsRef, showNotice, textRef]);
@@ -1424,9 +1424,9 @@ export function Threadmark({
     if (!markdown) return;
     try {
       await navigator.clipboard.writeText(markdown);
-      showNotice(`${annotationsRef.current.length} annotation${annotationsRef.current.length === 1 ? "" : "s"} copied`);
+      showNotice(`${annotationsRef.current.length} comment${annotationsRef.current.length === 1 ? "" : "s"} copied`);
     } catch {
-      showNotice("Couldn’t copy annotations");
+      showNotice("Couldn’t copy comments");
     }
   }, [annotationsRef, showNotice]);
 
@@ -1520,7 +1520,7 @@ export function Threadmark({
       await navigator.clipboard.writeText(url.toString());
       showNotice("Link copied");
     } catch {
-      showNotice("Couldn’t copy annotation link");
+      showNotice("Couldn’t copy the comment link");
     }
   }, [annotationsRef, showNotice]);
 
@@ -4112,7 +4112,7 @@ export function Threadmark({
     return () => window.removeEventListener("beforeunload", warn);
   }, [videoAtRisk]);
 
-  // Retired in beta.16: this API posted AI comments with no person choosing them. AI suggests; people decide.
+  // Retired in beta.15: this API posted AI comments with no person choosing them. AI suggests; people decide.
   const warnedRetiredReview = useRef(false);
   useEffect(() => {
     if (!onPageReviewRequested || warnedRetiredReview.current) return;
@@ -4200,6 +4200,7 @@ export function Threadmark({
     {presence && <Presence transport={presence} route={activeRoute} buildId={buildId} projectKey={projectKey} ignoredSelectors={ignoredSelectors} />}
     <Overlay
       mode={mode}
+      projectKey={projectKey}
       onStartTour={startTourMode}
       onExitTour={exitTourMode}
       tourDrafts={tourDrafts || []}
@@ -4381,12 +4382,10 @@ export function Threadmark({
       onSignOut={onSignOut}
       inviteSuggestions={Array.isArray(inviteSuggestions) ? inviteSuggestions : undefined}
       shareUrl={typeof shareUrl === "string" && shareUrl ? shareUrl : null}
-      linkAccess={["comment", "view", "off"].includes(linkAccess) ? linkAccess : null}
       members={Array.isArray(members) ? members.filter((member) => member && member.id != null && (member.displayName || member.email)) : []}
       onInvite={onInvite}
       onMemberChange={onMemberChange}
       onResendInvite={onResendInvite}
-      onLinkAccessChange={onLinkAccessChange}
       nextStepsOpen={nextStepsOpen}
       onShowNextSteps={setNextStepsOpen}
       canTickNextSteps={Boolean(shownNextSteps?.canEdit && callbacks.onNextStepDone.current)}

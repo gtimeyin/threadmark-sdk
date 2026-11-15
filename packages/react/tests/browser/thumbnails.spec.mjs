@@ -37,7 +37,7 @@ test('only real screenshots become thumbnails; a playback is never shown as a br
   // The same thread opened from its pin, as a popover beside it.
   await thread.getByRole('button', { name: 'All comments' }).click();
   await page.getByRole('button', { name: 'Close feedback panel' }).click();
-  await page.getByRole('button', { name: 'Edit annotation 1' }).dispatchEvent('click');
+  await page.getByRole('button', { name: 'Open comment 1' }).dispatchEvent('click');
   const popover = page.locator('.tm-popover--thread');
   await expect(popover.locator('.tm-replay-open')).toBeVisible();
   await expect.poll(() => insideCard(popover)).toBe(true);

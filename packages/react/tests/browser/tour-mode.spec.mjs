@@ -110,7 +110,7 @@ test("Tour mode edits a tour by clicking the page, then saves it to code", async
   // Esc goes back to the review toolbar, and drafts survive coming back.
   await page.keyboard.press("Escape");
   await expect(panel(page)).toHaveCount(0);
-  await expect(page.getByRole("toolbar", { name: "Threadmark annotation tools" })).toBeVisible();
+  await expect(page.getByRole("toolbar", { name: "Threadmark comment tools" })).toBeVisible();
   await openTourMode(page);
   await expect(panel(page).locator(".tm-tour-step")).toHaveCount(2);
   expect(pageErrors).toEqual([]);

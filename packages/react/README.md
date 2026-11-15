@@ -83,7 +83,7 @@ If you'd rather not run this yourself, add the script tag from your Threadmark d
 - Highlight page text with the browser's native text selection to annotate the exact quote.
 - Drag a marquee across eligible elements to collect them into one ordered group of up to 20 targets. If the marquee contains no eligible element, the same drag creates a viewport-clamped region and a privacy-filtered local snapshot preview.
 - Hold <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> while clicking to add or remove individual elements from an ordered group. Once at least two elements are selected, choose **Comment** on the Bar.
-- Choose **Sketch on a screenshot** from the feedback tools menu and drag around the exact area. Releasing the drag opens that crop directly in the in-page markup tools—there is no separate capture confirmation. Automatic snapshot masking remains part of the capture pipeline, while crop adjustment and reviewer-facing Privacy controls are deferred. Choosing **Use screenshot** finishes the markup and approves that exact crop for attachment; the universal comment popover does not add a second approval checkbox.
+- Choose **Sketch on a screenshot** from the feedback tools menu and drag around the exact area. Releasing the drag opens that crop directly in the in-page markup tools—there is no separate capture confirmation. Automatic snapshot masking remains part of the capture pipeline, while crop adjustment and reviewer-facing Privacy controls are deferred. **Comment ↵** on the Capture bar finishes the markup and approves that exact crop for attachment; the comment popover does not add a second approval checkbox.
 - Choose **Record an interaction**, use the page normally, then stop the recording. Threadmark captures a bounded, structured trace of clicks, safe input-change markers, command keys, scrolls, submissions, and same-document navigation. The trace can be played inside the standard comment popover and restored after reload; input values and printable keystrokes are never recorded.
 - Choose **Record a video** for a Loom-style walkthrough. See [Video feedback](#video-feedback).
 
@@ -248,7 +248,7 @@ The player waits a few seconds before showing the card, never covers the page wi
 
 ## Next steps
 
-Pass `nextSteps` and the **Feedback** panel gets a **Next steps** tab beside **Comments** (and **Versions**): a
+Pass `nextSteps` and the **Feedback** panel gets a **Next steps** tab beside **Comments** and **Inbox**: a
 checklist your review service keeps, for example one distilled by AI from the open feedback, as Threadmark's
 hosted service does. Reviewers see progress and whether the list is current, open a step to the quotes behind
 it (each opens its thread, here or on its own page through the thread link), and tick steps off.
@@ -602,7 +602,7 @@ Screenshot markup also uses the universal comment contract. The JSON contains se
 }
 ```
 
-Snapshot Blob data is never placed in JSON. For a submitted region or screenshot annotation, `feedback.evidence` contains whitelisted metadata while `onFeedbackCreate(feedback, context)` receives the matching `{ id, blob }` in `context.evidence`. The editor's marks are baked into that approved Blob. For Pencil markup, choosing **Use screenshot** is the attachment approval; cancelling the editor exposes no screenshot Blob to the callback. Existing one-argument callbacks continue to work. Consumer callbacks are isolated: an exception thrown by a callback does not crash the overlay.
+Snapshot Blob data is never placed in JSON. For a submitted region or screenshot annotation, `feedback.evidence` contains whitelisted metadata while `onFeedbackCreate(feedback, context)` receives the matching `{ id, blob }` in `context.evidence`. The editor's marks are baked into that approved Blob. For a sketch, **Comment ↵** on the Capture bar is the attachment approval; cancelling the editor exposes no screenshot Blob to the callback. Existing one-argument callbacks continue to work. Consumer callbacks are isolated: an exception thrown by a callback does not crash the overlay.
 
 Interaction traces are JSON-only and use the same `onFeedbackCreate` persistence boundary:
 
@@ -669,7 +669,7 @@ const ignoredSelectors = [".analytics-internal", "[data-test-fixture]"];
 
 Keep the selector array stable between renders. Invalid selectors fail closed and emit `invalid_ignored_selector`.
 
-The same built-in boundaries apply to region and selected screenshot-area captures. Inputs, editable fields, sensitive/ignored regions, iframes, video, embedded objects, and canvases are removed from the DOM-rendered image and their intersecting rectangles are painted with an opaque mask before the markup editor receives a raster. Those redactions are baked into the preview and cannot be removed with markup. These rules do not discover arbitrary unmarked PII, so reviewers must inspect the exact marked-up preview before choosing **Use screenshot**. Capture, redaction, markup, and attachment approval happen locally in browser memory; Threadmark never uploads or persists the image on its own.
+The same built-in boundaries apply to region and selected screenshot-area captures. Inputs, editable fields, sensitive/ignored regions, iframes, video, embedded objects, and canvases are removed from the DOM-rendered image and their intersecting rectangles are painted with an opaque mask before the markup editor receives a raster. Those redactions are baked into the preview and cannot be removed with markup. These rules do not discover arbitrary unmarked PII, so reviewers must inspect the exact marked-up preview before choosing **Comment ↵**. Capture, redaction, markup, and attachment approval happen locally in browser memory; Threadmark never uploads or persists the image on its own.
 
 Snapshot rendering also fails closed on unusually complex documents: more than 20,000 light/shadow DOM elements, a page dimension above 50,000px, or a page area above 100 million CSS pixels. Feedback remains available without image evidence when this safety budget is exceeded.
 
@@ -798,11 +798,41 @@ export function ReviewLayer({
 | `onFeedbackCreate` | `(feedback, context) => void \| Promise<void>` | Upserts created annotations, original-comment edits, and reply changes with approved JSON metadata plus in-memory evidence Blobs; async failures keep the draft open. |
 | `onFeedbackDelete` | `(feedback) => void \| Promise<void>` | Removes one persisted annotation; rejection keeps it visible. |
 | `onFeedbackClear` | `(feedback[]) => void \| Promise<void>` | Removes every persisted annotation; rejection keeps them visible. |
-| `onPageVersionSelect` | `(version, { route, url }) => void \| Promise<void>` | Lets the host navigate to the same route on another ready deployment; without it, Threadmark navigates in-page. |
+| `onPageVersionSelect` | `(version, { route, url }) => void \| Promise<void>` | Reserved: the overlay doesn't call it today (the Versions tab was removed). `pageVersions` still powers Carry forward. |
 | `onFeedbackCarryForward` | `(feedback, version, { route, url }) => void \| Promise<void>` | Explicit host-owned copy into another deployment; providing it enables the carry-forward control. |
 | `onPollVote` | `(feedback, optionIds) => PollResults \| Promise<PollResults>` | Stores a poll vote and returns the results; providing it adds **Add a poll** to the composer. |
 | `onNextStepDone` | `(step, done) => void \| Promise<void>` | Stores a next step as done or not done; the tick shows at once and a rejection puts it back. Without it, the checklist is read-only. |
 | `onNextStepsCopy` | `(steps) => void \| Promise<void>` | Adds **Copy for agent** to the Next steps tab; called from the click, so the host can put its own prompt on the clipboard. |
+| `reviewers` | `{ id, displayName, avatarUrl? }[]` | People who can be @mentioned in comments and replies. |
+| `onReactionChange` | `(feedback, change) => reactions[] \| Promise<reactions[]>` | Adds emoji reactions to messages; the host stores them and returns the message's reactions. |
+| `notifications` | `ThreadmarkNotification[]` | The reviewer's Inbox. Passing an array adds **Inbox** to the Bar (with the unread count) and as a panel tab. Threadmark only shows them. |
+| `onNotificationOpen` | `(notification) => void` | An Inbox item was opened. Threadmark opens its thread itself when it's in this project's records. |
+| `onNotificationsRead` | `(ids) => void` | Inbox items were read (opened, or Mark all read); mark them read in your store. |
+| `dashboardUrl` | `string` | An http(s) URL or same-site path; adds **Open the dashboard** to the More menu. |
+| `surveys` | `ThreadmarkSurvey[]` | Questions for people on the site; ones on the current page show at the top of Comments. |
+| `surveyResults` | `Record<surveyId, results>` | Answers per survey, for the results view (Export, Share results). |
+| `onSurveyPublish` | `(survey) => void \| Promise<void>` | Adds **Ask a question** to Tools and stores what's published. |
+| `onSurveyEnd` | `(surveyId) => void` | Ends a live survey from its results. |
+| `projectName` | `string` | Shown in Share and in the You menu. |
+| `shareUrl` | `string` | The review link in Share, with Copy link. Share says only invited people can open it, after signing in. |
+| `members` | `ThreadmarkMember[]` | People with access, shown in Share with their role; `pending` invites show Resend. |
+| `onInvite` | `({ entries, role, message? }) => void \| Promise<void>` | Invite people by name or email. With `shareUrl`, adds Share to the panel and the More menu. |
+| `inviteSuggestions` | `{ id, displayName?, email?, avatarUrl?, note? }[]` | People suggested while typing in Share, usually your workspace. |
+| `onMemberChange` | `(memberId, { role } \| { remove: true }) => void \| Promise<void>` | Makes each person's access editable: Can edit, Can comment, Can view, Make owner (owners only), Remove access. |
+| `onResendInvite` | `(memberId) => void \| Promise<void>` | Resend a pending invite. |
+| `linkAccess`, `onLinkAccessChange` | — | Ignored since beta.15: reviews are private and there's no public link setting. |
+| `faces` | `ThreadmarkFace[]` | Faces people can pick in Your face; their initial is always offered. |
+| `onReviewerChange` | `({ displayName, avatarUrl }) => void \| Promise<void>` | Lets people change their face and name (Your face, Your settings). |
+| `notificationSettings`, `onNotificationSettingsChange` | `ThreadmarkNotificationSettings`, `(settings) => void` | Notification preferences in Your settings. |
+| `onLeaveProject` | `() => void \| Promise<void>` | Adds Leave project to Your settings; it asks once first. |
+| `onSignOut` | `() => void` | Adds Sign out to the You menu. |
+| `onAiReview` | `({ route, focus, page, signal, report }) => Promise<{ findings, summary?, checked? }>` | Adds **Ask AI to review this page**. Findings stay drafts until someone keeps or dismisses each one. |
+| `onAskAi` | `({ element, label, route, question, history }) => Promise<…>` | Adds **Ask AI** (⌘K) to the composer for one element. Nothing posts until someone chooses to. |
+| `onAiDismiss` | `(finding, reason) => void` | Hears why an AI finding was dismissed. |
+| `onPageReview`, `onPageReviewDismiss` | see `index.d.ts` | A hosted page review (Review this page) whose suggestions are kept one by one. |
+| `onPageReviewRequested` | — | Retired in beta.15 and ignored: it posted AI comments without a person choosing them. Use `onAiReview`. |
+| `presence` | `{ connect(scope, onMembers, onError) }` | Live cursors and who's on the page, through your own transport (see Presence). |
+| `tours`, `onTourSave`, `onTourSendToAi`, `aiConnection`, `onConnectAi` | see Tours | Tour mode: edit tours in place and save them to code. |
 | `onError` | `(error) => void` | Reports configuration, duplicate-instance, snapshot-capture, submission, or deletion errors. |
 
 ### Utility exports
@@ -882,7 +912,7 @@ Coordinate-only region and Pencil pins require repair when a different known bui
 
 ### The side panel
 
-**Comments** and **Inbox** on the Bar open a 380px dark panel on that view; clicking the one already showing closes it. The panel's tabs are icons, with their names as tooltips and for screen readers. **Activity** lists supplied records for the current project, including other pages and builds; **Inbox** appears when the host passes `notifications`, and **Next steps** when it passes `nextSteps`. With the panel open, a thread opens in the panel's place with "← All comments". Cards show status, author, original screenshot, assignee, replies, and target-repair state. Search includes comment and reply text. The filter icon opens a floating dropdown without shifting the list: toggle resolved comments, your threads, the current page, or targets needing repair; **More filters** includes status, reviewer, page, and original build selectors. Search and applied filters remain active when the dropdown is closed. Selecting a different page navigates to its same-origin path with a thread link. Only current-page pins render on the page. The panel does not fetch other records itself: supply authorized project records through `annotations`. Escape closes the filter dropdown first, then the panel, before leaving comment mode.
+**Comments** and **Inbox** on the Bar open a 380px dark panel on that view; clicking the one already showing closes it. The panel's tabs are icons, with their names as tooltips and for screen readers. **Comments** lists supplied records for the current project, including other pages and builds; **Inbox** appears when the host passes `notifications`, and **Next steps** when it passes `nextSteps`. With the panel open, a thread opens in the panel's place with "← All comments". Cards show status, author, original screenshot, assignee, replies, and target-repair state. Search includes comment and reply text. The filter icon opens a floating dropdown without shifting the list: toggle resolved comments, your threads, the current page, or targets needing repair; **More filters** includes status, reviewer, page, and original build selectors. Search and applied filters remain active when the dropdown is closed. Selecting a different page navigates to its same-origin path with a thread link. Only current-page pins render on the page. The panel does not fetch other records itself: supply authorized project records through `annotations`. Escape closes the filter dropdown first, then the panel, before leaving comment mode.
 
 
 ### Review workflow and deployment verification
@@ -909,7 +939,7 @@ New comments include optional `feedback.captureEnvironment`: coarse browser/vers
 
 `collectPageReview()` returns the page outline and the built-in checks (unnamed controls, missing image alt text, heading jumps, text below 12px, possible horizontal overflow) without form values, protected content, the overlay or ignored selectors. `onAiReview` receives the same outline as `page`.
 
-> `onPageReviewRequested` was retired in beta.16 and is now ignored, with a console warning. It posted AI comments without a person choosing them. Use `onAiReview`: its suggestions stay drafts until someone keeps or dismisses each one.
+> `onPageReviewRequested` was retired in beta.15 and is now ignored, with a console warning. It posted AI comments without a person choosing them. Use `onAiReview`: its suggestions stay drafts until someone keeps or dismisses each one.
 
 `collectPageReview({ route, buildId, ignoredSelectors, signal })` is also exported for consumer-owned command surfaces. It returns `{ version, route, buildId, findings, truncated }` without posting feedback or making network requests.
 

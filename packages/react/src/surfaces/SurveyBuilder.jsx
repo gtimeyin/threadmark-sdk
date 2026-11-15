@@ -2,7 +2,7 @@
 // Three steps — Question, Where, Who and when — with sensible defaults so most people just press
 // Publish. Problems are named next to their field, and Next stays available (board 03, 13a).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AddIcon, CloseIcon, DragIcon, PollIcon, ScoreIcon, OpenAnswerIcon, CommentIcon, BrowserIcon, HomeIcon } from "../icons.jsx";
+import { ActionsIcon, AddIcon, CloseIcon, DragIcon, ScoreIcon, OpenAnswerIcon, CommentIcon, BrowserIcon, HomeIcon, SurveyIcon } from "../icons.jsx";
 import { Button, Input, Key, Segmented, Switch } from "../ui/primitives.jsx";
 import { ScaleInput, SurveyCard } from "../surveys/SurveyCard.jsx";
 import { createSurveyDraft, normalizeSurvey, surveyProblems, SCALE_POINTS } from "../surveys/schema.js";
@@ -115,7 +115,7 @@ export function SurveyBuilder({ route = "/", onPublish, onClose }) {
       )}
       <section className="tm-survey-builder" role="dialog" aria-modal="true" aria-labelledby="tm-survey-title" onKeyDown={onKeyDown}>
         <header className="tm-survey-builder__header">
-          <PollIcon aria-hidden="true" focusable="false" className="tm-survey-builder__mark" />
+          <SurveyIcon aria-hidden="true" focusable="false" className="tm-survey-builder__mark" />
           <h2 id="tm-survey-title">Ask a question</h2>
           <button type="button" className="tm-survey-builder__esc" onClick={() => onClose?.(null)} aria-label="Close question builder"><Key>Esc</Key></button>
         </header>
@@ -135,7 +135,7 @@ export function SurveyBuilder({ route = "/", onPublish, onClose }) {
                 label="Question type"
                 value={question.kind}
                 onChange={(kind) => update((current) => { current.question.kind = kind; return current; })}
-                options={[{ value: "poll", label: "Poll", icon: PollIcon }, { value: "scale", label: "Scale", icon: ScoreIcon }, { value: "text", label: "Text", icon: OpenAnswerIcon }]}
+                options={[{ value: "poll", label: "Choice", icon: ActionsIcon }, { value: "scale", label: "Scale", icon: ScoreIcon }, { value: "text", label: "Text", icon: OpenAnswerIcon }]}
               />
               <Input
                 ref={firstFieldRef}

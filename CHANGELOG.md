@@ -4,36 +4,22 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
-### Security and privacy
-- **Video records this tab only.** Firefox and Safari let people share a window or their whole screen even when the tab is asked for. Threadmark now checks what was shared and stops anything that isn't a tab before a frame is recorded, saying why. Engines that don't report what was shared are still allowed.
-- **Session replay masks editable regions.** Text typed into rich-text editors and other `contenteditable` areas was recorded in clear; it is now masked like form fields, as screenshots already did.
-- **Survey export can't run formulas.** Written answers starting with `=`, `+`, `-` or `@` get a leading apostrophe so Excel and Sheets show them as text. The file now starts with a UTF-8 marker so Excel reads accents and other non-ASCII text correctly.
-
-### Fixed
-- Tools and More open below a Bar snapped to a top spot, instead of off the top of the window.
-- Only a comment's author is offered Edit on the first comment of a thread (replies already worked this way).
-- ⌘⇧F and ⌘. no longer throw away an unsaved comment: they ask first, as Esc does. During an interaction recording they do nothing; Stop ends it.
-- The resting Bar's Comments button opens Comments, not Next steps when that was the last tab used.
-- Pick any polls keep quick picks: choosing A then B before the host answers sends [A] then [A, B], not [B]. A failed vote puts the saved vote back.
-- Esc no longer discards an interaction recording; it belongs to the page being recorded (for example to close its own dialog). Cancel and Stop end it.
-- Leaving or reloading the page while a video is recording, or before it's posted, asks first.
-- Closing an AI review with suggestions nobody kept or dismissed asks once before dropping them.
-
-### Changed — please read before upgrading
-- **`onPageReviewRequested` is retired and ignored**, with a one-time console warning. It posted AI comments without a person choosing them. Use `onAiReview`, where suggestions stay drafts until someone keeps or dismisses each one. `collectPageReview()` is unchanged.
-
-## [0.1.0-beta.15] — 2026-11-10
+## [0.1.0-beta.15] — not yet published
 
 The review overlay is rebuilt on the November brand, and gains surveys, an Inbox, sharing, AI review, a link to your dashboard, and layouts for phones and tablets. This release also carries the SDK changes from the unpublished beta.14.
 
 ### Changed — please read before upgrading
 
-- **New look.** The overlay uses the brand palette (Forest `#035D47`, Orange `#F15722` pins and focus ring, Lime `#E0F354` actions on dark chrome), Geist only, 6 / 8 / 16px radii and the Threadmark icon set. The launcher and toolbar are replaced by one dark **Bar** at the bottom of the page, which says what's waiting (Leave feedback, N new, All caught up, Offline) and carries the tools in comment mode.
+- **New look.** The overlay uses the brand palette (Forest `#035D47`, Orange `#F15722` pins and focus ring, Lime `#E0F354` actions on dark chrome), Geist only, 6 / 8 / 16px radii and the Threadmark icon set. The launcher and toolbar are replaced by one dark **Bar** at the bottom of the page: grip, **Tools**, **⋯ More**, **Comments** and **Inbox**, the same at rest and while commenting.
 - **Polls are attached to comments.** The composer no longer has Comment / Question / Poll tabs. With `onPollVote`, it shows **Add a poll**; new comments carry `ask: { kind: "poll", … }` or no `ask`. Comments saved with `ask: { kind: "question" }` still load and show a "Question" label.
 - **Polls show results after you vote.** Pick one shows results straight away, Pick any after **Done**, and you can change or take back your vote. The Activity list hides shares until you've voted.
 - The panel's **Versions** tab is gone. `pageVersions` still powers **Carry forward** and **Compare with current page** in a thread's ⋯ menu.
 - `@solar-icons/react` and the Bricolage font are no longer dependencies.
-- Wording says "comment", not "annotation", throughout the overlay.
+- Wording says "comment", not "annotation", throughout the overlay, including its button labels and messages ("Open comment 3", "Stop commenting (Esc)", "Threadmark comment tools"). The panel's first tab is **Comments** (it was Activity), matching the Bar button.
+- **`onPageReviewRequested` is retired and ignored**, with a one-time console warning. It posted AI comments without a person choosing them. Use `onAiReview`, where suggestions stay drafts until someone keeps or dismisses each one. `collectPageReview()` is unchanged.
+- **Share says reviews are private.** The "Anyone with the link can…" setting is gone: Share says only invited people can open the link, after signing in. `linkAccess` and `onLinkAccessChange` are ignored. **Can edit** can now be granted when inviting and from someone's access menu.
+- **Ask a question** (surveys) has its own icon and no longer uses the word "poll": its answer type is **Choice**. **Add a poll** in the composer is the only poll.
+- The **Comments** badge counts the whole project at rest and while commenting, and "new" means comments you haven't seen by id, cleared whenever the Comments panel opens.
 
 ### Added
 - Inbox notifications understand the kinds a review service sends besides replies and mentions: `comment` ("left a comment"), `video` ("posted a video"), `reopened` ("reopened a thread") and `poll` ("started a poll"). Unknown kinds still read as "left a note".
@@ -78,8 +64,19 @@ The review overlay is rebuilt on the November brand, and gains surveys, an Inbox
 - The Tools and More menus open above the side panel instead of under it.
 - The side panel header no longer overlaps itself when Inbox and Next steps are both present: its tabs are now icons, with their names kept as tooltips and for screen readers.
 - Next steps rows in the dark panel hover as flat, edge-to-edge rows instead of rounded light-theme cards.
+- Tools and More open below a Bar snapped to a top spot, instead of off the top of the window.
+- Only a comment's author is offered Edit on the first comment of a thread (replies already worked this way).
+- ⌘⇧F and ⌘. no longer throw away an unsaved comment: they ask first, as Esc does. During an interaction recording they do nothing; Stop ends it.
+- The resting Bar's Comments button opens Comments, not Next steps when that was the last tab used.
+- Pick any polls keep quick picks: choosing A then B before the host answers sends [A] then [A, B], not [B]. A failed vote puts the saved vote back.
+- Esc no longer discards an interaction recording; it belongs to the page being recorded (for example to close its own dialog). Cancel and Stop end it.
+- Leaving or reloading the page while a video is recording, or before it's posted, asks first.
+- Closing an AI review with suggestions nobody kept or dismissed asks once before dropping them.
 
-### Security
+### Security and privacy
+- **Video records this tab only.** Firefox and Safari let people share a window or their whole screen even when the tab is asked for. Threadmark now checks what was shared and stops anything that isn't a tab before a frame is recorded, saying why. Engines that don't report what was shared are still allowed.
+- **Session replay masks editable regions.** Text typed into rich-text editors and other `contenteditable` areas was recorded in clear; it is now masked like form fields, as screenshots already did.
+- **Survey export can't run formulas.** Written answers starting with `=`, `+`, `-` or `@` get a leading apostrophe so Excel and Sheets show them as text. The file now starts with a UTF-8 marker so Excel reads accents and other non-ASCII text correctly.
 
 - Tour steps' `page` and `showTo.path` must be paths on the same site. Protocol-relative values such as `//other.site`, backslashes, and control characters now fail validation (in `validateTour` and `tour.schema.json`), so a tour file can't hand the host's router an off-site address.
 - Tour `theme` values that could load a resource or break out of a CSS value, such as `url()`, `image-set()`, CSS escapes, or comments, are now ignored.
