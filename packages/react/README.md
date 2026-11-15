@@ -2,7 +2,7 @@
 
 An isolated, in-page review overlay for collecting structured feedback on live product UI. Threadmark lets a reviewer click an element, highlight native text, drag across eligible elements for grouped feedback, drag across empty space for region evidence, or select and mark up a privacy-filtered screenshot area before returning a normalized payload to the host application.
 
-> **Beta candidate:** This package provides local capture plus controlled hydration and lifecycle callbacks. Storage, evidence upload, authentication, and service communication remain consumer-owned.
+> **Beta:** This package captures feedback in the page and hands it to your app through callbacks. It makes no network requests and saves nothing by itself: storage, screenshot upload, sign-in and notifications are yours to provide (see [Setting up your own storage](#setting-up-your-own-storage)). Hosted Threadmark projects use the script tag from the dashboard instead; this package does not connect to them yet.
 
 ## Install
 
@@ -10,19 +10,9 @@ An isolated, in-page review overlay for collecting structured feedback on live p
 npm install -D threadmark-react@beta
 ```
 
-Until the first registry release is complete, contributors can install the packed tarball or use the local workspace dependency shown below.
+Always install with `@beta`. Releases are published under the `beta` tag.
 
 React and React DOM 18.2 or 19 are peer dependencies.
-
-For local development in this repository, use a file dev dependency:
-
-```json
-{
-  "devDependencies": {
-    "threadmark-react": "file:../../packages/react"
-  }
-}
-```
 
 ## Quick start
 
@@ -55,7 +45,7 @@ export function App() {
 }
 ```
 
-On a local hostname, Threadmark renders a **Review page** launcher. Reviewers can also toggle Review mode with <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>. Once active, one compact toolbar can be dragged by its grip to a convenient position.
+On a local hostname, Threadmark shows the **Bar**, a small dark bar at the bottom of the page that says what is waiting: **Leave feedback**, new comments, **All caught up** or **Offline**. Click it, or press <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>, to start commenting. The Bar can be dragged to one of six spots, shrunk to a dot (<kbd>Command/Ctrl</kbd> + <kbd>.</kbd>) or hidden on a page; those choices are saved per browser.
 
 ## Setting up your own storage
 
@@ -85,14 +75,14 @@ The quick-start callback above only logs feedback. Threadmark does **not** inclu
 
 5. **Verify with two signed-in reviewers.** Post a comment with a screenshot, reload, add a reply, and confirm both reviewers can see the same thread. Then verify that a reviewer outside the project cannot list, edit, or fetch its screenshot. This checks both persistence and the access boundary.
 
-If you prefer managed collaboration, explicitly connect Threadmark Cloud instead of implementing these operations yourself. The SDK does not connect to Cloud automatically.
+If you'd rather not run this yourself, add the script tag from your Threadmark dashboard instead of this package. It brings hosted storage, sign-in and notifications. Using this npm package with a hosted Threadmark project is not supported yet.
 
 ## Gesture-first annotations
 
 - Click an eligible element to open its anchored comment popover without activating the host control. Keyboard reviewers can focus an element and press Enter or Space.
 - Highlight page text with the browser's native text selection to annotate the exact quote.
 - Drag a marquee across eligible elements to collect them into one ordered group of up to 20 targets. If the marquee contains no eligible element, the same drag creates a viewport-clamped region and a privacy-filtered local snapshot preview.
-- Hold <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> while clicking to add or remove individual elements from an ordered group. Once at least two elements are selected, choose **Comment** in the toolbar.
+- Hold <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> while clicking to add or remove individual elements from an ordered group. Once at least two elements are selected, choose **Comment** on the Bar.
 - Choose **Sketch on a screenshot** from the feedback tools menu and drag around the exact area. Releasing the drag opens that crop directly in the in-page markup tools—there is no separate capture confirmation. Automatic snapshot masking remains part of the capture pipeline, while crop adjustment and reviewer-facing Privacy controls are deferred. Choosing **Use screenshot** finishes the markup and approves that exact crop for attachment; the universal comment popover does not add a second approval checkbox.
 - Choose **Record an interaction**, use the page normally, then stop the recording. Threadmark captures a bounded, structured trace of clicks, safe input-change markers, command keys, scrolls, submissions, and same-document navigation. The trace can be played inside the standard comment popover and restored after reload; input values and printable keystrokes are never recorded.
 - Choose **Record a video** for a Loom-style walkthrough. See [Video feedback](#video-feedback).
@@ -280,28 +270,34 @@ Tags are `bug`, `polish`, `copy`, `idea`, and `question`. Everything is shown as
 loads or stores steps itself: supply the updated `nextSteps` after a tick. `integrations/supabase` has a
 ready-made hook (`useThreadmarkNextSteps`) for Threadmark's hosted service.
 
-## Toolbar and markers
+## The Bar and pins
 
-The draggable toolbar has two menus beside the **Feedback** panel and Close.
+In comment mode the Bar shows "Click anything, or select text · Esc", then **Tools**, **⋯ More**, the panel button and Close.
 
-The **feedback tools** menu (the cursor icon) lists the ways to leave feedback. **Comment** is the default; the others start a one-off capture and return to Comment when it is posted, or when the reviewer chooses **Back to Comment** or presses <kbd>Escape</kbd>:
+**Tools** lists the ways to leave feedback. **Comment** is the default; the others start a one-off capture and return to Comment when it is posted or when the reviewer presses <kbd>Escape</kbd>:
 
 - <kbd>C</kbd> **Comment**: click, select text, or drag an area;
-- <kbd>S</kbd> **Sketch on a screenshot**: releasing a valid rectangle opens the in-page markup tools immediately;
-- <kbd>R</kbd> **Record an interaction**: a maximum 15-second structured trace while the host page stays usable; and
-- <kbd>V</kbd> **Record a video**: the in-page video recorder (camera, microphone, and capture mode).
+- <kbd>S</kbd> **Sketch on a screenshot**: a Capture bar with Box (<kbd>B</kbd>), Pen (<kbd>P</kbd>), Whole view (<kbd>W</kbd>) and three colours;
+- <kbd>R</kbd> **Record an interaction**: up to 15 seconds of clicks and steps while the page stays usable;
+- <kbd>V</kbd> **Record a video**: your tab, voice and camera (when `videoRecording` is on);
+- **Ask a question**: a poll, scale or open question for visitors (with `onSurveyPublish`);
+- **Ask AI to review this page** (with `onAiReview`); and
+- **Build a tour**.
 
-The **More actions** menu (**⋯**) holds everything else. A dot on it shows when the page is paused or pins are hidden, and a coral dot when comments need repair:
+**⋯ More** holds everything else. A dot on it shows when the page is paused or pins are hidden, and an Orange dot when comments need repair:
 
 - <kbd>P</kbd> pauses or resumes page animations and media;
-- <kbd>H</kbd> hides or shows saved comment pins;
-- <kbd>Shift</kbd> + <kbd>C</kbd> copies the current annotations as structured Markdown;
+- <kbd>H</kbd> hides or shows comment pins;
+- **Shrink to a dot** and **Hide on this page**;
+- **Share**, **Send feedback to…** and **Your settings**, when the host supplies them;
+- <kbd>?</kbd> **Keyboard shortcuts**;
+- <kbd>Shift</kbd> + <kbd>C</kbd> copies the comments as Markdown;
 - **Repair lost comments** opens the first comment whose target needs repair; and
-- <kbd>X</kbd> arms a destructive clear and opens the menu to show it; repeat it within 3.5 seconds to remove the current draft and saved annotations.
+- <kbd>X</kbd> arms a clear; press it again within 3.5 seconds to remove the draft and every saved comment.
 
-<kbd>Escape</kbd> closes an open menu, cancels the current popover, or exits Review mode. Both menus work with the arrow keys, <kbd>Home</kbd>, and <kbd>End</kbd>.
+<kbd>Escape</kbd> closes the innermost menu or sheet, cancels the current comment, or leaves comment mode. Menus work with the arrow keys, <kbd>Home</kbd> and <kbd>End</kbd>.
 
-Letter shortcuts are disabled while typing in an input or editable field; <kbd>Escape</kbd> remains available. Added annotations stay as numbered markers. Click a marker to open its discussion, edit the original comment, reply to any previous message, or start the visible delete flow. Threadmark keeps records in memory by default; consumers can persist callback results and pass them back through `annotations` after reload. Reopened records resolve stable IDs first, validate saved DOM paths, and use conservative fingerprints only when there is one unambiguous match.
+Letter shortcuts are off while typing in an input or editable field; <kbd>Escape</kbd> still works. Saved comments stay on the page as numbered pins. Click a marker to open its discussion, edit the original comment, reply to any previous message, or start the visible delete flow. Threadmark keeps records in memory by default; consumers can persist callback results and pass them back through `annotations` after reload. Reopened records resolve stable IDs first, validate saved DOM paths, and use conservative fingerprints only when there is one unambiguous match.
 
 ## Stable target IDs
 
@@ -404,7 +400,7 @@ export default function Projects() {
 
 ### Build tours in Tour mode
 
-Pass your tour files to the review overlay as well, and the toolbar gains **Build a tour**. With Vite, add the dev-server plugin so **Save to code** writes files straight into your project:
+Pass your tour files to the review overlay as well, and the Bar's Tools menu gains **Build a tour**. With Vite, add the dev-server plugin so **Save to code** writes files straight into your project:
 
 ```js
 // vite.config.js
@@ -523,7 +519,7 @@ const [annotations, setAnnotations] = useState([]);
 
 Each `annotations` entry has the shape `{ feedback, context }`. Hydration normalizes payloads and replies, verifies evidence metadata against each Blob, restores exact text ranges when the quote still has one match, and repairs every member of a multi-target annotation independently. Region and screenshot records retain their saved page geometry. Records are scoped to the active `projectKey` and canonical route. Create, edit, reply, reply-delete, annotation-delete, and clear mutations may return promises; a rejected mutation leaves the existing discussion visible.
 
-Comments stay visible when a page is updated or opened on another deployment. If the exact target no longer matches but one likely element does (same tag and role with similar text, or the same DOM position), its marker appears there in a dashed **element changed** style; nothing is attached until a reviewer chooses **Confirm location**, which is saved as a repin with the previous location in `pinHistory`, or **Choose another**. If nothing matches, a faded ghost marker and outline show the element's last known page position (`target.pageBounds`, recorded for new comments) with its original build, and the thread offers **Repin comment**. Region and Pencil comments from another build use the same ghost treatment. If a target matches more than one live element, Threadmark refuses to guess. The toolbar exposes the affected annotation, the popover shows **Target needs repair**, and the original comment and approved evidence remain available. Partial groups report how many members restored without silently shrinking `targets[]`. **Recheck** reruns resolution after the host page changes.
+Comments stay visible when a page is updated or opened on another deployment. If the exact target no longer matches but one likely element does (same tag and role with similar text, or the same DOM position), its marker appears there in a dashed **element changed** style; nothing is attached until a reviewer chooses **Confirm location**, which is saved as a repin with the previous location in `pinHistory`, or **Choose another**. If nothing matches, a faded ghost marker and outline show the element's last known page position (`target.pageBounds`, recorded for new comments) with its original build, and the thread offers **Repin comment**. Region and Pencil comments from another build use the same ghost treatment. If a target matches more than one live element, Threadmark refuses to guess. **⋯ More → Repair lost comments** opens the affected comment, the popover shows **Target needs repair**, and the original comment and approved evidence remain available. Partial groups report how many members restored without silently shrinking `targets[]`. **Recheck** reruns resolution after the host page changes.
 
 Editing a saved annotation also offers **Copy link**. Deep links use the `threadmark` URL query parameter, for example `?threadmark=feedback-id`; after the consumer hydrates that route's records, Threadmark enters Review mode and opens the exact annotation automatically. Treat annotation IDs as non-secret identifiers and keep authorization in the hosted review service.
 
@@ -681,7 +677,7 @@ Snapshots wait briefly for the host page's fonts and embed available web-font fa
 
 ## Page version history
 
-Threadmark can show other deployments for the route currently under review. The React package does not call Vercel directly: fetch deployment records in a trusted server route, combine them with per-build feedback counts, and pass the safe result through `pageVersions`. Use immutable deployment URLs rather than mutable branch aliases.
+Threadmark can use other deployments of the route under review for **Carry forward** and **Compare with current page** in a thread's ⋯ menu. There is no separate Versions tab. The React package does not call Vercel directly: fetch deployment records in a trusted server route, combine them with per-build feedback counts, and pass the safe result through `pageVersions`. Use immutable deployment URLs rather than mutable branch aliases.
 
 This repository includes a tested, framework-neutral [Vercel host adapter](https://github.com/gtimeyin/threadmark/tree/main/integrations/vercel) that performs the provider request, membership boundary, response reduction, count merge, and unavailable-history merge outside the SDK.
 
@@ -834,19 +830,19 @@ If path segments contain customer or record identifiers, pass a templated canoni
 - Keyboard reviewers can Tab to a target and press Enter or Space while Review mode is active.
 - Added annotations remain as editable markers. Reopening restores the author-attributed discussion, approved screenshot evidence, and interaction traces supplied in the hydrated record; edits and replies preserve the capture data and reuse the feedback ID so consumers can upsert the result.
 - Review controls provide visible keyboard focus and respect reduced-motion preferences.
-- Launcher, toolbar, marker, popover, reply, composer, deletion, markup, and toast state changes use short motion tokens to preserve spatial context. Under `prefers-reduced-motion: reduce`, Threadmark removes transitions and animations while keeping every state immediately available.
+- Bar, pin, popover, reply, composer, deletion, markup, and toast state changes use short motion tokens to preserve spatial context. Under `prefers-reduced-motion: reduce`, Threadmark removes transitions and animations while keeping every state immediately available.
 
 ## Current limitations
 
 - Feedback is not persisted by the package; consumers must store callback records and hydrate them through `annotations`.
 - Region and selected screenshot-area evidence are approximate DOM-rendered rasters, not operating-system screenshots. Cross-origin media, frames, WebGL/canvas content, unusual transforms, and unsupported CSS may be omitted or differ from the visible compositor output.
-- Region capture currently supports one region per draft; resizing and manual masks are not implemented yet.
+- Region capture supports one region per draft, and there are no manual masks yet.
 - Region dragging is pointer-first in this alpha; keyboard region initialization and edge adjustment remain a beta accessibility gate.
 - Grouped feedback stores one ordered target group but does not yet create a snapshot per member.
 - Interaction capture replays its structured event trace; it does not record video frames or automatically re-execute actions against the host application. Use video feedback for a recording.
-- Video feedback records tab pixels without masking. Tab capture needs a desktop browser with `getDisplayMedia`; Chromium-based browsers offer the current tab directly, while Safari and Firefox show their full sharing picker. Recordings are WebM or MP4 depending on the browser, and transcription is not included.
+- Video feedback records tab pixels as they appear, including typing, unless the reviewer uses **Blur**. Tab capture needs a desktop browser with `getDisplayMedia`; Chromium-based browsers offer the current tab directly, while Safari and Firefox show their full sharing picker. Recordings are WebM or MP4 depending on the browser, and transcription is not included.
 - Session replay rebuilds the page from DOM snapshots. Canvas, WebGL, video, cross-origin frames, and closed shadow roots appear blank, and replays of pages with cross-origin stylesheets depend on those stylesheets still being reachable.
-- Collaboration, authentication, and agent dispatch are not included yet.
+- Storage, sign-in, notifications and AI models are not included; the host supplies them through callbacks.
 - Same-origin iframes, cross-origin frames, and closed shadow roots are not selection targets.
 - Production activation is intentionally unavailable.
 
@@ -872,15 +868,11 @@ npm run dev
 
 The fixture consumes `threadmark-react` through `file:../../packages/react` and logs every submitted feedback payload in the page.
 
-## License
-
-Threadmark is available under the [MIT License](./LICENSE). Third-party software notices are listed in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
-
 ### Comment screenshots and repinning
 
 Element, text, group, and completed interaction comments automatically prepare a masked local screenshot. It is always attached through `onFeedbackCreate(feedback, context)` when the reviewer chooses **Post**; the composer does not show a preview or an approval checkbox. Region drags keep their preview and are attached automatically as well. Automatic masking covers inputs, editable fields, sensitive and ignored regions, iframes, video, embedded objects, and canvases, but does not detect arbitrary unmarked PII, so mark sensitive areas with `data-threadmark-sensitive`. Capture failures preserve the comment with unavailable evidence metadata. No evidence is sent before posting. Replies reuse the original screenshot.
 
-Persist both the serializable feedback and the Blob sidecar in `context.evidence`. Hydrate both through `annotations` to keep the preview available after reload or target removal. The basic React example uses IndexedDB; the optional Threadmark Cloud adapter also supports private shared screenshot storage. The host must explicitly connect an authenticated Cloud client; the SDK itself makes no Cloud requests. Production hosting and identity configuration remain the consumer’s responsibility.
+Persist both the serializable feedback and the Blob sidecar in `context.evidence`. Hydrate both through `annotations` to keep the preview available after reload or target removal. The basic React example uses IndexedDB. The SDK itself makes no network requests; hosting and sign-in remain the consumer’s responsibility.
 
 **Repin comment** is available on existing discussions and is the primary repair action for missing targets. Select one live element, then confirm. Cancellation or a rejected persistence callback leaves the original location unchanged. The same feedback ID, original `target`/`targets`, build, author, replies, and evidence remain intact. `feedback.pin` identifies the current location; `pinHistory` contains previous locations and reviewer/build/time context. Subsequent edits and reloads retain these fields. Consumers should treat this as an update to the existing record, validate membership and reviewer identity server-side, and persist the full normalized record. Repinning does not take or replace a screenshot.
 
@@ -888,23 +880,18 @@ If `onFeedbackCreate` returns an authoritative record when confirming or repinni
 
 Coordinate-only region and Pencil pins require repair when a different known build is active; their original evidence remains available. Ordinary element pins continue using conservative stable-ID/path/fingerprint restoration. Missing or ambiguous matches never silently attach to another element.
 
-### Feedback panel
+### The side panel
 
-Choose the **Feedback panel** icon in the annotation toolbar. Its **Comments** tab lets reviewers browse supplied records for the current project, including other pages and builds. Cards show status, author, original screenshot, assignee, replies, and target-repair state. Search includes comment and reply text. The filter icon opens a floating dropdown without shifting the list: toggle resolved comments, your threads, the current page, or targets needing repair; **More filters** includes status, reviewer, page, and original build selectors. Search and applied filters remain active when the dropdown is closed. Selecting a different page navigates to its same-origin path with a thread link. Only current-page pins render on the page. The panel does not fetch other records itself: supply authorized project records through `annotations`, or use Cloud’s project-wide comments view. Escape closes the filter dropdown first, then the panel, before exiting review mode. When the host supplies `pageVersions`, a **Versions** tab lists those deployments in the same panel.
+The panel button on the Bar opens a 380px dark panel. **Activity** lists supplied records for the current project, including other pages and builds; **Inbox** appears when the host passes `notifications`, and **Next steps** when it passes `nextSteps`. With the panel open, a thread opens in the panel's place with "← All comments". Cards show status, author, original screenshot, assignee, replies, and target-repair state. Search includes comment and reply text. The filter icon opens a floating dropdown without shifting the list: toggle resolved comments, your threads, the current page, or targets needing repair; **More filters** includes status, reviewer, page, and original build selectors. Search and applied filters remain active when the dropdown is closed. Selecting a different page navigates to its same-origin path with a thread link. Only current-page pins render on the page. The panel does not fetch other records itself: supply authorized project records through `annotations`. Escape closes the filter dropdown first, then the panel, before leaving comment mode.
 
 
 ### Review workflow and deployment verification
 
-Existing discussions open as a **Comment** popover with **⋯** thread options (Repin, Copy link, Carry forward, deployment comparison, activity history), a **✓** Resolve/Reopen toggle, and close. Browse discussions through the toolbar's **Feedback** panel. Each message has its own **⋯** menu with Reply, Edit (original comment), and Delete; replies are posted from the rounded field at the bottom (Enter sends, Shift+Enter adds a line). Reviewers are mentioned inline: typing `@` suggests members from `reviewers` and inserts `@Display Name`, and saving records newly mentioned members in `workflow.mentions`. Clicking a saved screenshot opens the full image. Existing `workflow.assignee` values are preserved but there is no assignment control. Workflow changes use `onFeedbackCreate`; persist the complete record. SDK-only callbacks do not send notifications; Cloud generates in-app notifications from its authenticated assignment/mention endpoints.
+Existing discussions open as a **Comment** popover with **⋯** thread options (Repin, Copy link, Carry forward, deployment comparison, activity history), a **✓** Resolve/Reopen toggle, and close. Browse discussions in the side panel. Each message has its own **⋯** menu with Reply, Edit (original comment), and Delete; replies are posted from the rounded field at the bottom (Enter sends, Shift+Enter adds a line). Reviewers are mentioned inline: typing `@` suggests members from `reviewers` and inserts `@Display Name`, and saving records newly mentioned members in `workflow.mentions`. Clicking a saved screenshot opens the full image. Existing `workflow.assignee` values are preserved but there is no assignment control. Workflow changes use `onFeedbackCreate`; persist the complete record. The SDK does not send notifications; your backend decides who to notify from `workflow.mentions`, and can show them in the Inbox through `notifications`.
 
 **Compare with current page** captures a temporary masked view beside the original screenshot. Mark a fix verified or still needing work for the current build; verification does not automatically resolve the comment. Repair a missing target before capturing a comparison. Repinning preserves the original capture and records the new location separately.
 
-`onFeedbackCreate` may return a canonical `{ feedback, context }` record from your persistence adapter, allowing server-owned IDs and authoritative identities to replace local draft IDs. The optional Cloud adapter is in `threadmark-cloud/cloud/src/threadmark-adapter.mjs`; construction does not connect or upload. See the Cloud collaboration guide for setup and deployment limits.
-
-
-### Choose your hosting
-
-Use **Your backend** to persist SDK callbacks in your own infrastructure, or explicitly connect **Threadmark Cloud** for managed collaboration and MCP access. Core capture and repinning work with either choice; the SDK never connects automatically. The separate Cloud repository now contains an optional `threadmark-cloud-client` package, a `/setup` guide, and a review-scoped approval popup. That client package is available as a local tarball and has not been published to npm. Cloud’s initial MCP endpoint accepts short-lived bearer headers; automatic MCP OAuth discovery is not available.
+`onFeedbackCreate` may return a canonical `{ feedback, context }` record from your persistence adapter, allowing server-owned IDs and authoritative identities to replace local draft IDs.
 
 ## Icon credits
 
@@ -916,15 +903,17 @@ New comments include optional `feedback.captureEnvironment`: coarse browser/vers
 
 ### Optional live presence
 
-`presence` accepts a consumer-owned transport with `connect(scope, onMembers, onError)`, returning `publish(cursor)` and `close()`. It is mounted only when Threadmark activation succeeds. The optional Cloud client provides `client.presence`; pass it after the reviewer explicitly connects. Core SDK usage has no presence requests or account requirement. Named cursors and the page reviewer count live in the isolated overlay, and cursor movement does not rerender the host page. Stable `data-threadmark-id` anchors align positions across viewports. Untagged content uses document coordinates, so responsive layouts may differ. Hidden tabs disconnect; idle pointers fade; Hide cursors affects local display. Presence never transmits typed values or drafts.
+`presence` accepts a consumer-owned transport with `connect(scope, onMembers, onError)`, returning `publish(cursor)` and `close()`. It is mounted only when Threadmark activation succeeds. Without it, the SDK makes no presence requests and needs no account. Named cursors and the page reviewer count live in the isolated overlay, and cursor movement does not rerender the host page. Stable `data-threadmark-id` anchors align positions across viewports. Untagged content uses document coordinates, so responsive layouts may differ. Hidden tabs disconnect; idle pointers fade; Hide cursors affects local display. Presence never transmits typed values or drafts.
 
-## Requested page reviews
+## Built-in page checks (older API)
 
-Mount `onPageReviewRequested` to enable **Ask Threadmark → Review this page**. With Cloud, pass `adapter.onPageReviewRequested`. The SDK captures up to five issues and supplies masked screenshots for targets inside the current viewport. It excludes hidden/protected content, form values, the overlay and configured ignored selectors. Screenshot failures do not block text comments. Traversal stops at 3,000 elements with a partial-review notice. It never clicks controls, navigates or changes the page.
+> For AI review, use `onAiReview` and `onAskAi` (see the [changelog](https://github.com/gtimeyin/threadmark-sdk/blob/main/CHANGELOG.md)). `onPageReviewRequested` stays for compatibility and may be removed before 1.0.
+
+Mount `onPageReviewRequested` to enable **Ask Threadmark → Review this page**. The SDK captures up to five issues and supplies masked screenshots for targets inside the current viewport. It excludes hidden/protected content, form values, the overlay and configured ignored selectors. Screenshot failures do not block text comments. Traversal stops at 3,000 elements with a partial-review notice. It never clicks controls, navigates or changes the page.
 
 This starter uses built-in checks for unnamed controls, missing image alt attributes, heading jumps, text below 12px and possible horizontal overflow. It needs no model API key, and does not perform model-based design critique, comprehensive accessibility audits or interaction tests. Ordinary comment mentions do not dispatch tasks; the displayed `@threadmark review this page` command uses the explicit review button. Consumers can replace the callback with a separately authorized provider.
 
-Cloud assigns Threadmark Agent as the displayed author and records the requesting member in activity. The requester retains edit/evidence/delete permissions; invited members can reply and resolve. Scope must match the session page and build. Runs are transactional/idempotent, with exact rule-text/target duplicates skipped, including resolved comments. Stop cancels local work; committed server comments remain, and retry reconciles the run.
+Stop cancels local work; comments your callback already saved remain.
 
 `collectPageReview({ route, buildId, ignoredSelectors, signal })` is also exported for consumer-owned command surfaces. It returns `{ version, route, buildId, findings, truncated }` without posting feedback or making network requests.
 
@@ -954,7 +943,7 @@ privacy exclusions and confirmation requirements are unchanged.
 ### Idle and scroll performance
 
 While review is closed, saved-comment restoration does not observe the page, read target geometry,
-match elements or compute suggestions. The launcher still shows the supplied comment count. Opening
+match elements or compute suggestions. The Bar still shows what is waiting. Opening
 review refreshes targets in slices, including changes made while closed; opening a thread through a
 comment link still checks that thread immediately. Explicitly enabled session replay is independent
 of this pause.
@@ -1021,4 +1010,8 @@ JSON copying and browser frame settling; it is not an isolated normalization CPU
 
 Supply `onReactionChange(feedback, { messageId, emoji, active })` to enable reactions on comments and replies. Return the saved message's full array of `{ emoji, reviewer: { id, displayName } }` records. Hydrate those records as `feedback.reactions` or `feedback.replies[].reactions`; the SDK renders counts and the current reviewer's pressed state. Supported reactions are 👍, ❤️, 🎉, 👀, and ✅. Each person can add each reaction once, and click again to remove it. The callback should set the requested `active` state rather than blindly toggle, so retries are safe.
 
-Authenticate the actor in your backend; never accept the browser's reviewer identity as authority. Validate that the message belongs to the authorized discussion. Without the callback, saved reactions remain visible but cannot be changed. Cloud's optional adapter provides this callback. The SDK makes no network requests itself.
+Authenticate the actor in your backend; never accept the browser's reviewer identity as authority. Validate that the message belongs to the authorized discussion. Without the callback, saved reactions remain visible but cannot be changed. The SDK makes no network requests itself.
+
+## License
+
+Threadmark is available under the [MIT License](./LICENSE). Third-party software notices are listed in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
