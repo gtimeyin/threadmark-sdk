@@ -1,4 +1,3 @@
-import { normalizeNotifications } from "./notifications.js";
 import { nearestBarPosition, readBarPrefs, readHiddenPages, writeBarPrefs, writeHiddenPages } from "./barPrefs.js";
 import { normalizeSurveys, surveyPageMatches } from "./surveys/schema.js";
 import { normalizeReactions } from "./reactions.js";
@@ -17,7 +16,6 @@ import {
 import {
   MAX_METADATA_BYTES,
   createFeedbackPayload,
-  normalizeLinks,
   isLocalHostname,
   isThreadmarkEnabled,
   normalizeMetadata,
@@ -84,6 +82,18 @@ import { HostedPageReview } from "./HostedPageReview.jsx";
 import { Presence } from "./Presence.jsx";
 
 const MAX_MULTI_TARGETS = 20;
+
+/** The host's dashboard, opened from the Bar. Only http(s) or a same-site path. */
+function safeDashboardUrl(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  if (/^\/(?!\/)/.test(value)) return value;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 const EMPTY_IGNORED_SELECTORS = [];
 const MIN_REGION_SIZE = 12;
 const ANNOTATION_QUERY_PARAM = "threadmark";
@@ -510,13 +520,10 @@ export function Threadmark({
   styleNonce,
   annotations: persistedAnnotations,
   pageVersions,
+  dashboardUrl,
   nextSteps,
-  notifications,
   surveys,
   surveyResults,
-  faces,
-  notificationSettings,
-  projectName,
   videoRecording,
   sessionReplay,
   deviceDetails = true,
@@ -536,30 +543,13 @@ export function Threadmark({
   onFeedbackCarryForward,
   onPollVote,
   onReactionChange,
-  destinations,
-  onSendTo,
-  onConnectDestination,
   onAiReview,
   onAskAi,
   onAiDismiss,
   onNextStepDone,
   onNextStepsCopy,
-  onNotificationOpen,
-  onNotificationsRead,
   onSurveyPublish,
   onSurveyEnd,
-  onReviewerChange,
-  onNotificationSettingsChange,
-  onLeaveProject,
-  onSignOut,
-  inviteSuggestions,
-  shareUrl,
-  linkAccess,
-  members,
-  onInvite,
-  onMemberChange,
-  onResendInvite,
-  onLinkAccessChange,
   tours,
   onTourSave,
   aiConnection,
@@ -677,7 +667,6 @@ export function Threadmark({
   const clientHintsRef = useRef(null);
   const metadataRef = useLatest(metadata);
 
-  const normalizedNotifications = useMemo(() => normalizeNotifications(notifications), [notifications]);
   const normalizedSurveys = useMemo(() => normalizeSurveys(surveys), [surveys]);
   const callbacks = {
     onReady: useLatest(onReady),
@@ -692,11 +681,8 @@ export function Threadmark({
     onFeedbackCarryForward: useLatest(onFeedbackCarryForward),
     onPollVote: useLatest(onPollVote),
     onReactionChange: useLatest(onReactionChange),
-    onSendTo: useLatest(onSendTo),
     onNextStepDone: useLatest(onNextStepDone),
     onNextStepsCopy: useLatest(onNextStepsCopy),
-    onNotificationOpen: useLatest(onNotificationOpen),
-    onNotificationsRead: useLatest(onNotificationsRead),
     onSurveyPublish: useLatest(onSurveyPublish),
     onSurveyEnd: useLatest(onSurveyEnd),
     onTourSave: useLatest(onTourSave),
@@ -3643,30 +3629,6 @@ export function Threadmark({
     }
   };
 
-  // Send a comment to an issue tracker or channel (board 10). The host creates the issue and returns
-  // where it lives; Threadmark keeps that link on the comment so it points both ways.
-  const sendToDestination = async (annotationId, destinationId, draft) => {
-    const current = annotationsRef.current.find((item) => item.id === annotationId);
-    if (!current || !callbacks.onSendTo.current) return null;
-    const result = await callbacks.onSendTo.current(current.payload, { destinationId, ...draft });
-    const [link] = normalizeLinks([{ destination: destinationId, status: "open", ...(result || {}) }]);
-    if (!link) return null;
-    const links = [...(current.payload.links || []).filter((item) => item.label !== link.label), link];
-    let payload = createFeedbackPayload({ ...current.payload, now: current.payload.createdAt,
-      updatedAt: new Date().toISOString(), lastEditedBy: normalizedReviewer, links });
-    try {
-      const evidence = current.runtime?.evidence || [];
-      const accepted = acceptAuthoritative(payload, evidence, await callbacks.onFeedbackCreate.current?.(payload, { evidence }));
-      setAnnotations((items) => items.map((item) => mergeAccepted(item, current.id, accepted)));
-    } catch {
-      // The issue exists even if the link didn't save; say so rather than pretend.
-      showNotice(`${link.label} created, but the link back wasn’t saved.`);
-      return link;
-    }
-    showNotice(`${link.label} created`, link.url ? { label: "Open", run: () => window.open(link.url, "_blank", "noopener,noreferrer") } : null);
-    return link;
-  };
-
   // AI review (board 12): a finding is posted only when someone chooses to, as their own comment marked
   // "From an AI review". Threadmark bundles no model; the host's onAiReview / onAskAi supply the words.
   const postAiComment = async ({ element, comment }) => {
@@ -4325,19 +4287,6 @@ export function Threadmark({
       onCopyAnnotationLink={copyAnnotationLink}
       onSelectPageVersion={selectPageVersion}
       nextSteps={shownNextSteps}
-      notifications={Array.isArray(notifications) ? normalizedNotifications : null}
-      onOpenNotification={(notification) => {
-        safeCall(callbacks.onNotificationOpen, notification);
-        if (notification.annotationId && projectAnnotations.some((item) => item.id === notification.annotationId)) {
-          openListedAnnotation(notification.annotationId);
-        } else if (notification.route && notification.route !== activeRoute) {
-          // The host's onNotificationOpen navigates; without one, at least say where it is.
-          if (!callbacks.onNotificationOpen.current) showNotice(`That’s on ${notification.route === "/" ? "Home" : notification.route}.`);
-        } else {
-          showNotice("That comment isn’t on this page any more.");
-        }
-      }}
-      onNotificationsSeen={(ids) => { if (ids.length) safeCall(callbacks.onNotificationsRead, ids); }}
       surveys={Array.isArray(surveys) ? normalizedSurveys.filter((survey) => survey.pages.some((page) => surveyPageMatches(page, activeRoute))) : null}
       surveyResults={surveyResults && typeof surveyResults === "object" ? surveyResults : {}}
       onSurveyPublish={onSurveyPublish ? async (survey) => {
@@ -4346,22 +4295,7 @@ export function Threadmark({
       } : null}
       onSurveyEnd={onSurveyEnd ? (survey) => safeCall(callbacks.onSurveyEnd, survey.id) : null}
       surveyRoute={activeRoute}
-      faces={Array.isArray(faces) ? faces.filter((face) => face && typeof face.url === "string") : []}
-      reviewerEmail={typeof reviewer?.email === "string" ? reviewer.email : null}
-      notificationSettings={notificationSettings}
-      projectName={typeof projectName === "string" ? projectName : null}
-      onReviewerChange={onReviewerChange}
-      onNotificationSettingsChange={onNotificationSettingsChange}
-      onLeaveProject={onLeaveProject}
-      onSignOut={onSignOut}
-      inviteSuggestions={Array.isArray(inviteSuggestions) ? inviteSuggestions : undefined}
-      shareUrl={typeof shareUrl === "string" && shareUrl ? shareUrl : null}
-      linkAccess={["comment", "view", "off"].includes(linkAccess) ? linkAccess : null}
-      members={Array.isArray(members) ? members.filter((member) => member && member.id != null && (member.displayName || member.email)) : []}
-      onInvite={onInvite}
-      onMemberChange={onMemberChange}
-      onResendInvite={onResendInvite}
-      onLinkAccessChange={onLinkAccessChange}
+      dashboardUrl={safeDashboardUrl(dashboardUrl)}
       nextStepsOpen={nextStepsOpen}
       onShowNextSteps={setNextStepsOpen}
       canTickNextSteps={Boolean(shownNextSteps?.canEdit && callbacks.onNextStepDone.current)}
@@ -4392,9 +4326,6 @@ export function Threadmark({
       pollsEnabled={Boolean(callbacks.onPollVote.current)}
       onVote={votePoll}
       onReactionChange={callbacks.onReactionChange.current ? changeReaction : undefined}
-      destinations={Array.isArray(destinations) ? destinations.filter((item) => item && item.id && item.name) : []}
-      onSendTo={callbacks.onSendTo.current ? sendToDestination : undefined}
-      onConnectDestination={onConnectDestination}
       onStartHostedReview={onPageReview ? () => setHostedReviewOpen(true) : undefined}
       onAiReview={onAiReview}
       onAskAi={onAskAi}

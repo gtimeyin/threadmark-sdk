@@ -545,23 +545,6 @@ export interface ThreadmarkPageReviewResult {
   records: ThreadmarkAnnotationRecord[]; annotations?: unknown[]; skipped?: number; evidenceFailures?: number; engine?: string;
 }
 export declare function collectPageReview(options?: { documentRef?: Document; route?: string; buildId?: string; ignoredSelectors?: string[]; signal?: AbortSignal }): Promise<ThreadmarkPageReview>;
-/** Something in the Inbox for the current reviewer. Host-owned, like comments. */
-export interface ThreadmarkNotification {
-  id: string;
-  kind?: "reply" | "mention" | "resolved" | "reaction" | "assigned" | "question" | "other";
-  /** Without an avatarUrl, the Inbox uses the face of the member with the same id from `members`. */
-  actor: { id?: string; displayName: string; avatarUrl?: string | null };
-  /** The line shown in the Inbox, e.g. the reply text. */
-  text: string;
-  /** Opens this thread when it is on the current project. */
-  annotationId?: string | null;
-  route?: string | null;
-  /** What on the page it is about, shown after the route, e.g. "Field · Company". */
-  target?: string | null;
-  createdAt?: string;
-  read?: boolean;
-}
-
 /** What `onPageReview` receives: the screen as an outline and a masked screenshot. Nothing typed is included. */
 export interface ThreadmarkPageReviewRequest {
   route: string;
@@ -633,8 +616,11 @@ export interface ThreadmarkProps {
    * shown as plain text, never as HTML.
    */
   nextSteps?: ThreadmarkNextSteps | readonly ThreadmarkNextStep[] | null;
-  /** Replies, mentions and other things for this reviewer. Passing an array shows the Inbox tab and lets the bar say "Maya mentioned you". */
-  notifications?: readonly ThreadmarkNotification[];
+  /**
+   * Your dashboard, as an http(s) URL or a same-site path. Adds **Open the dashboard** to the More menu and
+   * the side panel. Inbox, sharing, invites, your settings and sending to trackers live there, not in the overlay.
+   */
+  dashboardUrl?: string;
   /** Survey questions for this project. Ones on the current page show at the top of Activity. */
   surveys?: readonly import("./surveys.js").ThreadmarkSurvey[];
   /** Answers per survey id, e.g. from `summarizeSurveyAnswers`. `summary` is an optional one-line read. */
@@ -715,49 +701,10 @@ export interface ThreadmarkProps {
    * write its own prompt to the clipboard.
    */
   onNextStepsCopy?: (steps: readonly ThreadmarkNextStep[]) => void | Promise<void>;
-  /** A notification was opened from the Inbox. Threadmark also opens its thread when it is on this project. */
-  onNotificationOpen?: (notification: ThreadmarkNotification) => void;
-  /** These notifications were shown in the Inbox; mark them read in your store. */
-  onNotificationsRead?: (ids: readonly string[]) => void;
   /** Store a question published from Tools → Ask a question. Passing this shows the menu item. */
   onSurveyPublish?: (survey: import("./surveys.js").ThreadmarkSurvey) => void | Promise<void>;
   /** End a live survey from its results. */
   onSurveyEnd?: (surveyId: string) => void;
-  /** Faces people can pick in Your settings. Your initial is always offered too. Threadmark ships no images. */
-  faces?: readonly ThreadmarkFace[];
-  /** The reviewer's notification choices, shown in Your settings. */
-  notificationSettings?: ThreadmarkNotificationSettings;
-  /** Shown in Your settings and Share, such as "Leave Parcel". */
-  projectName?: string;
-  /** Save a new name or face. Passing this shows the face picker and name field in Your settings. */
-  onReviewerChange?: (change: { displayName: string; avatarUrl: string | null }) => void | Promise<void>;
-  /** Save notification choices. Mentions and replies are always on. */
-  onNotificationSettingsChange?: (settings: ThreadmarkNotificationSettings) => void | Promise<void>;
-  /** Adds Leave project, with a confirm step. */
-  onLeaveProject?: () => void | Promise<void>;
-  /** Adds Sign out to the You menu under your face in the panel (board 08, 27a). Signing out is the host's own flow. */
-  onSignOut?: () => void;
-  /** The review link shown in Share with Copy link. */
-  shareUrl?: string;
-  /** What anyone with the link can do. */
-  linkAccess?: ThreadmarkLinkAccess;
-  /** People with access, shown in Share. */
-  members?: readonly ThreadmarkMember[];
-  /** Invite people by name or email. Passing this (or `shareUrl`) adds Share to the panel and the More menu. */
-  /** `message` is the optional note typed under the invite (board 04, 15b). */
-  onInvite?: (invite: { entries: string[]; role: ThreadmarkMemberRole; message?: string }) => void | Promise<void>;
-  /**
-   * People to suggest while typing a name or email in Share, usually your workspace (15b). `note` is the
-   * small line after the email, such as "in Ojie's studio". A typed email nobody knows is offered as "new".
-   */
-  inviteSuggestions?: Array<{ id: string; displayName?: string; email?: string; avatarUrl?: string | null; note?: string }>;
-  /** Change someone's access, or remove it. Passing this makes each person's access editable. */
-  /** `role: "owner"` is offered only to an owner (Make owner, 15f). Remove access asks once first. */
-  onMemberChange?: (memberId: string, change: { role: ThreadmarkMemberRole | "owner" } | { remove: true }) => void | Promise<void>;
-  /** Send a pending invite again. */
-  onResendInvite?: (memberId: string) => void | Promise<void>;
-  /** Change what anyone with the link can do. */
-  onLinkAccessChange?: (access: ThreadmarkLinkAccess) => void | Promise<void>;
   /**
    * Tours to edit in Tour mode (the same files you pass to <ThreadmarkTours>). Tour mode keeps
    * edits as drafts in the overlay; nothing is written anywhere until onTourSave or Copy file.
@@ -793,17 +740,6 @@ export interface ThreadmarkProps {
     Promise<{ points: string[]; fix?: string }>;
   /** A finding was dismissed, with why, so your AI can stop raising it. */
   onAiDismiss?: (finding: { id: string; category: string; title: string }, reason: "not-a-problem" | "already-known" | "wrong") => void;
-  /** Places a comment can be sent: issue trackers or channels the project has connected. */
-  destinations?: readonly ThreadmarkDestination[];
-  /**
-   * Send a comment to a destination. Create the issue or message and return where it lives; Threadmark
-   * keeps the link on the comment. Throw an Error to show its message in the sheet; give the error a
-   * `fix: { label, url }` to show a way to fix it, such as installing an app.
-   */
-  onSendTo?: (feedback: ThreadmarkFeedback, draft: { destinationId: string; targetId: string | null; title: string | null; body: string }) =>
-    Promise<{ label: string; url?: string; status?: "open" | "closed" | null }>;
-  /** Adds "Send feedback to…" to the More menu, listing destinations with Connect or Manage. */
-  onConnectDestination?: (destinationId: string) => void;
   onError?: (error: ThreadmarkError) => void;
 }
 
@@ -870,36 +806,7 @@ export declare function createFeedbackPayload(options: {
 export declare const THREADMARK_TARGET_ATTRIBUTE: "data-threadmark-id";
 export declare const DEFAULT_ALLOWED_HOSTS: readonly string[];
 
-export interface ThreadmarkFace {
-  id?: string;
-  name?: string;
-  url: string;
-}
-
-export interface ThreadmarkNotificationSettings {
-  mentionsAndReplies?: true;
-  myPages?: boolean;
-  digest?: "off" | "daily" | "weekly";
-}
-
-export type ThreadmarkMemberRole = "edit" | "comment" | "view";
-export type ThreadmarkLinkAccess = "comment" | "view" | "off";
-
-export interface ThreadmarkMember {
-  id: string;
-  displayName?: string;
-  email?: string;
-  avatarUrl?: string | null;
-  role: ThreadmarkMemberRole | "owner";
-  /** This is the person looking at the sheet. */
-  you?: boolean;
-  /** Invited, not joined yet. Shows Resend. */
-  pending?: boolean;
-  guest?: boolean;
-  /** A short line under the name, such as "link expires in 7 days". */
-  note?: string;
-}
-
+/** A link to where this comment also lives, such as a tracker issue. Your backend adds these; the overlay shows them. */
 export interface ThreadmarkCommentLink {
   destination: string | null;
   /** Shown on the comment, such as "GitHub #482". */
@@ -907,29 +814,6 @@ export interface ThreadmarkCommentLink {
   url: string | null;
   /** "closed" shows "closed in GitHub #482". */
   status: "open" | "closed" | null;
-}
-
-export interface ThreadmarkDestination {
-  id: string;
-  kind?: "github" | "linear" | "slack" | string;
-  name: string;
-  /** Only connected destinations appear in a comment's Send to menu. */
-  connected: boolean;
-  /** A short line in the destinations list, such as "Connected to studio · 3 repositories". */
-  detail?: string;
-  /** Repositories, teams or channels to pick from. */
-  targets?: readonly { id: string; label: string }[];
-  defaultTargetId?: string;
-  /** The picker's label, such as "Repository". */
-  targetLabel?: string;
-  /** The sheet's title, such as "New GitHub issue". */
-  sheetTitle?: string;
-  /** The send button, such as "Create issue". */
-  actionLabel?: string;
-  /** A note in the sheet's footer, such as "Label: feedback". */
-  note?: string;
-  /** A small same-origin logo. Without it, a generic icon is shown. */
-  iconUrl?: string;
 }
 
 export interface ThreadmarkAiFinding {
