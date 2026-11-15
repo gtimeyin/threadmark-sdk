@@ -638,7 +638,7 @@ export interface ThreadmarkProps {
    * Sending comments to trackers lives there, not in the overlay.
    */
   dashboardUrl?: string;
-  /** Replies, mentions and other things for this reviewer. Passing an array shows the Inbox tab and lets the bar say "Maya mentioned you". */
+  /** Replies, mentions and other things for this reviewer. Passing an array shows Inbox on the Bar (with the unread count) and as a panel tab. Threadmark only shows these: your backend creates them and marks them read via `onNotificationsRead`. */
   notifications?: readonly ThreadmarkNotification[];
   /** Survey questions for this project. Ones on the current page show at the top of Activity. */
   surveys?: readonly import("./surveys.js").ThreadmarkSurvey[];
