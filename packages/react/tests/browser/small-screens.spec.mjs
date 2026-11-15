@@ -42,7 +42,7 @@ test.describe('on a phone', () => {
   test('the panel is a tall sheet that drops to half height', async ({ page }) => {
     await open(page);
     await page.getByRole('button', { name: 'Leave feedback', exact: true }).click();
-    await page.getByRole('button', { name: /^Feedback panel/ }).click();
+    await page.getByRole('button', { name: "Comments", exact: true }).click();
     const panel = page.locator('#tm-all-comments');
     await expect(panel).toBeVisible();
     const tall = await panel.boundingBox();
@@ -56,7 +56,7 @@ test.describe('on a tablet', () => {
   test('the panel is a 380px drawer, and tapping the page closes it', async ({ page }) => {
     await open(page);
     await page.getByRole('button', { name: 'Leave feedback', exact: true }).click();
-    await page.getByRole('button', { name: /^Feedback panel/ }).click();
+    await page.getByRole('button', { name: "Comments", exact: true }).click();
     const panel = page.locator('#tm-all-comments');
     await expect.poll(async () => { const box = await panel.boundingBox(); return [Math.round(box.width), Math.round(box.x + box.width), Math.round(box.height)]; }).toEqual([380, 768, 1024]);
     await page.mouse.click(100, 500);

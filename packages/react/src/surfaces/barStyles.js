@@ -55,6 +55,20 @@ export const barStyles = `
   }
   .tm-bar__tools svg { width: 16px; height: 16px; }
   .tm-bar__tools:hover { background: rgba(251, 250, 246, .08); color: var(--tm-text-primary); }
+  /* The idle Bar wears the comment-mode Bar's controls (2026-11-15), so the two read as one bar. */
+  .tm-bar--idle { gap: 2px; padding: 6px; }
+  .tm-bar--idle button { position: relative; display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--tm-radius-button); background: transparent; color: var(--tm-text-secondary); cursor: pointer; font: inherit; }
+  .tm-bar--idle button:hover { background: rgba(251, 250, 246, .08); color: var(--tm-text-primary); }
+  .tm-bar--idle button:focus-visible { outline: 2px solid var(--tm-focus); outline-offset: 2px; }
+  .tm-bar--idle button svg { width: 18px; height: 18px; }
+  .tm-bar--idle .tm-drag-handle { width: 20px !important; color: rgba(163, 173, 168, .6) !important; }
+  .tm-bar--idle .tm-tool-switch { display: inline-flex; align-items: center; width: auto; gap: 3px; padding: 0 6px 0 8px; }
+  .tm-bar--idle .tm-tool-switch .tm-tool-switch__chevron { width: 13px; height: 13px; }
+  .tm-bar--idle .tm-toolbar-divider { flex: none; width: 1px; height: 18px; margin: 0 4px; background: rgba(251, 250, 246, .12); }
+  .tm-bar--idle .tm-bar__shrink { width: 20px; margin-right: 0; }
+  .tm-bar .tm-count-badge { top: -4px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border: 2px solid var(--tm-ground); background: var(--tm-orange); color: #fff; font: 600 10px/12px var(--tm-font); }
+  .tm-bar .tm-all-comments-trigger.is-waiting .tm-count-badge { background: var(--tm-action-primary); color: var(--tm-ground); }
+  .tm-bar .tm-bar__icon-dot { position: absolute; top: 5px; right: 5px; }
 
   .tm-bar .tm-launcher {
     position: static;

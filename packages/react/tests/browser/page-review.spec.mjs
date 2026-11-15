@@ -36,7 +36,7 @@ test('requested review posts saved agent discussions, attaches evidence and skip
   await page.getByRole('button', { name: 'Review this page', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Skipped 3 duplicates.' })).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Close agent panel' }).click();
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await expect(page.getByText('Threadmark Agent', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('This control has no accessible name.', { exact: false }).first()).toBeVisible();
 });

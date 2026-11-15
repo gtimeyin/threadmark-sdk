@@ -45,7 +45,7 @@ export function App() {
 }
 ```
 
-On a local hostname, Threadmark shows the **Bar**, a small dark bar at the bottom of the page that says what is waiting: **Leave feedback**, new comments, **All caught up** or **Offline**. Click it, or press <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>, to start commenting. The Bar can be dragged to one of six spots, shrunk to a dot (<kbd>Command/Ctrl</kbd> + <kbd>.</kbd>) or hidden on a page; those choices are saved per browser.
+On a local hostname, Threadmark shows the **Bar**, a small dark bar at the bottom of the page. It is the same bar you comment with: a grip, **Tools**, **⋯ More**, then **Comments** with the comment count (its badge turns Lime when something is new) and **Inbox** with the unread count when the host passes `notifications`, and a dot to shrink it. Choosing a tool or a More item starts commenting with that menu open. Click Comments, or press <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>, to open the review; screen readers hear what is waiting (new comments, questions, offline) in its name. The Bar can be dragged to one of six spots, shrunk to a dot (<kbd>Command/Ctrl</kbd> + <kbd>.</kbd>) or hidden on a page; those choices are saved per browser.
 
 ## Setting up your own storage
 
@@ -272,7 +272,7 @@ ready-made hook (`useThreadmarkNextSteps`) for Threadmark's hosted service.
 
 ## The Bar and pins
 
-In comment mode the Bar shows "Click anything, or select text · Esc", then **Tools**, **⋯ More**, the panel button and Close.
+In comment mode the Bar shows its grip, then **Tools**, **⋯ More**, **Comments**, **Inbox** (when the host passes `notifications`) and Close. It adds a short hint only while something is happening: several elements selected, a drag in progress, or a comment being repinned.
 
 **Tools** lists the ways to leave feedback. **Comment** is the default; the others start a one-off capture and return to Comment when it is posted or when the reviewer presses <kbd>Escape</kbd>:
 
@@ -882,7 +882,7 @@ Coordinate-only region and Pencil pins require repair when a different known bui
 
 ### The side panel
 
-The panel button on the Bar opens a 380px dark panel. **Activity** lists supplied records for the current project, including other pages and builds; **Inbox** appears when the host passes `notifications`, and **Next steps** when it passes `nextSteps`. With the panel open, a thread opens in the panel's place with "← All comments". Cards show status, author, original screenshot, assignee, replies, and target-repair state. Search includes comment and reply text. The filter icon opens a floating dropdown without shifting the list: toggle resolved comments, your threads, the current page, or targets needing repair; **More filters** includes status, reviewer, page, and original build selectors. Search and applied filters remain active when the dropdown is closed. Selecting a different page navigates to its same-origin path with a thread link. Only current-page pins render on the page. The panel does not fetch other records itself: supply authorized project records through `annotations`. Escape closes the filter dropdown first, then the panel, before leaving comment mode.
+**Comments** and **Inbox** on the Bar open a 380px dark panel on that view; clicking the one already showing closes it. The panel's tabs are icons, with their names as tooltips and for screen readers. **Activity** lists supplied records for the current project, including other pages and builds; **Inbox** appears when the host passes `notifications`, and **Next steps** when it passes `nextSteps`. With the panel open, a thread opens in the panel's place with "← All comments". Cards show status, author, original screenshot, assignee, replies, and target-repair state. Search includes comment and reply text. The filter icon opens a floating dropdown without shifting the list: toggle resolved comments, your threads, the current page, or targets needing repair; **More filters** includes status, reviewer, page, and original build selectors. Search and applied filters remain active when the dropdown is closed. Selecting a different page navigates to its same-origin path with a thread link. Only current-page pins render on the page. The panel does not fetch other records itself: supply authorized project records through `annotations`. Escape closes the filter dropdown first, then the panel, before leaving comment mode.
 
 
 ### Review workflow and deployment verification

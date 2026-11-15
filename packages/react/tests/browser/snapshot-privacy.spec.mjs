@@ -151,12 +151,12 @@ test("carries a comment to another page version only when requested", async ({ p
   await mountPickingFixture(page);
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot
-      .querySelector('button[aria-label="Feedback panel"]').click();
+      .querySelector('button[aria-label="Comments"]').click();
   });
   await expect(page.getByRole("tab", { name: /^Versions/ })).toHaveCount(0);
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot
-      .querySelector('button[aria-label="Feedback panel"]').click();
+      .querySelector('button[aria-label="Comments"]').click();
   });
 
   await page.locator("#custom-target").click({ position: { x: 80, y: 25 } });
@@ -193,7 +193,7 @@ test("carries a comment to another page version only when requested", async ({ p
 test("Feedback is a solid dark panel in every tab, with a high-contrast fallback", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 700 });
   await mountPickingFixture(page);
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Feedback", exact: true });
   const panelStyle = () => panel.evaluate((element) => {
     const style = getComputedStyle(element);
@@ -1022,7 +1022,7 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
   await mountPickingFixture(page);
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const name of ["Feedback panel", "Close annotations (Esc)"]) {
+    for (const name of ["Comments", "Close annotations (Esc)"]) {
       const bounds = await page.getByRole("button", { name, exact: true }).boundingBox();
       expect(bounds.x).toBeGreaterThanOrEqual(0);
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
@@ -1031,12 +1031,12 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
   await page.setViewportSize({ width: 320, height: 844 });
   await page.locator("#custom-target").click({ position: { x: 24, y: 25 }, modifiers: ["Meta", "Shift"] });
   await page.locator("#secondary-target").click({ modifiers: ["Meta", "Shift"] });
-  for (const name of ["Comment 2", "Feedback panel", "Close annotations (Esc)"]) {
+  for (const name of ["Comment 2", "Comments", "Close annotations (Esc)"]) {
     const bounds = await page.getByRole("button", { name, exact: true }).boundingBox();
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
   }
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   await expect(page.getByRole("complementary", { name: "Feedback", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close feedback panel", exact: true }).click();
   await page.getByRole("button", { name: "Close annotations (Esc)", exact: true }).click();
@@ -1511,7 +1511,7 @@ test("a region pin needs repair on a new build and repinning retains its origina
 test("all comments lists saved threads, filters, and opens missing targets without losing the list", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
   await mountPickingFixture(page);
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await expect(page.getByRole('complementary', { name: 'Feedback' })).toBeVisible();
   await expect(page.getByText('No comments yet', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close feedback panel', exact: true }).click();
@@ -1522,7 +1522,7 @@ test("all comments lists saved threads, filters, and opens missing targets witho
   await setComposerComment(page, 'Button needs contrast');
   await submitComposer(page);
   await page.evaluate(() => window.__threadmarkShowSecondary(false));
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   const panel = page.getByRole('complementary', { name: 'Feedback' });
   await expect(panel.locator('.tm-comment-card')).toHaveCount(2);
   await expect(panel.getByAltText('Saved screenshot')).toHaveCount(2);
@@ -1554,7 +1554,7 @@ test("all comments lists saved threads, filters, and opens missing targets witho
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
   await expect(page.getByRole('toolbar', { name: 'Threadmark annotation tools' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Feedback panel', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Comments', exact: true })).toBeFocused();
 });
 
 test("comment filters float over the list, retain search, and dismiss accessibly", async ({ page }) => {
@@ -1572,7 +1572,7 @@ test("comment filters float over the list, retain search, and dismiss accessibly
       { feedback: { ...feedback, id: 'resolved', comment: 'Resolved issue', workflow: { status: 'resolved' } } },
     ]);
   });
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   const panel = page.getByRole('complementary', { name: 'Feedback', exact: true });
   await expect(panel.locator('.tm-comment-card')).toHaveCount(4);
   await panel.getByRole('button', { name: 'Show search comments', exact: true }).click();
@@ -1684,7 +1684,7 @@ test("workflow controls preserve evidence through inline mention, verification, 
   await page.getByRole('button', { name: 'Resolve comment', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Reopen comment', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel comment', exact: true }).click();
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await page.getByRole('button', { name: 'Show comment filters', exact: true }).click();
   await page.getByRole('button', { name: 'More filters', exact: true }).click();
   await page.getByRole('combobox', { name: 'Filter comments by status' }).selectOption('open');
@@ -1711,7 +1711,7 @@ test("project comments include authorized supplied pages, filter deployments and
       { feedback: { ...feedback, id: 'other-page', route: '/other', buildId: 'next-build', comment: 'Another page' } },
       { feedback: { ...feedback, id: 'foreign', projectKey: 'foreign-project', route: '/private', comment: 'Do not show' } }]);
   });
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await expect(page.locator('.tm-comment-card')).toHaveCount(2);
   await page.getByRole('button', { name: 'Show comment filters', exact: true }).click();
   await page.getByRole('button', { name: 'More filters', exact: true }).click();

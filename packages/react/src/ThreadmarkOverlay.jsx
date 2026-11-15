@@ -132,8 +132,14 @@ function ReplayAttachment({ draft, onToggle, onPreview }) {
         <strong>{draft.removed ? "Playback removed" : "Playback attached"}</strong>
         <span>{draft.removed ? "This comment will be posted without it." : `${replayFacts(draft.summary)} · only you can see it until you post`}</span>
       </div>
-      {!draft.removed && <button type="button" onClick={onPreview}>Preview</button>}
-      <button type="button" onClick={onToggle}>{draft.removed ? "Attach again" : "Remove"}</button>
+      {!draft.removed && <button type="button" className="tm-replay-attachment__icon" aria-label="Preview playback" title="Preview" onClick={onPreview}>
+        <Play size={15} aria-hidden="true" focusable="false" />
+      </button>}
+      {draft.removed
+        ? <button type="button" onClick={onToggle}>Attach again</button>
+        : <button type="button" className="tm-replay-attachment__icon" aria-label="Remove playback" title="Remove" onClick={onToggle}>
+          <X size={15} aria-hidden="true" focusable="false" />
+        </button>}
     </div>
   );
 }
@@ -799,16 +805,18 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
         aria-pressed={halfSheet} onClick={() => setHalfSheet((value) => !value)} />
       <header className="tm-comments-header">
         <h2 className="tm-sr-only">Feedback</h2>
-        <div className="tm-panel-tabs" role="tablist" aria-label="Feedback views">
-          <button type="button" role="tab" aria-selected={tab === "comments"} onClick={() => onTabChange("comments")}>
-            Activity <span className="tm-sr-only">{annotations.length}</span>
+        {/* Icon-only once there's more than one view, so three tabs and the header buttons fit a 360px panel. */}
+        <div className={`tm-panel-tabs${notifications || nextSteps ? " is-icon-only" : ""}`} role="tablist" aria-label="Feedback views">
+          <button type="button" role="tab" aria-selected={tab === "comments"} title="Activity" onClick={() => onTabChange("comments")}>
+            <MessagesSquare aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />
+            <span className="tm-panel-tabs__label">Activity</span> <span className="tm-sr-only">{annotations.length}</span>
           </button>
-          {notifications && <button type="button" role="tab" aria-selected={tab === "inbox"} onClick={() => onTabChange("inbox")}>
-            <InboxIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />Inbox
+          {notifications && <button type="button" role="tab" aria-selected={tab === "inbox"} title="Inbox" onClick={() => onTabChange("inbox")}>
+            <InboxIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" /><span className="tm-panel-tabs__label">Inbox</span>
             {unreadNotifications.length > 0 && <span className="tm-panel-tabs__badge">{unreadNotifications.length}<span className="tm-sr-only"> unread</span></span>}
           </button>}
-          {nextSteps && <button type="button" role="tab" aria-selected={tab === "next-steps"} onClick={() => onTabChange("next-steps")}>
-            <NextStepsIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" />Next steps <span className="tm-sr-only">{nextSteps.steps.filter((step) => !step.completed).length}</span>
+          {nextSteps && <button type="button" role="tab" aria-selected={tab === "next-steps"} title="Next steps" onClick={() => onTabChange("next-steps")}>
+            <NextStepsIcon aria-hidden="true" focusable="false" className="tm-panel-tabs__icon" /><span className="tm-panel-tabs__label">Next steps</span> <span className="tm-sr-only">{nextSteps.steps.filter((step) => !step.completed).length}</span>
           </button>}
         </div>
         <div className="tm-comments-actions">
@@ -2232,6 +2240,15 @@ function Overlay({
   const carryForwardVersions = pageVersions.filter((version) => !version.current && version.state === "ready");
   const [toolbarMenu, setToolbarMenu] = useState(null);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const panelTab = inboxOpen && notifications ? "inbox" : nextStepsOpen && nextSteps ? "next-steps" : "comments";
+  const panelView = allCommentsOpen ? panelTab : null;
+  const unreadInboxCount = notifications ? notifications.filter((item) => !item.read).length : 0;
+  const openPanelView = (view) => {
+    if (panelView === view) { onToggleAllComments(); return; }
+    setInboxOpen(view === "inbox");
+    onShowNextSteps?.(false);
+    if (!allCommentsOpen) onToggleAllComments();
+  };
   const [surveyBuilderOpen, setSurveyBuilderOpen] = useState(false);
   // Board 08: "menu" (27a), "face" (27b), "settings" (28a) or "leave" (28b).
   const [youOpen, setYouOpen] = useState(false);
@@ -2434,6 +2451,9 @@ function Overlay({
             if ((hasComments || toInbox) && !allCommentsOpen) onToggleAllComments();
           }}
           onOpenTools={() => { onStart(); setToolbarMenu("tools"); }}
+          onOpenMore={() => { onStart(); setToolbarMenu("more"); }}
+          drag={{ onPointerDown: onToolbarPointerDown, onPointerMove: onToolbarPointerMove, onPointerUp: onToolbarPointerUp }}
+          style={toolbarPosition ? { left: toolbarPosition.left, top: toolbarPosition.top, right: "auto", bottom: "auto", margin: 0 } : undefined}
         />
       )}
 
@@ -2607,14 +2627,15 @@ function Overlay({
             >
               <GripIcon />
             </button>
-            <BarHint>
-              {selectedCount >= 2
-                ? `${selectedCount} elements selected`
-                : drawRect
-                  ? "Release to comment on this area"
-                  : repinning ? "Click the new spot for this comment" : "Click anything, or select text"}
-            </BarHint>
-            <div className="tm-toolbar-divider" />
+            {/* No standing hint: the Bar speaks up only when something is happening. */}
+            {(selectedCount >= 2 || drawRect || repinning) && <>
+              <BarHint>
+                {selectedCount >= 2
+                  ? `${selectedCount} elements selected`
+                  : drawRect ? "Release to comment on this area" : "Click the new spot for this comment"}
+              </BarHint>
+              <div className="tm-toolbar-divider" />
+            </>}
             <div className="tm-tool-group tm-toolbar-tools">
               <button ref={toolsTriggerRef} type="button" className={`tm-tool-switch${toolbarMenu === "tools" ? " is-open" : ""}`}
                 aria-label="Feedback tools: Comment" title="Feedback tools" aria-haspopup="menu" aria-expanded={toolbarMenu === "tools"}
@@ -2719,12 +2740,19 @@ function Overlay({
               </button>
             )}
             <div className="tm-toolbar-divider" />
+            {/* Comments and Inbox each open the side panel on their own view; clicking the one showing closes it. Next steps stays a panel tab. */}
             <div className="tm-tool-group">
-              <button type="button" className={`tm-all-comments-trigger${allCommentsOpen ? " is-active" : ""}`} aria-label="Feedback panel" title="Feedback panel"
-                aria-expanded={allCommentsOpen} aria-controls="tm-all-comments" onClick={onToggleAllComments}>
+              <button type="button" className={`tm-all-comments-trigger${panelView === "comments" ? " is-active" : ""}`} aria-label="Comments" title="Comments"
+                aria-expanded={panelView === "comments"} aria-controls="tm-all-comments" onClick={() => openPanelView("comments")}>
                 <MessagesSquare {...iconProps} />
                 {projectAnnotations.length > 0 && <span className="tm-count-badge" aria-hidden="true">{projectAnnotations.length > 99 ? "99+" : projectAnnotations.length}</span>}
               </button>
+              {notifications && <button type="button" className={`tm-all-comments-trigger tm-inbox-trigger${panelView === "inbox" ? " is-active" : ""}`}
+                aria-label={unreadInboxCount ? `Inbox, ${unreadInboxCount} unread` : "Inbox"} title="Inbox"
+                aria-expanded={panelView === "inbox"} aria-controls="tm-all-comments" onClick={() => openPanelView("inbox")}>
+                <InboxIcon {...iconProps} />
+                {unreadInboxCount > 0 && <span className="tm-count-badge" aria-hidden="true">{unreadInboxCount > 99 ? "99+" : unreadInboxCount}</span>}
+              </button>}
             </div>
             <div className="tm-toolbar-divider" />
             <ToolButton icon={<CloseIcon />} label="Close annotations (Esc)" onClick={onExit} />
@@ -2816,7 +2844,7 @@ function Overlay({
       {allCommentsOpen && ["picking", "selected"].includes(mode) && (
         <AllCommentsPanel annotations={projectAnnotations} restorations={annotationRestorations} reviewer={reviewer}
           route={pageVersionRoute} hidden={mode !== "picking"} onClose={onCloseAllComments} onOpen={onOpenListedAnnotation}
-          tab={inboxOpen && notifications ? "inbox" : nextStepsOpen && nextSteps ? "next-steps" : "comments"}
+          tab={panelTab}
           onTabChange={(tab) => { setInboxOpen(tab === "inbox"); onShowNextSteps(tab === "next-steps"); }}
           pageVersions={pageVersions} onSelectPageVersion={onSelectPageVersion}
           nextSteps={nextSteps} canTickNextSteps={canTickNextSteps} onNextStepDone={onNextStepDone}

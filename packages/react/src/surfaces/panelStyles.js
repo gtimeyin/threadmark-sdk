@@ -64,6 +64,15 @@ export const panelStyles = `
   .tm-comments-panel .tm-panel-tabs button[aria-selected="true"] { background: transparent; color: var(--tm-text-primary); box-shadow: none; }
   .tm-comments-panel .tm-panel-tabs button[aria-selected="true"] .tm-panel-tabs__icon { color: var(--tm-action-primary); }
   .tm-comments-panel .tm-panel-tabs__icon { width: 14px; height: 14px; flex: none; }
+  /* With Inbox or Next steps the tabs are icons; the name stays for screen readers and as a tooltip. */
+  .tm-comments-panel .tm-panel-tabs.is-icon-only { gap: 2px; }
+  .tm-comments-panel .tm-panel-tabs.is-icon-only button { position: relative; justify-content: center; width: 28px; height: 28px; border-radius: var(--tm-radius-button); }
+  .tm-comments-panel .tm-panel-tabs.is-icon-only button:hover { background: rgba(251, 250, 246, .05); }
+  .tm-comments-panel .tm-panel-tabs.is-icon-only button[aria-selected="true"] { background: var(--tm-raised); }
+  .tm-comments-panel .tm-panel-tabs.is-icon-only .tm-panel-tabs__icon { width: 16px; height: 16px; }
+  .tm-comments-panel .tm-panel-tabs.is-icon-only .tm-panel-tabs__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .tm-comments-panel .tm-panel-tabs.is-icon-only .tm-panel-tabs__badge { position: absolute; top: -3px; right: -5px; min-width: 14px; height: 14px; padding: 0 3px; font-size: 10px; line-height: 14px; }
+  .tm-comments-panel .tm-panel-tabs:not(.is-icon-only) .tm-panel-tabs__icon { display: none; }
   .tm-comments-panel .tm-panel-tabs__badge {
     display: inline-grid;
     place-items: center;
@@ -257,7 +266,7 @@ export const panelStyles = `
 
   /* Next steps (Figma "Next step"): a checkbox row, the step in 14px, mono meta; open rows show who
      asked for it. Progress is a thin Lime bar. */
-  .tm-comments-panel .tm-next-steps { overflow: auto; flex: 1; }
+  .tm-comments-panel .tm-next-steps { overflow: auto; flex: 1; padding: 0 0 12px; }
   .tm-comments-panel .tm-next-steps__summary { padding: 12px 16px 8px; border-bottom: 1px solid rgba(251, 250, 246, .08); }
   .tm-comments-panel .tm-next-steps__progress { color: var(--tm-text-secondary); font: 500 11px/14px var(--tm-font); }
   .tm-comments-panel .tm-next-steps__progress strong { color: var(--tm-text-primary); }
@@ -265,7 +274,9 @@ export const panelStyles = `
   .tm-comments-panel .tm-next-steps__bar span { border-radius: 2px; background: var(--tm-action-primary); }
   .tm-comments-panel .tm-next-steps__list { margin: 0; padding: 0; }
   .tm-comments-panel .tm-next-step { border-bottom: 1px solid rgba(251, 250, 246, .08); }
-  .tm-comments-panel .tm-next-step.is-open { background: rgba(251, 250, 246, .04); }
+  /* Rows run edge to edge between dividers, so the hover is a flat tint, not the light theme's rounded card. */
+  .tm-comments-panel .tm-next-step { border-radius: 0; }
+  .tm-comments-panel .tm-next-step:hover, .tm-comments-panel .tm-next-step.is-open { background: rgba(251, 250, 246, .04); }
   .tm-comments-panel .tm-next-step__row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px 10px; }
   .tm-comments-panel .tm-next-step__check {
     appearance: none;
@@ -291,6 +302,11 @@ export const panelStyles = `
   .tm-comments-panel .tm-next-step__meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font-mono); }
   .tm-comments-panel .tm-next-step__count { display: inline-flex; align-items: center; gap: 4px; }
   .tm-comments-panel .tm-step-tag { border-radius: 4px; padding: 0 5px; background: rgba(251, 250, 246, .10); color: var(--tm-text-secondary); font: 500 11px/16px var(--tm-font); }
+  /* Dark-panel versions of the light-theme "all done" line and Done divider: Lime passes contrast on the ground, and the divider matches the row dividers. */
+  .tm-comments-panel .tm-next-steps__all-done { margin: 0; padding: 12px 16px; border-bottom: 1px solid rgba(251, 250, 246, .08); color: var(--tm-action-primary); font: 600 12px/16px var(--tm-font); }
+  .tm-comments-panel .tm-next-steps__done { margin-top: 0; padding: 4px 0 0; border-top: 0; }
+  .tm-comments-panel .tm-next-steps__done-toggle { margin: 4px 10px; color: var(--tm-text-secondary); }
+  .tm-comments-panel .tm-next-steps__done-toggle:hover { color: var(--tm-text-primary); }
   .tm-comments-panel .tm-next-step__details { display: grid; gap: 10px; padding: 0 16px 12px 44px; }
   .tm-comments-panel .tm-next-step__notes { margin: 0; padding: 10px 12px; border: 1px solid rgba(251, 250, 246, .14); border-radius: var(--tm-radius-button); color: var(--tm-text-primary); font: 400 13px/20px var(--tm-font-mono); }
   .tm-comments-panel .tm-next-step__sources { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }

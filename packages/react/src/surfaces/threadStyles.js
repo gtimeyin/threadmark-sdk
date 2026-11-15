@@ -179,6 +179,12 @@ export const threadStyles = `
   .tm-popover .tm-replay-attachment strong,
   .tm-popover .tm-replay-open strong { font: 500 11px/14px var(--tm-font); }
   .tm-popover .tm-replay-attachment button { height: 26px; padding: 0 8px; background: rgba(251, 250, 246, .10); font: 600 11px/14px var(--tm-font); }
+  /* Preview and Remove are icon buttons; "Attach again" stays a labelled button. */
+  .tm-replay-attachment .tm-replay-attachment__icon { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; background: transparent; color: var(--tm-text-secondary); }
+  .tm-replay-attachment .tm-replay-attachment__icon:hover { background: rgba(251, 250, 246, .10); color: var(--tm-text-primary); }
+  .tm-replay-attachment .tm-replay-attachment__icon .tm-tool-icon { width: 15px; height: 15px; color: inherit; }
+  .tm-replay-attachment { column-gap: 4px; }
+  .tm-replay-attachment > div { margin-left: 5px; }
 
   /* Polls (Figma "Poll option" and "Poll result"): numbered rows until you vote, then results with a
      thin bar under each answer; the leader is Lime, your pick is ticked. */

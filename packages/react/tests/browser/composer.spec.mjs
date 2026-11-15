@@ -197,7 +197,7 @@ test("a thread opened from the panel opens in the panel, with a way back to the 
   await page.keyboard.press("Enter");
   await expect(page.locator(".tm-toast")).toContainText("Comment added");
 
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   await page.locator(".tm-comments-list li").first().click();
   const thread = page.locator(".tm-popover--docked");
   await expect(thread).toBeVisible();
@@ -218,7 +218,7 @@ test("a pin opens its thread as a popover by the pin, even with the panel open",
   await page.keyboard.press("Enter");
   await expect(page.locator(".tm-toast")).toContainText("Comment added");
 
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   await expect(page.locator("#tm-all-comments")).toBeVisible();
   await page.locator(".tm-marker").first().click();
   const thread = page.locator(".tm-popover--thread");
@@ -260,7 +260,7 @@ test("the Inbox shows Unread or All, grouped by day; opening an item and Mark al
   await page.setViewportSize({ width: 1280, height: 800 });
   const panel = page.locator("#tm-all-comments");
   await page.waitForTimeout(300);
-  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Comments", exact: true }).click();
   await page.getByRole("tab", { name: /Inbox/ }).click();
 
   const views = panel.getByRole("radiogroup", { name: "Show" });
@@ -289,11 +289,71 @@ test("the Inbox shows Unread or All, grouped by day; opening an item and Mark al
   expect(pageErrors).toEqual([]);
 });
 
+test("the idle Bar is the comment-mode Bar: Tools, More, Comments, and Inbox with its unread count, which opens the Inbox", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "inbox=1");
+  const close = page.getByRole("button", { name: "Close annotations (Esc)" });
+  if (await close.isVisible()) await close.click();
+  const idle = page.getByRole("group", { name: "Threadmark" });
+  await expect(idle.getByRole("button", { name: "Feedback tools" })).toBeVisible();
+  await expect(idle.getByRole("button", { name: "More actions" })).toBeVisible();
+  await expect(idle.locator(".tm-launcher")).toBeVisible();
+  await expect(idle.locator(".tm-bar__primary, .tm-ui-key")).toHaveCount(0);
+  await idle.getByRole("button", { name: "Inbox, 3 unread" }).click();
+  await expect(page.locator("#tm-all-comments")).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Inbox/ })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Close annotations (Esc)" }).click();
+  // More from the idle Bar starts commenting with the More menu already open.
+  await page.getByRole("group", { name: "Threadmark" }).getByRole("button", { name: "More actions" }).click();
+  await expect(page.locator("#tm-more-menu")).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
+test("the Bar's Comments and Inbox buttons open the panel on their own view, and close it when it's already showing", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "inbox=1");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const panel = page.locator("#tm-all-comments");
+  const bar = page.getByRole("toolbar", { name: "Threadmark annotation tools" });
+  await page.waitForTimeout(300);
+  // Clicking Comments on another view switches to Comments; clicking it again closes the panel.
+  for (let tries = 0; tries < 2 && await panel.isVisible(); tries += 1) await bar.getByRole("button", { name: "Comments", exact: true }).click();
+  await expect(panel).toBeHidden();
+
+  const inbox = bar.getByRole("button", { name: "Inbox, 3 unread" });
+  await inbox.click();
+  await expect(panel).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Inbox/ })).toHaveAttribute("aria-selected", "true");
+  await expect(inbox).toHaveAttribute("aria-expanded", "true");
+
+  const comments = bar.getByRole("button", { name: "Comments", exact: true });
+  await comments.click();
+  await expect(page.getByRole("tab", { name: /Activity/ })).toHaveAttribute("aria-selected", "true");
+  await expect(inbox).toHaveAttribute("aria-expanded", "false");
+
+  await comments.click();
+  await expect(panel).toBeHidden();
+  await expect(comments).toBeFocused();
+  expect(pageErrors).toEqual([]);
+});
+
+test("the panel's tabs are icons with their names kept for screen readers, and the header doesn't overlap at 800px", async ({ page }) => {
+  await mountFixture(page, "inbox=1&nextsteps=1");
+  await page.setViewportSize({ width: 800, height: 900 });
+  const panel = page.locator("#tm-all-comments");
+  await page.waitForTimeout(300);
+  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Comments", exact: true }).click();
+  await expect(page.getByRole("tab", { name: /Activity/ })).toHaveAttribute("title", "Activity");
+  await expect(page.getByRole("tab", { name: /Inbox/ })).toHaveAttribute("title", "Inbox");
+  const boxes = await panel.locator(".tm-comments-header").evaluate((header) =>
+    [...header.querySelectorAll(".tm-panel-tabs > button, .tm-comments-actions > button, .tm-comments-actions > * > button")]
+      .map((button) => { const box = button.getBoundingClientRect(); return { left: box.left, right: box.right }; }));
+  for (let index = 1; index < boxes.length; index += 1) expect(boxes[index].left).toBeGreaterThanOrEqual(boxes[index - 1].right);
+});
+
 test("an empty Inbox says what will show up there (19a)", async ({ page }) => {
   await mountFixture(page, "inbox=empty");
   const panel = page.locator("#tm-all-comments");
   await page.waitForTimeout(300);
-  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Comments", exact: true }).click();
   await page.getByRole("tab", { name: /Inbox/ }).click();
   await expect(panel.locator(".tm-inbox-empty")).toContainText("Nothing needs you");
   await expect(panel.locator(".tm-inbox-empty")).toContainText("Mentions, replies to your comments and things assigned to you");
@@ -310,7 +370,7 @@ test("an Inbox item opens its thread in the panel, with a way back to the Inbox 
   const id = await page.evaluate(() => window.__threadmarkFeedback.at(-1).id);
   await page.evaluate((annotationId) => window.__threadmarkSetNotifications([{ id: "n1", kind: "mention", actor: { id: "maya", displayName: "Maya Patel" },
     text: "@Emily can we drop the company field here?", annotationId, route: "/picking-events", createdAt: new Date().toISOString() }]), id);
-  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Comments", exact: true }).click();
   await page.getByRole("tab", { name: /Inbox/ }).click();
   await panel.locator(".tm-inbox-item").first().click();
   const thread = page.locator(".tm-popover--docked");
@@ -323,7 +383,7 @@ test("an Inbox item opens its thread in the panel, with a way back to the Inbox 
 async function openPanel(page) {
   const panel = page.locator("#tm-all-comments");
   await page.waitForTimeout(300);
-  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Comments", exact: true }).click();
   return panel;
 }
 

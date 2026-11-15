@@ -106,7 +106,7 @@ test('closing cancels queued work; reopening refreshes changed and removed targe
   await expect(page.locator('.tm-marker--suggested')).toHaveCount(1);
   expect(await page.evaluate(() => window.__performanceCounters.assess)).toBe(60);
   // The bar opened the Feedback panel; close it to reach the pins.
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   // A thread remains anchored while scrolling, and only its overlay subscribes to geometry.
   await page.locator('.tm-marker').nth(3).click();
   await expect(page.getByRole('button', { name: 'Cancel comment', exact: true })).toBeVisible();

@@ -46,7 +46,7 @@ test('the More menu opens above the side panel, not under it', async ({ page }) 
   // At 800px wide the bar's menu and the 380px panel overlap.
   await page.setViewportSize({ width: 800, height: 1000 });
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await expect(page.locator('#tm-all-comments')).toBeVisible();
   await page.getByRole('button', { name: 'More actions' }).click();
   const item = page.getByRole('menuitem', { name: 'Open the dashboard' });

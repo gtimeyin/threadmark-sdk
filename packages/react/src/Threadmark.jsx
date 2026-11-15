@@ -1682,7 +1682,7 @@ export function Threadmark({
 
   const onToolbarPointerDown = useCallback((event) => {
     if (event.button !== 0) return;
-    const toolbar = event.currentTarget.closest(".tm-modebar");
+    const toolbar = event.currentTarget.closest(".tm-modebar, .tm-bar");
     const bounds = toolbar?.getBoundingClientRect();
     if (!bounds) return;
     event.preventDefault();
@@ -1725,7 +1725,7 @@ export function Threadmark({
   useEffect(() => {
     if (!toolbarPosition) return undefined;
     const clampToolbar = () => {
-      const toolbar = portalRoot?.querySelector(".tm-modebar");
+      const toolbar = portalRoot?.querySelector(".tm-modebar, .tm-bar--idle");
       const bounds = toolbar?.getBoundingClientRect();
       if (!bounds) return;
       setToolbarPosition((current) => current ? {
@@ -2620,7 +2620,7 @@ export function Threadmark({
           if (mode === "tour") exitTourMode();
           else if (allCommentsOpen && mode === "picking") {
             setAllCommentsOpen(false);
-            portalRoot.querySelector(".tm-all-comments-trigger")?.focus();
+            (portalRoot.querySelector(".tm-all-comments-trigger.is-active") || portalRoot.querySelector(".tm-all-comments-trigger"))?.focus();
           }
           else if (mode === "recording") cancelInteractionRecording();
           else if (mode === "video-setup") cancelVideoSetup();
@@ -4201,7 +4201,7 @@ export function Threadmark({
       }}
       allCommentsOpen={allCommentsOpen}
       onToggleAllComments={() => { setAllCommentsOpen((open) => !open); }}
-      onCloseAllComments={() => { setAllCommentsOpen(false); portalRoot.querySelector(".tm-all-comments-trigger")?.focus(); }}
+      onCloseAllComments={() => { setAllCommentsOpen(false); (portalRoot.querySelector(".tm-all-comments-trigger.is-active") || portalRoot.querySelector(".tm-all-comments-trigger"))?.focus(); }}
       onOpenListedAnnotation={openListedAnnotation}
       repinning={Boolean(repinningId)}
       repinTargetCount={(() => {

@@ -127,7 +127,7 @@ test("a poll is attached to a comment; reviewers vote and change their vote", as
   await page.keyboard.press("Escape");
 
   // In the Activity list, the poll shows its answers and shares, read-only, in a sunken well.
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   const summary = page.locator(".tm-comment-card .tm-comment-poll");
   await expect(summary).toContainText("1 vote · You voted");
   await expect(summary.locator(".tm-comment-poll__option")).toHaveCount(3);
@@ -190,7 +190,7 @@ test("reviewers ask people a survey question in three steps; problems are named 
   })]);
 
   // The team sees it at the top of Activity and can read the answers, then end it.
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   await page.getByRole("button", { name: /How easy was it to find pricing\?/ }).click();
   const results = page.getByRole("tabpanel", { name: /^Answers:/ });
   await expect(results).toContainText("4.3 of 7 · 3 answers");

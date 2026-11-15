@@ -92,7 +92,7 @@ test('keeping a suggestion posts it as the reviewer\'s comment, marked with wher
 
   // The kept comment opens as an ordinary thread, labelled as an AI suggestion.
   await page.getByRole('button', { name: 'Close page review' }).click();
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await page.getByText('"Get started" doesn\'t say what happens next.').first().click();
   await expect(page.getByText('From an AI review', { exact: true })).toBeVisible();
 });

@@ -356,7 +356,7 @@ test("page versions are host-driven and power carry-forward from the thread menu
     readFile(resolvePackagePath("./src/index.d.ts"), "utf8"),
   ]);
 
-  assert.match(source, /aria-label="Feedback panel"/);
+  assert.match(source, /aria-label="Comments"/);
   assert.match(source, /role="tablist"/);
   assert.doesNotMatch(source, /Versions <span className="tm-sr-only">/);
   assert.match(source, /Carry comment forward/);

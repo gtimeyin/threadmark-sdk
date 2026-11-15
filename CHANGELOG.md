@@ -18,6 +18,9 @@ The review overlay is rebuilt on the November brand, and gains surveys, an Inbox
 - Wording says "comment", not "annotation", throughout the overlay.
 
 ### Added
+- The idle Bar is now the same bar as comment mode: grip, **Tools**, **⋯ More** | **Comments** with its count, **Inbox** with its unread count | a shrink dot where comment mode has Close. Tools and More start commenting with that menu open. The message ("Sam mentioned you · on Home", "All caught up") and the ⌘⇧F key hint are gone; the shortcut still works and the Comments button's accessible name still says what is waiting.
+- The Bar drops its standing "Click anything, or select text · Esc" hint. It shows a hint only while something is happening: several elements selected, a drag, or a repin.
+- **Comments** and **Inbox** buttons on the Bar replace the single Feedback panel button. Each opens the panel on its own view, and clicking the one already showing closes it. Inbox appears when the host passes `notifications` and carries the unread count. Next steps stays a tab inside the panel.
 
 - **Composer and threads** (board 01): one dark card with what you picked, the text, @ to mention, the poll tool and a Lime send. ↵ posts, Shift+↵ adds a line. Replies get the same @ button. With the panel open, a thread opens in the panel's place with "← All comments".
 - **Delete with Undo:** a comment without replies goes straight away with "Comment deleted · Undo"; threads with replies, and replies, still ask first. You can edit your own replies.
@@ -54,6 +57,8 @@ The review overlay is rebuilt on the November brand, and gains surveys, an Inbox
 - Thumbnails only show real screenshots.
 - Esc closes only the innermost sheet or menu.
 - The Tools and More menus open above the side panel instead of under it.
+- The side panel header no longer overlaps itself when Inbox and Next steps are both present: its tabs are now icons, with their names kept as tooltips and for screen readers.
+- Next steps rows in the dark panel hover as flat, edge-to-edge rows instead of rounded light-theme cards.
 
 ### Security
 

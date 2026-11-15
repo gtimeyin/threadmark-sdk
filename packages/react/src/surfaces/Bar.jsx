@@ -1,11 +1,10 @@
 // The Bar: Threadmark's way in (Figma "Bar" component, Feedback experience board 01).
-// When nobody is reviewing it is a small dark bar that says what is waiting on this page:
-// Nothing yet ("Leave feedback"), Waiting (new questions or comments), All caught up, or Offline.
-// In comment mode the same bar carries the hint ("Click anything, or select text  Esc") and the tools.
+// When nobody is reviewing it is the same bar as comment mode (grip, Tools, More | Comments, Inbox) with the
+// shrink dot in Close's place. What is waiting (new, questions, offline) is in the Comments button's name and badge.
+// In comment mode the same bar carries the tools, plus a hint while something is happening (a multi-select, a drag, a repin).
 import { useEffect, useRef, useState } from "react";
-import { AddIcon, CommentIcon, ResolveIcon } from "../icons.jsx";
-import { Avatar, Key } from "../ui/primitives.jsx";
-import { notificationHeadline } from "../notifications.js";
+import { ChevronDownIcon, CommentIcon, DragIcon, InboxIcon, MoreIcon, SelectIcon, ThreadsIcon } from "../icons.jsx";
+import { Key } from "../ui/primitives.jsx";
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 export const openShortcutLabel = () => (isMac() ? "⌘⇧F" : "Ctrl⇧F");
@@ -77,7 +76,7 @@ export function useScrollAway(enabled = true) {
 }
 
 /** The idle bar. `onOpen` opens the review (and the panel when there is something to read). */
-export function IdleBar({ annotations = [], notifications = null, route, launcherRef, onOpen, onOpenTools, position = "bottom-center", shrunk = false, onShrink }) {
+export function IdleBar({ annotations = [], notifications = null, route, launcherRef, onOpen, onOpenTools, onOpenMore, drag, style, position = "bottom-center", shrunk = false, onShrink }) {
   const online = useOnline();
   const away = useScrollAway(!shrunk);
   const count = annotations.length;
@@ -87,22 +86,18 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
   const unread = (notifications || []).filter((item) => !item.read);
   const latest = online ? unread[0] : null;
   const base = barMood({ count, questions, seen, online });
-  const { mood, primary, secondary } = latest
-    ? { mood: "reply", primary: notificationHeadline(latest), secondary: latest.route ? `on ${latest.route === "/" ? "Home" : latest.route}` : unread.length > 1 ? `${unread.length} new` : "" }
-    : base;
   const shortcut = openShortcutLabel();
-  const label = latest
-    ? `Open inbox: ${primary}${unread.length > 1 ? `, ${unread.length} unread` : ""}`
+  const baseLabel = !online
+    ? `Offline${count ? `, ${plural(count, "comment")}` : ""}`
     : count
-      ? `Open feedback, ${plural(count, "comment")}${mood === "waiting" ? `, ${primary}` : ""}`
+      ? `Open feedback, ${plural(count, "comment")}${base.mood === "waiting" ? `, ${base.primary}` : ""}`
       : "Leave feedback";
-
   const open = () => {
     if (count) {
       markFeedbackSeen(route, count);
       setSeen(count);
     }
-    onOpen?.(count > 0, Boolean(latest));
+    onOpen?.(count > 0, false);
   };
 
   // Shrinking or restoring moves focus to the control that's now there, rather than dropping it.
@@ -127,30 +122,52 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
     );
   }
 
+  // Idle and comment mode share one Bar (2026-11-15): grip, Tools, More | Comments, Inbox | and the shrink dot
+  // where comment mode has Close. Tools and More start commenting with that menu open, so nothing jumps.
+  // What is waiting (new comments, questions, offline) is in the Comments button's name and badge.
+  const waitingCount = Math.max(0, count - seen);
+  const badge = (value) => <span className="tm-count-badge" aria-hidden="true">{value > 99 ? "99+" : value}</span>;
   return (
-    <div className={`tm-bar tm-bar--idle tm-bar--${mood} tm-bar--at-${position}${away ? " is-away" : ""}`} role="group" aria-label="Threadmark">
-      {(count > 0 || latest) && (
-        <>
-          <button type="button" className="tm-bar__tools" aria-label="Comment on the page" title="Comment on the page (C)" onClick={onOpenTools}>
-            <AddIcon aria-hidden="true" focusable="false" />
-          </button>
-          <span className="tm-bar__divider" aria-hidden="true" />
-        </>
-      )}
-      <button ref={launcherRef} type="button" className="tm-launcher tm-bar__main" aria-label={label} aria-keyshortcuts="Meta+Shift+F Control+Shift+F" onClick={open}>
-        {mood === "nothing" && <AddIcon aria-hidden="true" focusable="false" className="tm-bar__lead-icon" />}
-        {mood === "caught-up" && <ResolveIcon aria-hidden="true" focusable="false" className="tm-bar__lead-icon tm-bar__lead-icon--lime" />}
-        {(mood === "waiting" || mood === "offline" || mood === "reply") && <span className={`tm-bar__dot tm-bar__dot--${mood}`} aria-hidden="true" />}
-        {mood === "reply" && <Avatar name={latest.actor.displayName} src={latest.actor.avatarUrl} size={20} />}
-        <span className="tm-bar__primary">{primary}</span>
-        {secondary && <span className="tm-bar__sep" aria-hidden="true">·</span>}
-        {secondary && <span className="tm-bar__secondary">{secondary}</span>}
-        <Key className="tm-bar__key">{shortcut}</Key>
-      </button>
-      {onShrink && (
-        <button type="button" className="tm-bar__shrink" aria-label="Shrink to a dot" title="Shrink to a dot (⌘.)" onClick={() => onShrink(true)}>
-          <span aria-hidden="true" />
+    <div className={`tm-bar tm-bar--idle tm-bar--${base.mood} tm-bar--at-${position}${away ? " is-away" : ""}`} role="group" aria-label="Threadmark"
+      style={style}>
+      {drag && (
+        <button type="button" className="tm-drag-handle" aria-label="Move the Threadmark bar" title="Drag the bar"
+          onPointerDown={drag.onPointerDown} onPointerMove={drag.onPointerMove} onPointerUp={drag.onPointerUp} onPointerCancel={drag.onPointerUp}>
+          <DragIcon aria-hidden="true" focusable="false" />
         </button>
+      )}
+      <button type="button" className="tm-tool-switch" aria-label="Feedback tools" title="Feedback tools (C to comment)" aria-haspopup="menu" onClick={onOpenTools}>
+        <SelectIcon aria-hidden="true" focusable="false" />
+        <ChevronDownIcon aria-hidden="true" focusable="false" className="tm-tool-switch__chevron" />
+      </button>
+      {onOpenMore && (
+        <button type="button" className="tm-toolbar-more" aria-label="More actions" title="More actions" aria-haspopup="menu" onClick={onOpenMore}>
+          <MoreIcon aria-hidden="true" focusable="false" />
+        </button>
+      )}
+      <span className="tm-toolbar-divider" aria-hidden="true" />
+      <button ref={launcherRef} type="button" className={`tm-launcher tm-all-comments-trigger${waitingCount || questions ? " is-waiting" : ""}`}
+        aria-label={baseLabel} title={online ? `Comments (${shortcut})` : "Offline: comments will wait"}
+        aria-keyshortcuts="Meta+Shift+F Control+Shift+F" onClick={open}>
+        {/* Threads, not the single bubble: that one means "add a comment". */}
+        <ThreadsIcon aria-hidden="true" focusable="false" />
+        {!online && <span className="tm-bar__dot tm-bar__dot--offline tm-bar__icon-dot" aria-hidden="true" />}
+        {online && count > 0 && badge(count)}
+      </button>
+      {notifications && (
+        <button type="button" className="tm-all-comments-trigger" aria-label={unread.length ? `Inbox, ${unread.length} unread` : "Inbox"} title="Inbox"
+          onClick={() => onOpen?.(count > 0, true)}>
+          <InboxIcon aria-hidden="true" focusable="false" />
+          {unread.length > 0 && badge(unread.length)}
+        </button>
+      )}
+      {onShrink && (
+        <>
+          <span className="tm-toolbar-divider" aria-hidden="true" />
+          <button type="button" className="tm-bar__shrink" aria-label="Shrink to a dot" title="Shrink to a dot (⌘.)" onClick={() => onShrink(true)}>
+            <span aria-hidden="true" />
+          </button>
+        </>
       )}
     </div>
   );
