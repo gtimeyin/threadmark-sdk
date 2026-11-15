@@ -11,6 +11,7 @@ export default defineConfig({
       // `tours` is the production-safe player entry; it must not import the review overlay.
       entry: {
         index: fileURLToPath(new URL("./src/index.jsx", import.meta.url)),
+        capture: fileURLToPath(new URL("./src/capture.js", import.meta.url)),
         tours: fileURLToPath(new URL("./src/tours.js", import.meta.url)),
         // `surveys` is the production-safe visitor survey player; like tours, no review overlay.
         surveys: fileURLToPath(new URL("./src/surveys.js", import.meta.url)),

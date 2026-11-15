@@ -3,6 +3,7 @@ import { PauseIcon as Pause } from "./icons.jsx";
 import { PlayIcon as Play } from "./icons.jsx";
 import { CloseIcon as X } from "./icons.jsx";
 import { buildReplayTimeline, graphqlLabel, isFailedRequest } from "./replayTimeline.js";
+import { createCanvasPainter } from "./canvasReplay.js";
 
 import replayerStyles from 'rrweb/dist/style.css?inline';
 import { videoStyles } from './videoStyles.js';
@@ -77,6 +78,7 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
   useEffect(() => {
     if (!events.length || !stageRef.current) return undefined;
     let replayer = null;
+    let painter = null;
     let frame = 0;
     let observer = null;
     let cancelled = false;
@@ -88,9 +90,13 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
         showWarning: false,
         triggerFocus: false,
         mouseTail: { duration: 700, lineCap: "round", lineWidth: 3, strokeStyle: "rgba(229, 72, 60, 0.55)" },
+        // Never true: it lets scripts run in the replay's frame. Recorded canvas frames are painted below.
         UNSAFE_replayCanvas: false,
       });
       replayerRef.current = replayer;
+      painter = createCanvasPainter(events);
+      if (painter.size) replayer.on("fullsnapshot-rebuilded", () => painter.reset());
+      else painter = null;
       replayer.on("finish", () => setPlaying(false));
       const fit = () => {
         const wrapper = stageRef.current?.querySelector(".replayer-wrapper");
@@ -112,6 +118,7 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
       setTimeline(buildReplayTimeline(events, kit));
       setStatus("ready");
       const tick = () => {
+        painter?.paint(replayer);
         setCurrent((value) => {
           const next = Math.round(replayer.getCurrentTime());
           return Math.abs(next - value) >= 100 ? next : value;
@@ -126,6 +133,7 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
       observer?.disconnect();
       replayer?.pause();
       replayer?.destroy?.();
+      painter?.destroy();
       replayerRef.current = null;
     };
   }, [events]);

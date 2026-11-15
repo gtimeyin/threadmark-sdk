@@ -1,29 +1,48 @@
+import { CAPTURE_PRIVATE_SELECTOR } from './privacy.js';
 import { createTargetDescriptor } from './target.js';
 
-const PROTECTED = '[data-threadmark-root], [data-threadmark-ignore], [data-threadmark-sensitive], [data-private], input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+const PROTECTED = `[data-threadmark-root], [aria-hidden="true"], script, style, noscript, template, ${CAPTURE_PRIVATE_SELECTOR}`;
 export const PAGE_REVIEW_LIMIT = 5;
+
+/**
+ * What a page review may read: whether an element is off limits (private, ignored, hidden from assistive tech,
+ * or a form field), and its accessible name with private parts removed. Shared by the rule scan and the AI
+ * outline, so both leave out exactly the same things.
+ */
+export function createPageInspector({ documentRef = document, ignoredSelectors = [] } = {}) {
+  const protectedSelectors = [PROTECTED, ...ignoredSelectors];
+  function excluded(element) {
+    return protectedSelectors.some(selector => { try { return Boolean(element.closest(selector)); } catch { return true; } });
+  }
+  function visibleText(element) {
+    const walker = documentRef.createTreeWalker(element, 4);
+    let node, text = '';
+    while ((node = walker.nextNode())) {
+      if (node.parentElement && !excluded(node.parentElement)) text += node.textContent;
+    }
+    return text;
+  }
+  function name(element) {
+    const ids = (element.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean);
+    const labels = ids.map(id => documentRef.getElementById(id)).filter(el => el && !excluded(el));
+    const labelText = labels.map(visibleText).join(' ').trim();
+    const label = element.getAttribute('aria-label')?.trim() || labelText || visibleText(element).trim();
+    if (label) return label;
+    const image = Array.from(element.querySelectorAll('img[alt]')).find(el => !excluded(el));
+    const title = Array.from(element.querySelectorAll('svg title')).find(el => !excluded(el));
+    return (image?.getAttribute('alt') || (title ? visibleText(title) : '')).trim();
+  }
+  return { excluded, name, visibleText, protectedSelectors };
+}
 
 /** Capture observable page issues without reading form values, private text, or running host actions. */
 export async function collectPageReview({ documentRef = document, route = '/', buildId, ignoredSelectors = [], signal } = {}) {
   const findings = [];
   const windowRef = documentRef.defaultView;
+  const { excluded, name, protectedSelectors } = createPageInspector({ documentRef, ignoredSelectors });
   let headingLevel = 0, visited = 0;
-  function excluded(element) {
-    if (element.closest(PROTECTED) || element.closest('[aria-hidden="true"]')) return true;
-    return ignoredSelectors.some(selector => { try { return Boolean(element.closest(selector)); } catch { return true; } });
-  }
-  function name(element) {
-    const ids = (element.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean);
-    const labels = ids.map(id => documentRef.getElementById(id)).filter(el => el && !excluded(el));
-    const clone = element.cloneNode(true);
-    clone.querySelectorAll(`${PROTECTED}, [aria-hidden="true"]`).forEach(el => el.remove());
-    for (const selector of ignoredSelectors) { try { clone.querySelectorAll(selector).forEach(el => el.remove()); } catch {} }
-    const labelText = labels.map(el => { const copy = el.cloneNode(true); copy.querySelectorAll(`${PROTECTED}, [aria-hidden="true"]`).forEach(child => child.remove()); return copy.textContent; }).join(' ');
-    return (element.getAttribute('aria-label') || labelText || clone.textContent
-      || element.querySelector('img[alt]')?.getAttribute('alt') || element.querySelector('svg title')?.textContent || '').trim();
-  }
   function add(element, rule) {
-    const target = createTargetDescriptor(element, { route, ignoredSelectors: [...ignoredSelectors, '[data-private]'] });
+    const target = createTargetDescriptor(element, { route, ignoredSelectors: protectedSelectors });
     findings.push({ rule, target });
   }
   // An iterator avoids creating an unbounded element list on a large page.

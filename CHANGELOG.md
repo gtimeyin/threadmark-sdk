@@ -33,6 +33,9 @@ The review overlay is rebuilt on the November brand, and gains surveys, an Inbox
 - **AI review** (board 12): "Ask AI to review this page" gives draft findings with AI pins (Post one, Post all, or Dismiss with a reason). **Ask AI** (⌘K) answers about one element. Your host supplies the model through `onAiReview`, `onAskAi` and `onAiDismiss`. Posted findings are marked "From an AI review". The beta.14 `onPageReview` flow is included.
 - **Phones and tablets** (board 11): bottom sheets and 44px targets on phones, and a drawer on touch tablets in portrait.
 - **Live presence and emoji reactions** (`onReactionChange`).
+- **Private AI suggestions** (`onPageReview`, `onPageReviewDismiss`): **Tools → Review this page** shows suggestions only to the person who asked; keeping one posts it as their comment with `source: "ai_review"` and `feedback.aiReview`. It takes precedence over `onPageReviewRequested`.
+- **`threadmark-react/capture`**: payload, privacy, device, canvas-replay and replay-timeline helpers for servers, extensions and dashboards. Importing it starts no capture.
+- Session replay passes `sessionReplay.canvas` options through, and `data-quality-block` / `data-quality-mask` are treated as private.
 - From beta.14:
   - **Upload progress:** `onFeedbackCreate` gets a third argument with `onUploadProgress`, and Post shows "Uploading N%".
   - **Browser details** on `feedback.device` (turn off with `deviceDetails={false}`).

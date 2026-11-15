@@ -16,6 +16,7 @@ export const OTHER_TOOLS_BLOCK_SELECTORS = Object.freeze([
   ".highlight-ignore",
   ".heap-ignore",
   "[data-heap-ignore]",
+  "[data-quality-block]",
 ]);
 
 /** Regions other tools show with their text hidden. */
@@ -33,11 +34,28 @@ export const OTHER_TOOLS_MASK_SELECTORS = Object.freeze([
   "[data-matomo-mask]",
   "[data-heap-redact-text]",
   "[data-amp-mask]",
+  "[data-quality-mask]",
   "[data-jam-blur]:not([data-jam-blur='false']):not([data-jam-blur='no'])",
 ]);
 
 /** Every region a site marked as private, its own (`data-threadmark-sensitive`) or another tool's. */
 export const SITE_PRIVATE_SELECTOR = ["[data-threadmark-sensitive]", ...OTHER_TOOLS_BLOCK_SELECTORS, ...OTHER_TOOLS_MASK_SELECTORS].join(",");
+
+// Regions a site marked private for another session tool are masked here too.
+export const CAPTURE_PRIVATE_SELECTOR = [
+  "input",
+  "textarea",
+  "select",
+  "option",
+  "[contenteditable]:not([contenteditable='false'])",
+  "[data-threadmark-ignore]",
+  "iframe",
+  "video",
+  "object",
+  "embed",
+  "canvas",
+  SITE_PRIVATE_SELECTOR,
+].join(",");
 
 /** Fields whose visible value is private on its own: card details. Password fields already show dots. */
 export const PRIVATE_FIELD_SELECTOR = [

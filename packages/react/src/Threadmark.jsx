@@ -80,6 +80,7 @@ import {
 } from "./videoRecording.js";
 
 import { AgentReview } from "./AgentReview.jsx";
+import { HostedPageReview } from "./HostedPageReview.jsx";
 import { Presence } from "./Presence.jsx";
 
 const MAX_MULTI_TARGETS = 20;
@@ -218,6 +219,7 @@ function recordToAnnotation(record, reusablePayload = null) {
       tourStep: source.tourStep,
       links: source.links,
       source: source.source,
+      aiReview: source.aiReview,
       comment: source.comment,
       replies: source.replies,
       reactions: source.reactions,
@@ -528,6 +530,8 @@ export function Threadmark({
   onFeedbackDelete,
   onFeedbackClear,
   onPageReviewRequested,
+  onPageReview,
+  onPageReviewDismiss,
   onPageVersionSelect,
   onFeedbackCarryForward,
   onPollVote,
@@ -615,6 +619,7 @@ export function Threadmark({
   const [toolbarDragging, setToolbarDragging] = useState(false);
   const [barPrefs, setBarPrefs] = useState(() => (typeof window === "undefined" ? { position: "bottom-center", shrunk: false } : readBarPrefs()));
   const [hiddenPages, setHiddenPages] = useState(() => (typeof window === "undefined" ? [] : readHiddenPages()));
+  const [hostedReviewOpen, setHostedReviewOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const updateBarPrefs = useCallback((change) => setBarPrefs((current) => {
     const next = { ...current, ...change };
@@ -1052,7 +1057,7 @@ export function Threadmark({
     let active = true;
     let session = null;
     startSessionReplay({
-      bufferMs: replayOptions.bufferMs, blockSelectors: ignoredSelectors, network: replayNetworkRef.current,
+      bufferMs: replayOptions.bufferMs, blockSelectors: ignoredSelectors, network: replayNetworkRef.current, canvas: replayOptions.canvas,
       onError: () => safeCall(callbacks.onError, { code: "replay_unavailable", message: "Session replay could not start on this page." }),
     })
       .then((started) => {
@@ -1071,7 +1076,7 @@ export function Threadmark({
       replayRecorderRef.current = null;
       session?.stop();
     };
-  }, [portalRoot, replayOptions.enabled, replayOptions.bufferMs, hasReplayProvider, ignoredSelectorsKey]);
+  }, [portalRoot, replayOptions.enabled, replayOptions.bufferMs, replayOptions.canvas?.fps, replayOptions.canvas?.quality, hasReplayProvider, ignoredSelectorsKey]);
 
   useEffect(() => () => { annotationHydrator.clear(); otherPageHydrator.clear(); }, [annotationHydrator, otherPageHydrator]);
 
@@ -3931,6 +3936,7 @@ export function Threadmark({
         pinHistory: editing?.payload.pinHistory,
         links: editing?.payload.links,
         source: editing?.payload.source,
+        aiReview: editing?.payload.aiReview,
         workflow: withInlineMentions(editing?.payload.workflow, comment, reviewers, normalizedReviewer, buildId),
         ask: editing
           ? editing.payload.ask
@@ -4112,10 +4118,56 @@ export function Threadmark({
     });
   }
 
+  const acceptPageReviewFinding = async ({ finding, review, element, target }) => {
+    if (!element.isConnected || !review?.reviewId || !finding?.id || !callbacks.onFeedbackCreate.current) throw new Error("That suggestion can’t be kept.");
+    let shot = null;
+    const rect = element.getBoundingClientRect();
+    const left = Math.max(0, rect.left), top = Math.max(0, rect.top);
+    const width = Math.min(window.innerWidth, rect.right) - left, height = Math.min(window.innerHeight, rect.bottom) - top;
+    if (width >= 4 && height >= 4) {
+      try {
+        shot = await captureRegionSnapshot({ id: makeId("snapshot"), region: { left, top, width, height }, ignoredSelectors: [...ignoredSelectors, "[data-private]"] });
+      } catch { /* A missing screenshot never blocks keeping the comment. */ }
+    }
+    const payload = createFeedbackPayload({
+      captureEnvironment: deviceDetails === false ? undefined : captureEnvironment(window),
+      projectKey,
+      environment: environment || "local",
+      buildId,
+      route: activeRoute,
+      workflow: withInlineMentions(undefined, finding.comment, reviewers, normalizedReviewer, buildId),
+      target,
+      targets: [target],
+      captureKind: "element",
+      evidence: shot ? [shot.metadata] : [],
+      comment: finding.comment,
+      author: normalizedReviewer,
+      lastEditedBy: normalizedReviewer,
+      device: deviceDetails === false ? undefined : readDeviceInfo(window, clientHintsRef.current),
+      source: "ai_review",
+      aiReview: { reviewId: review.reviewId, findingId: finding.id },
+    });
+    const contextEvidence = shot ? [{ id: shot.metadata.id, blob: shot.blob }] : [];
+    if (!element.isConnected) throw new Error("That element isn’t on the page any more.");
+    const accepted = acceptAuthoritative(payload, contextEvidence, await callbacks.onFeedbackCreate.current?.(payload, { evidence: contextEvidence }));
+    setAnnotations((current) => [
+      ...current.filter((annotation) => annotation.id !== accepted.payload.id),
+      { id: accepted.payload.id, payload: accepted.payload, runtime: { kind: "element", elements: [element], evidence: accepted.evidence }, poll: emptyPoll(accepted.payload.ask) },
+    ]);
+    showNotice("Suggestion kept as a comment");
+  };
+
   const overlay = createPortal(
     <>
     {/* Inside a tm-root so the widget gets the brand tokens. */}
-    {onPageReviewRequested && mode === 'picking' && <div className="tm-root"><AgentReview route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
+    {onPageReview && hostedReviewOpen && mode === "picking" && <div className="tm-root">
+      <HostedPageReview key={JSON.stringify([projectKey, activeRoute, buildId])} onClose={() => setHostedReviewOpen(false)}
+        route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
+        existing={annotations.filter((item) => item.payload.route === activeRoute)
+          .map((item) => ({ comment: item.payload.comment, target: item.payload.target }))}
+        onAiReview={onPageReview} onAccept={acceptPageReviewFinding} onDismiss={onPageReviewDismiss} />
+    </div>}
+    {!onPageReview && onPageReviewRequested && mode === 'picking' && <div className="tm-root"><AgentReview route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
       onReview={onPageReviewRequested} onRecords={(records) => {
         const accepted = records.filter(record => record.feedback?.projectKey === projectKey && record.feedback?.route === activeRoute).map(record => recordToAnnotation(record)).filter(Boolean);
         setAnnotations(current => [...current.filter(item => !accepted.some(next => next.id === item.id)), ...accepted]);
@@ -4343,6 +4395,7 @@ export function Threadmark({
       destinations={Array.isArray(destinations) ? destinations.filter((item) => item && item.id && item.name) : []}
       onSendTo={callbacks.onSendTo.current ? sendToDestination : undefined}
       onConnectDestination={onConnectDestination}
+      onStartHostedReview={onPageReview ? () => setHostedReviewOpen(true) : undefined}
       onAiReview={onAiReview}
       onAskAi={onAskAi}
       onAiDismiss={onAiDismiss}

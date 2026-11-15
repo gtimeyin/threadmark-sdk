@@ -180,6 +180,8 @@ export interface ThreadmarkSessionReplayOptions {
     bodies?: boolean;
     sanitize?: (entry: ThreadmarkNetworkEntry) => ThreadmarkNetworkEntry | null;
   };
+  /** Opt in to bounded canvas image sampling. Pixels inside blocked or masked regions are excluded. */
+  canvas?: boolean | { fps?: number; quality?: number };
 }
 
 /** A request as `sessionReplay.network.sanitize` sees it. Header names are lowercase. */
@@ -488,7 +490,8 @@ export interface ThreadmarkFeedback {
   /** What the host's `metadata` returned when the comment was posted, cleaned and at most 10 KB. */
   metadata?: ThreadmarkMetadata;
   /** "ai" when it was posted from an AI review or Ask AI. The author is still the person who posted it. */
-  source?: "ai";
+  source?: "ai" | "agent" | "ai_review";
+  aiReview?: { reviewId: string; findingId: string };
   /** Where this comment was sent with Send to…, such as a GitHub issue. */
   links?: ThreadmarkCommentLink[];
   comment: string;
@@ -559,9 +562,50 @@ export interface ThreadmarkNotification {
   read?: boolean;
 }
 
+/** What `onPageReview` receives: the screen as an outline and a masked screenshot. Nothing typed is included. */
+export interface ThreadmarkPageReviewRequest {
+  route: string;
+  buildId: string | null;
+  /** What the reviewer asked the review to look at, if anything. */
+  focus: string | null;
+  viewport: { width: number; height: number };
+  /** Up to 150 visible elements; private areas, ignored selectors and form fields are left out. */
+  elements: { id: string; tag: string; role?: string; name?: string; text?: string; box: { x: number; y: number; w: number; h: number }; fontSize?: number }[];
+  /** What the built-in checks found, by outline id. */
+  hints: { element: string; rule: ThreadmarkPageReview['findings'][number]['rule'] }[];
+  /** Comments already on this page, so a review doesn't repeat them. */
+  existing: { comment: string; element?: string }[];
+  /** The viewport, masked like comment screenshots, as base64 without a data: prefix. */
+  screenshot: { type: string; base64: string };
+}
+export interface ThreadmarkPageReviewFinding {
+  id: string;
+  /** The outline id the suggestion is about. */
+  element: string;
+  category: 'copy' | 'polish' | 'accessibility' | 'bug' | 'idea' | 'question';
+  severity: 'high' | 'medium' | 'low';
+  comment: string;
+  reason?: string;
+  state: 'suggested' | 'accepted' | 'dismissed';
+}
+export interface ThreadmarkAiPageReview {
+  reviewId: string;
+  status: 'processing' | 'done' | 'failed';
+  error?: string | null;
+  findings: ThreadmarkPageReviewFinding[];
+}
 export interface ThreadmarkProps {
   /** Explicit page-review command; the consumer owns agent dispatch and persistence. */
   onPageReviewRequested?: (input: ThreadmarkPageReview, context: ThreadmarkPageReviewContext) => Promise<ThreadmarkPageReviewResult>;
+  /**
+   * AI page review. Adds **Review this page** to the tools menu; the host sends the request to its reviewer (the
+   * Supabase store's `reviewPage`) and returns the review. Suggestions stay in the reviewer's panel until they
+   * keep one, which is posted through `onFeedbackCreate` with `source: "ai_review"` and `aiReview`. Takes
+   * precedence over `onPageReviewRequested`.
+   */
+  onPageReview?: (request: ThreadmarkPageReviewRequest, context: { signal: AbortSignal }) => Promise<ThreadmarkAiPageReview>;
+  /** Records that the reviewer dismissed a suggestion (the Supabase store's `dismissPageReviewFinding`). */
+  onPageReviewDismiss?: (finding: ThreadmarkPageReviewFinding, review: ThreadmarkAiPageReview) => void | Promise<unknown>;
   /** Optional, explicitly authorized presence transport; no network connection by default. */
   presence?: ThreadmarkPresenceTransport;
   /** Public project identifier; never use a secret token here. */
@@ -819,6 +863,8 @@ export declare function createFeedbackPayload(options: {
   workflow?: ThreadmarkWorkflow;
   device?: ThreadmarkDeviceInfo;
   metadata?: ThreadmarkMetadata;
+  source?: ThreadmarkFeedback["source"];
+  aiReview?: ThreadmarkFeedback["aiReview"];
 }): ThreadmarkFeedback;
 
 export declare const THREADMARK_TARGET_ATTRIBUTE: "data-threadmark-id";

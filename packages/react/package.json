@@ -46,6 +46,10 @@
       "types": "./dist/vite.d.ts",
       "import": "./dist/vite.js"
     },
+    "./capture": {
+      "types": "./dist/capture.d.ts",
+      "import": "./dist/capture.js"
+    },
     "./tour.schema.json": "./tour.schema.json",
     "./package.json": "./package.json"
   },

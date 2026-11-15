@@ -16,7 +16,11 @@ async function open(page) {
 }
 test('page scanning bounds findings and excludes protected content and labelled controls', async ({ page }) => {
   await open(page);
-  const input = await page.evaluate(() => window.scanPage());
+  const input = await page.evaluate(() => {
+    document.querySelector('[data-threadmark-id="tiny"]').insertAdjacentHTML('beforeend', '<span class="rr-mask">masked-sentinel</span>');
+    document.body.insertAdjacentHTML('beforeend', '<div class="rr-block"><button style="width:40px;height:30px"></button></div>');
+    return window.scanPage();
+  });
   expect(input.findings.map(item => item.rule)).toEqual(['heading-jump', 'unnamed-control', 'small-text']);
   expect(JSON.stringify(input)).not.toContain('sentinel');
   await page.evaluate(() => { for (let i = 0; i < 10; i++) { const el = document.createElement('button'); el.style.cssText = 'width:30px;height:30px'; document.body.append(el); } });

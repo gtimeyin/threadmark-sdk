@@ -18,6 +18,15 @@ import {
   resourceTiming,
   timingPhases,
 } from "./networkCapture.js";
+import {
+  canvasBlockSelectors,
+  canvasFrameBytes,
+  createCanvasBudget,
+  isCanvasFrameEvent,
+  resolveCanvasOptions,
+  sanitizeCanvasDataUrl,
+  sanitizeCanvasFrame,
+} from "./canvasReplay.js";
 import { OTHER_TOOLS_BLOCK_SELECTORS, OTHER_TOOLS_MASK_SELECTORS } from "./privacy.js";
 import { sanitizeReplayUrl, scrubConsoleText } from "./scrub.js";
 
@@ -55,7 +64,7 @@ export const MOUSE_INTERACTION = Object.freeze({ Click: 2, DblClick: 4, TouchEnd
  * `{ capture, hold?, release? }` or just a capture function.
  */
 export function resolveSessionReplayOptions(value) {
-  if (!value) return { enabled: false, bufferMs: DEFAULT_REPLAY_BUFFER_MS, provider: null, network: DEFAULT_NETWORK_OPTIONS };
+  if (!value) return { enabled: false, bufferMs: DEFAULT_REPLAY_BUFFER_MS, provider: null, network: DEFAULT_NETWORK_OPTIONS, canvas: null };
   const options = typeof value === "object" ? value : {};
   const requested = Number(options.bufferMs);
   const rawProvider = options.provider;
@@ -68,6 +77,8 @@ export function resolveSessionReplayOptions(value) {
     provider,
     // Request and response bodies stay out unless the host keeps them (`network: { bodies: true }`).
     network: resolveNetworkOptions(options.network),
+    // Canvases (charts, maps, 3D) are sampled as images only when the host opts in (`canvas: true`).
+    canvas: resolveCanvasOptions(options.canvas),
   };
 }
 
@@ -94,18 +105,23 @@ function keyKind(name) {
   if (kind === undefined) {
     kind = SECRET_KEY.test(name) ? "secret"
       : /^(?:href|src|action|formaction|poster|xlink:href|background|data)$/i.test(name) ? "url"
-        : /^srcset$/i.test(name) ? "srcset" : "text";
+        : /^srcset$/i.test(name) ? "srcset"
+          : name === "rr_dataURL" ? "image" : "text";
     if (keyKinds.size < 500) keyKinds.set(name, kind);
   }
   return kind;
 }
 
 /** Clone recorder events so sanitizing never mutates rrweb's own snapshot/mutation state. */
-export function sanitizeReplayEvent(event, base) {
+export function sanitizeReplayEvent(event, base, keepCanvasImage = () => false) {
   const visit = (value, kind = "text") => {
     if (typeof value === "string") {
       if (kind === "url") return sanitizeReplayUrl(value, base);
       if (kind === "srcset") return ""; // Candidates can contain commas/data URLs; fail closed.
+      if (kind === "image") {
+        const image = sanitizeCanvasDataUrl(value);
+        return image && keepCanvasImage(image.length) ? image : "";
+      }
       return scrubReplayText(value);
     }
     if (Array.isArray(value)) {
@@ -638,11 +654,14 @@ export async function startSessionReplay({
   blockSelectors = [],
   maskTextSelectors = [],
   network = DEFAULT_NETWORK_OPTIONS,
+  canvas = null,
   onError,
   loadRecorder = () => import("rrweb").then((module) => module.record),
 } = {}) {
   const record = await loadRecorder();
   const buffer = createReplayBuffer({ bufferMs });
+  const canvasOptions = resolveCanvasOptions(canvas);
+  const canvasBudget = canvasOptions ? createCanvasBudget({ bufferMs, maxHoldMs: MAX_REPLAY_HOLD_MS }) : null;
   let stopRecording = null;
   let stopped = false;
   let networkOptions = resolveNetworkOptions(network);
@@ -709,7 +728,16 @@ export async function startSessionReplay({
       stopRecording = record({
         emit(event, isCheckout) {
           if (stopped) return;
-          const { overflow } = buffer.push(sanitizeReplayEvent(event, windowRef.location?.href), isCheckout);
+          let kept;
+          if (isCanvasFrameEvent(event)) {
+            // Frames are images: they skip text scrubbing, keep only their known shape, and share a byte budget.
+            kept = canvasOptions ? sanitizeCanvasFrame(event) : null;
+            if (!kept || !canvasBudget.take(kept.timestamp, canvasFrameBytes(kept))) return;
+          } else {
+            kept = sanitizeReplayEvent(event, windowRef.location?.href,
+              (bytes) => canvasBudget?.take(event.timestamp, bytes));
+          }
+          const { overflow } = buffer.push(kept, isCheckout);
           if (overflow && !snapshotInProgress) {
             // Start a fresh replayable segment before requesting a synchronous rrweb checkout.
             // Otherwise its Meta event is still over budget and recursively requests another snapshot.
@@ -721,14 +749,19 @@ export async function startSessionReplay({
         maskAllInputs: true,
         maskInputOptions: { password: true, email: true, tel: true, text: true, textarea: true, number: true, search: true, select: true },
         // Regions a site marked private for another session tool stay out of this one too.
-        blockSelector: ["[data-threadmark-root]", "[data-threadmark-sensitive]", "[data-threadmark-ignore]", ...OTHER_TOOLS_BLOCK_SELECTORS, ...blockSelectors].join(","),
+        blockSelector: [
+          "[data-threadmark-root]", "[data-threadmark-sensitive]", "[data-threadmark-ignore]", ...OTHER_TOOLS_BLOCK_SELECTORS, ...blockSelectors,
+          // A canvas's pixels can't have their text masked, so canvases in masked regions are left out.
+          ...(canvasOptions ? canvasBlockSelectors([...OTHER_TOOLS_MASK_SELECTORS, ...maskTextSelectors]) : []),
+        ].join(","),
         maskTextSelector: ["[data-threadmark-sensitive]", ...OTHER_TOOLS_MASK_SELECTORS, ...maskTextSelectors].join(",") || null,
-        recordCanvas: false,
+        recordCanvas: Boolean(canvasOptions),
+        ...(canvasOptions ? { dataURLOptions: { type: "image/webp", quality: canvasOptions.quality } } : {}),
         collectFonts: false,
         inlineImages: false,
         recordCrossOriginIframes: false,
         slimDOMOptions: "all",
-        sampling: { mousemove: 50, scroll: 150, media: 800, input: "last" },
+        sampling: { mousemove: 50, scroll: 150, media: 800, input: "last", ...(canvasOptions ? { canvas: canvasOptions.fps } : {}) },
       }) || null;
       if (!stopRecording) throw new Error("Session replay recorder did not start.");
       snapshotTook(startedAt); // rrweb takes the first full snapshot as it starts.
@@ -746,8 +779,14 @@ export async function startSessionReplay({
   else begin();
 
   return {
-    hold: () => buffer.hold(Date.now()),
-    release: () => buffer.release(Date.now()),
+    hold: () => {
+      buffer.hold(Date.now());
+      canvasBudget?.hold(Date.now());
+    },
+    release: () => {
+      buffer.release(Date.now());
+      canvasBudget?.release();
+    },
     /** Changes what is kept from requests from now on (`{ network: { bodies, sanitize } }`). */
     configure({ network: next } = {}) {
       networkOptions = resolveNetworkOptions(next);

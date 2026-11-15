@@ -711,6 +711,7 @@ export function createFeedbackPayload({
   metadata,
   links,
   source,
+  aiReview,
 }) {
   const payloadId = cleanString(id, 160)
     || globalThis.crypto?.randomUUID?.()
@@ -780,7 +781,12 @@ export function createFeedbackPayload({
   }
   if (Array.isArray(reactions)) payload.reactions = normalizeReactions(reactions);
   // "ai": posted from an AI review or Ask AI (board 12). Shown as "From an AI review"; the author is still the person who posted it.
-  if (source === "ai") payload.source = "ai";
+  if (source === "ai" || source === "agent" || source === "ai_review") payload.source = source;
+  const reviewId = cleanString(aiReview?.reviewId, 64);
+  const findingId = cleanString(aiReview?.findingId, 8);
+  if (source === "ai_review" && /^[0-9a-f-]{36}$/i.test(reviewId) && /^f[1-8]$/.test(findingId)) {
+    payload.aiReview = { reviewId, findingId };
+  }
   const normalizedLinks = normalizeLinks(links);
   if (normalizedLinks.length) payload.links = normalizedLinks;
   if (Array.isArray(replies)) {

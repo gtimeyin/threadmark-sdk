@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { ReactIcon as SmileCircleIcon } from "./icons.jsx";
 import { REACTIONS } from "./reactions.js";
 import { VirtualCommentList } from "./VirtualCommentList.jsx";
@@ -945,7 +946,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
                 <span>{routeLabel(feedback.route)}</span>
                 {feedback.workflow?.assignee && <span>Assigned to {feedback.workflow.assignee.displayName}</span>}
                 {feedback.links?.length > 0 && <CommentLinks links={feedback.links} plain />}
-                {feedback.source === "ai" && <span className="tm-from-ai">From an AI review</span>}
+                {["ai", "ai_review"].includes(feedback.source) && <span className="tm-from-ai">From an AI review</span>}
                 <span>{(feedback.replies || []).length} replies</span>
                 {needsRepair(annotation) && <span className="tm-comment-repair"><TriangleAlert size={12} /> Target needs repair</span>}
                 {feedback.evidence?.some((item) => item.quality === "unavailable") && <span>Screenshot unavailable</span>}
@@ -1580,6 +1581,29 @@ function MentionTextarea({ reviewers = [], value, onValueChange, onKeyDown, ...p
     ? reviewers.filter((member) => member.displayName?.toLowerCase().startsWith(mention.query.toLowerCase())).slice(0, 6)
     : [];
   const open = matches.length > 0;
+  // The list floats over everything: it is portalled to the overlay root and pinned to the text box,
+  // so the popover's scroll area and the composer's layout never clip or push it.
+  const [place, setPlace] = useState(null);
+  useLayoutEffect(() => {
+    if (!open) { setPlace(null); return undefined; }
+    const element = ref.current;
+    const update = () => {
+      const box = element?.getBoundingClientRect();
+      if (!box) return;
+      const height = Math.min(200, matches.length * 34 + 10);
+      const below = window.innerHeight - box.bottom >= height + 12 || box.top < height + 12;
+      setPlace({
+        left: Math.max(8, Math.min(box.left, window.innerWidth - 228)),
+        top: below ? box.bottom + 6 : box.top - height - 6,
+        width: Math.max(180, Math.min(box.width, 260)),
+        below,
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => { window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
+  }, [open, matches.length]);
   const refresh = (element) => {
     const next = activeMentionQuery(element.value, element.selectionStart ?? element.value.length);
     setMention((current) => next ? { ...next, index: current?.start === next.start ? current.index : 0 } : null);
@@ -1625,14 +1649,15 @@ function MentionTextarea({ reviewers = [], value, onValueChange, onKeyDown, ...p
         onKeyDown?.(event);
       }}
     />
-    {open && <ul id="tm-mention-list" className="tm-mention-list" role="listbox" aria-label="Mention a reviewer">
+    {open && place && ref.current?.closest(".tm-root") && createPortal(<ul id="tm-mention-list" className={`tm-mention-list${place.below ? "" : " is-above"}`} role="listbox" aria-label="Mention a reviewer"
+      style={{ left: place.left, top: place.top, width: place.width }}>
       {matches.map((member, index) => (
         <li key={member.id} role="option" aria-selected={index === mention.index}
           onMouseDown={(event) => { event.preventDefault(); insert(member); }}>
           <ReviewerAvatar reviewer={member} className="tm-mention-list__avatar" />{member.displayName}
         </li>
       ))}
-    </ul>}
+    </ul>, ref.current.closest(".tm-root"))}
   </>;
 }
 
@@ -2058,6 +2083,7 @@ function Overlay({
   onLinkAccessChange,
   destinations = [],
   onAiReview,
+  onStartHostedReview,
   onAskAi,
   onAiDismiss,
   onPostAiComment,
@@ -2644,6 +2670,11 @@ function Overlay({
                     icon={<PollIcon {...iconProps} />} label="Ask a question" description="A short poll, scale or question for people on this page"
                     onClick={runToolbarItem(() => setSurveyBuilderOpen(true))} />
                 )}
+                {onStartHostedReview && (
+                  <ToolbarMenuItem role="menuitemradio" aria-checked="false"
+                    icon={<AiIcon {...iconProps} />} label="Review this page" description="AI suggests comments for you to review"
+                    onClick={runToolbarItem(onStartHostedReview)} />
+                )}
                 {onAiReview && (
                   <ToolbarMenuItem role="menuitemradio" aria-checked="false"
                     icon={<AiIcon {...iconProps} />} label="Ask AI to review this page" description="It suggests; you decide what gets posted"
@@ -3033,7 +3064,7 @@ function Overlay({
                   }}
                   annotation
                   links={editingAnnotation.payload.links}
-                  fromAi={editingAnnotation.payload.source === "ai"}
+                  fromAi={["ai", "ai_review"].includes(editingAnnotation.payload.source)}
                   onReactionChange={onReactionChange ? (messageId, emoji, active) => onReactionChange(editingAnnotation.id, messageId, emoji, active) : undefined}
                   currentReviewer={reviewer}
                   onReply={onBeginReply}

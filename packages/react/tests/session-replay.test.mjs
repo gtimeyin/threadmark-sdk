@@ -30,7 +30,7 @@ const custom = (timestamp, tag, payload) => ({ type: EVENT_TYPE.Custom, timestam
 test("replay is opt-in and its buffer length is bounded", () => {
   assert.equal(resolveSessionReplayOptions(undefined).enabled, false);
   assert.equal(resolveSessionReplayOptions(false).enabled, false);
-  assert.deepEqual(resolveSessionReplayOptions(true), { enabled: true, bufferMs: 30_000, provider: null, network: { bodies: false, sanitize: null } });
+  assert.deepEqual(resolveSessionReplayOptions(true), { enabled: true, bufferMs: 30_000, provider: null, network: { bodies: false, sanitize: null }, canvas: null });
   assert.equal(resolveSessionReplayOptions({ bufferMs: 999_999 }).bufferMs, 120_000);
   assert.equal(resolveSessionReplayOptions({ bufferMs: 10 }).bufferMs, 5_000);
   const capture = async () => null;

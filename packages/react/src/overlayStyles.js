@@ -15,6 +15,15 @@ export const overlayStyles = `
   .tm-agent-trigger { display: flex; gap: 6px; align-items: center; margin-left: auto; background: var(--tm-ground) !important; box-shadow: 0 8px 24px rgba(14, 23, 20, .25); }
   .tm-agent-trigger svg { width: 16px; height: 16px; color: var(--tm-lime); }
   .tm-agent-panel { width: min(320px, calc(100vw - 40px)); padding: 14px 16px 16px; margin-top: 8px; background: var(--tm-ground); border: 1px solid rgba(251, 250, 246, .08); border-radius: var(--tm-radius-panel); box-shadow: 0 22px 60px rgba(0, 0, 0, .38); }
+  .tm-hosted-review .tm-agent-panel { max-height: min(640px, calc(100dvh - 120px)); overflow-y: auto; overscroll-behavior: contain; }
+  .tm-hosted-review textarea { box-sizing: border-box; width: 100%; color: inherit; background: var(--tm-raised); font: inherit; padding: 8px; border: 1px solid currentColor; border-radius: var(--tm-radius-button); }
+  .tm-agent-focus, .tm-agent-results__head, .tm-agent-finding__actions, .tm-agent-finding__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .tm-agent-focus, .tm-agent-results__head { justify-content: space-between; }
+  .tm-agent-results ul { display: grid; gap: 8px; list-style: none; padding: 0; }
+  .tm-agent-finding { padding: 8px; border: 1px solid rgba(251, 250, 246, .15); border-radius: var(--tm-radius-button); }
+  .tm-agent-finding.is-shown { border-color: var(--tm-lime); }
+  .tm-agent-highlight { position: fixed; pointer-events: none; border: 2px dashed var(--tm-lime); border-radius: 6px; }
+  .tm-agent button.tm-agent-keep { background: var(--tm-lime); color: var(--tm-ground); }
   .tm-agent-panel header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
   .tm-agent-panel header button { padding: 4px; border: 0; background: none; color: var(--tm-text-secondary); }
   .tm-agent-panel p { margin: 12px 0; color: var(--tm-text-secondary); }
@@ -478,7 +487,7 @@ export const overlayStyles = `
   /* Inline @mention suggestions float above the field being typed in. */
   .tm-reply__box, .tm-inline-edit, .tm-field { position: relative; }
   .tm-inline-edit { overflow: visible; }
-  .tm-mention-list { position: relative; z-index: 4; margin-top: 6px !important; max-height: 200px; overflow: auto; min-width: 180px; margin: 0; padding: 4px; list-style: none; border: 1px solid rgba(255,255,255,.1); border-radius: var(--tm-radius-panel); background: var(--tm-ground); box-shadow: 0 12px 32px rgba(0,0,0,.4); animation: tm-state-in var(--tm-motion-fast) var(--tm-ease-standard) both; }
+  .tm-mention-list { position: fixed; z-index: 70; box-sizing: border-box; max-height: 200px; pointer-events: auto; font-family: var(--tm-font); overflow: auto; min-width: 180px; margin: 0; padding: 4px; list-style: none; border: 1px solid rgba(255,255,255,.1); border-radius: var(--tm-radius-panel); background: var(--tm-ground); box-shadow: 0 12px 32px rgba(0,0,0,.4); animation: tm-state-in var(--tm-motion-fast) var(--tm-ease-standard) both; }
   .tm-mention-list li { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border-radius: var(--tm-radius-button); color: var(--tm-text-primary); font-size: 12px; cursor: pointer; }
   .tm-mention-list li[aria-selected="true"], .tm-mention-list li:hover { background: rgba(224, 243, 84,.16); }
   .tm-mention-list__avatar { width: 20px; height: 20px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--tm-deep-sage); color: var(--tm-text-primary); font-size: 8px; font-weight: 700; }
@@ -1145,8 +1154,11 @@ export const overlayStyles = `
   }
 
   .tm-thread-message--reply {
-    animation: tm-message-in var(--tm-motion-standard) var(--tm-ease-standard) both;
+    /* backwards, not both: a kept transform would trap the actions menu under later content. */
+    animation: tm-message-in var(--tm-motion-standard) var(--tm-ease-standard) backwards;
   }
+  /* A message with its menu open sits above the snapshot, playback and replies below it. */
+  .tm-thread-message.has-menu { z-index: 6; }
 
   .tm-thread-message__avatar {
     width: 28px;
