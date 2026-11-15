@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   EVENT_TYPE,
   INCREMENTAL_SOURCE,
+  MAX_REPLAY_CHECKOUT_MS,
   MAX_REPLAY_HOLD_MS,
   MOUSE_INTERACTION,
   REPLAY_CONSOLE_EVENT,
@@ -16,6 +17,7 @@ import {
   resolveSessionReplayOptions,
   sanitizeReplayUrl,
   scrubConsoleText,
+  scrubReplayText,
   startSessionReplay,
   summarizeReplay,
 } from "../src/sessionReplay.js";
@@ -28,7 +30,7 @@ const custom = (timestamp, tag, payload) => ({ type: EVENT_TYPE.Custom, timestam
 test("replay is opt-in and its buffer length is bounded", () => {
   assert.equal(resolveSessionReplayOptions(undefined).enabled, false);
   assert.equal(resolveSessionReplayOptions(false).enabled, false);
-  assert.deepEqual(resolveSessionReplayOptions(true), { enabled: true, bufferMs: 30_000, provider: null });
+  assert.deepEqual(resolveSessionReplayOptions(true), { enabled: true, bufferMs: 30_000, provider: null, network: { bodies: false, sanitize: null }, canvas: null });
   assert.equal(resolveSessionReplayOptions({ bufferMs: 999_999 }).bufferMs, 120_000);
   assert.equal(resolveSessionReplayOptions({ bufferMs: 10 }).bufferMs, 5_000);
   const capture = async () => null;
@@ -42,6 +44,7 @@ test("recorded URLs keep origin, path, and query names only", () => {
   assert.equal(sanitizeReplayUrl("https://user:secret@api.test/v1/orders?id=42&token=abc#frag"), "https://api.test/v1/orders?id=…&token=…");
   assert.equal(sanitizeReplayUrl("/checkout", "https://shop.test/cart"), "https://shop.test/checkout");
   assert.equal(sanitizeReplayUrl("data:text/plain,hello"), "data:");
+  assert.equal(sanitizeReplayUrl("wss://live.shop.test/orders?session=abc"), "wss://live.shop.test/orders?session=…");
   assert.equal(sanitizeReplayUrl("::not a url::", "not a base"), "");
 });
 
@@ -339,6 +342,93 @@ test("event overflow takes one non-reentrant checkout and leaves a replayable bo
   assert.equal(events[1].type, EVENT_TYPE.FullSnapshot);
   assert.ok(events.length < 10);
   session.stop();
+});
+
+test("the quick pre-check never lets through text the full scrubbing would change", () => {
+  const scrubEverything = (value) => scrubConsoleText(String(value)
+    .replace(/url\(\s*(["']?)(.*?)\1\s*\)/gi, (_, quote, url) => `url("${sanitizeReplayUrl(url)}")`));
+  const samples = [
+    "Customer 12 Okafor", "Overdue", "$53.90", "badge badge--overdue",
+    "otp=1234567", "pwd=x", "a@b.co", "x://y", "url(a)", "url(/private?token=SECRET)",
+    "Bearer abc.def.ghi", "basic YWxhZGRpbjpvcGVu", "Token 12345678", "eyJabcdef.ghijkl.m",
+    "4242 4242 4242 4242", "4242-4242-4242-4242", "sk_live_abcdefghijkl", "sb_secret_abcdefgh", "xoxb-12345678",
+    "ghp_abcdefghijklmnop", "AKIAABCDEFGHIJKLMNOP", "re_abcdefghijklmnop", "tmk_abcdefghij",
+    "0123456789abcdef0123456789abcdef", "aB3".repeat(11), "aB3+/".repeat(9),
+  ];
+  // Random strings over the characters and words the patterns look for.
+  const pieces = ["a", "B", "7", "0", "-", "_", ".", "/", "+", ":", "=", "@", " ", "(", "url(", "eyJ", "Bearer ", "token", "sk_live_", "4242", "x".repeat(12), "Ab1".repeat(4)];
+  let seed = 42;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  for (let index = 0; index < 3000; index += 1) {
+    let text = "";
+    const count = 1 + Math.floor(random() * 12);
+    for (let piece = 0; piece < count; piece += 1) text += pieces[Math.floor(random() * pieces.length)];
+    samples.push(text);
+  }
+  for (const sample of samples) assert.equal(scrubReplayText(sample), scrubEverything(sample), sample);
+});
+
+test("checkouts wait for idle time, pause while a video holds the buffer, and back off when snapshots are slow", async () => {
+  const realNow = Date.now;
+  let clock = 1_000_000;
+  Date.now = () => clock;
+  try {
+    let emit;
+    let snapshotMs = 0;
+    const record = (options) => {
+      assert.equal(options.checkoutEveryNms, undefined, "rrweb's own checkout timer stays off");
+      emit = options.emit;
+      emit(meta(clock), true);
+      emit(full(clock));
+      return () => {};
+    };
+    record.takeFullSnapshot = (isCheckout) => {
+      assert.equal(isCheckout, true);
+      clock += snapshotMs;
+      emit(meta(clock), true);
+      emit(full(clock));
+    };
+    const timers = [];
+    const idle = [];
+    const { windowRef } = recorderWindow();
+    windowRef.setTimeout = (callback, delay) => timers.push({ callback, delay }) && timers.length;
+    windowRef.clearTimeout = () => {};
+    windowRef.requestIdleCallback = (callback, options) => idle.push({ callback, options }) && idle.length;
+    let checkouts = 0;
+    const counted = record.takeFullSnapshot;
+    record.takeFullSnapshot = (isCheckout) => { checkouts += 1; counted(isCheckout); };
+    const session = await startSessionReplay({ windowRef, bufferMs: 30_000, loadRecorder: async () => record });
+    const runNext = () => {
+      timers.shift().callback();
+      idle.shift().callback();
+    };
+
+    assert.equal(timers[0].delay, 30_000, "a checkout comes once per buffer length");
+    runNext();
+    assert.equal(idle.length, 0);
+    assert.equal(checkouts, 1, "it runs in the browser's idle time");
+
+    session.hold();
+    runNext();
+    assert.equal(checkouts, 1, "a held buffer takes no checkouts");
+    session.release();
+    runNext();
+    assert.equal(checkouts, 2);
+
+    snapshotMs = 2_000;
+    runNext();
+    assert.equal(checkouts, 3);
+    assert.equal(timers[0].delay, 100_000, "a 2-second snapshot waits 50 times as long before the next");
+    snapshotMs = 60_000;
+    runNext();
+    assert.equal(timers[0].delay, MAX_REPLAY_CHECKOUT_MS);
+    session.stop();
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 test("immediate and deferred startup failures restore globals and remove every listener", async () => {

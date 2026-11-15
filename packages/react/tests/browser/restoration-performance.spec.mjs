@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { build } from 'vite';
 import react from '@vitejs/plugin-react';
-import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -9,7 +9,8 @@ const src = fileURLToPath(new URL('../../src/', import.meta.url));
 let bundle;
 test.beforeAll(async () => {
   // Freeze the published beta.11 matching behavior; this baseline never reads the working tree target.js.
-  const original = execFileSync('git', ['show', '4ce77ac:packages/react/src/target.js'], { cwd: src, encoding: 'utf8' });
+  // It's threadmark-sdk's 4ce77ac:packages/react/src/target.js, kept here because this repository lacks that history.
+  const original = readFileSync(new URL('../fixtures/beta11-target.js', import.meta.url), 'utf8');
   const result = await build({ configFile: false, logLevel: 'silent', plugins: [react(), {
     name: 'restoration-baseline',
     resolveId(id) { if (id === 'beta11-target') return '\0beta11-target'; },
@@ -111,9 +112,9 @@ test('mutation bursts debounce, ignored trees stay quiet, immediate rechecks kee
 
 test('React hydration resolves once and fresh host arrays do not restart it', async ({ page }) => {
   await page.evaluate(() => restorationFixture.mount());
-  await expect(page.getByRole('button', { name: /Review page/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ })).toBeVisible();
   expect(await page.evaluate(() => window.__restoreCount)).toBe(0);
-  await page.getByRole('button', { name: /Review page/ }).click();
+  await page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ }).click();
   await expect.poll(() => page.evaluate(() => Object.keys(window.__assessCounts).length)).toBe(60);
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => Object.values(window.__assessCounts))).toEqual(Array(60).fill(1));

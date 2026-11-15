@@ -1,7 +1,11 @@
+import { normalizeReactions } from "./reactions.js";
 import { normalizeCaptureEnvironment } from "./captureEnvironment.js";
 import {
   MAX_REPLAY_ENTRIES,
+  MAX_REPLAY_HOLD_MS,
+  isSecretName,
   sanitizeReplayUrl,
+  scrubCredentials,
 } from "./sessionReplay.js";
 import {
   MAX_POINTER_SAMPLES,
@@ -46,11 +50,20 @@ const INTERACTION_INPUT_TYPES = new Set([
 ]);
 const EVIDENCE_QUALITIES = new Set(["captured", "degraded", "unavailable"]);
 const EVIDENCE_MIME_TYPES = new Set(["image/webp", "image/png", "image/jpeg"]);
-const RECORDING_EVIDENCE_MIME_TYPES = new Set(RECORDING_MIME_TYPES);
+// Uploaded recordings from a phone's or Mac's own screen recorder may be QuickTime as well.
+const RECORDING_EVIDENCE_MIME_TYPES = new Set([...RECORDING_MIME_TYPES, "video/quicktime"]);
 const REPLAY_MIME_TYPES = new Set(["application/gzip", "application/json"]);
-const REPLAY_OUTCOMES = new Set(["successful", "client_error", "server_error", "transport_failure", "incomplete"]);
-const MAX_REPLAY_DURATION_MS = 5 * 60_000;
-const VIDEO_MODES = new Set(["tab", "voice"]);
+const REPLAY_OUTCOMES = new Set(["successful", "client_error", "server_error", "graphql_error", "transport_failure", "incomplete"]);
+const GRAPHQL_OPERATION = /^(?:query|mutation|subscription) [_A-Za-z][_0-9A-Za-z]{0,99}$/;
+const ERROR_CODE = /^[A-Za-z0-9_.:-]{1,60}$/;
+const MAX_REPLAY_DURATION_MS = MAX_REPLAY_HOLD_MS;
+// "screen" is a recording of any screen or window, made from a recording request rather than on the page.
+const VIDEO_MODES = new Set(["tab", "voice", "screen"]);
+const DEVICE_TYPES = new Set(["desktop", "mobile", "tablet"]);
+const NETWORK_TYPES = new Set(["slow-2g", "2g", "3g", "4g"]);
+export const MAX_METADATA_BYTES = 10_240;
+const MAX_METADATA_DEPTH = 6;
+const MAX_METADATA_ITEMS = 100;
 
 function normalizeHostname(hostname = "") {
   return String(hostname).trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
@@ -154,7 +167,33 @@ function normalizeReply(value) {
     updatedAt: cleanString(value.updatedAt, 48) || createdAt,
     author: normalizeReviewer(value.author),
     lastEditedBy: normalizeReviewer(value.lastEditedBy),
+    ...(Array.isArray(value.reactions) ? { reactions: normalizeReactions(value.reactions) } : {}),
   };
+}
+
+/**
+ * Where a comment was sent (board 10): `{ destination, label, url, status }`, such as
+ * `{ destination: "github", label: "GitHub #482", url: "https://github.com/…", status: "open" }`.
+ * Only http(s) links are kept.
+ */
+export function normalizeLinks(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).map((item) => {
+    if (!item || typeof item !== "object") return null;
+    const label = cleanString(item.label, 120);
+    let url = null;
+    try {
+      const parsed = new URL(String(item.url || ""));
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") url = parsed.href;
+    } catch { url = null; }
+    if (!label) return null;
+    return {
+      destination: cleanString(item.destination, 60) || null,
+      label,
+      url,
+      status: item.status === "closed" ? "closed" : item.status === "open" ? "open" : null,
+    };
+  }).filter(Boolean);
 }
 
 export function normalizeReviewer(value) {
@@ -390,8 +429,37 @@ function normalizeVideo(value, targetCount, evidence) {
     .slice(0, MAX_VIDEO_EVENTS)
     .map((event) => normalizeInteractionEvent(event, targetCount, durationMs))
     .filter(Boolean);
+  // Where the reviewer paused, in recording time, and for how long, so clock-time logs line up with the video.
+  const pauses = (Array.isArray(value.pauses) ? value.pauses : [])
+    .slice(0, 200)
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({ offsetMs: Math.min(durationMs, count(item.offsetMs)), durationMs: Math.min(3_600_000, count(item.durationMs)) }))
+    .filter((item) => item.durationMs > 0)
+    .sort((a, b) => a.offsetMs - b.offsetMs);
+  // Strokes the reviewer drew while recording: where each started, then `[ms into the stroke, x, y]` points.
+  const drawings = (Array.isArray(value.drawings) ? value.drawings : [])
+    .slice(0, 100)
+    .flatMap((stroke) => {
+      if (!stroke || typeof stroke !== "object") return [];
+      const points = normalizeSampleList(stroke.points, 300, 10_000);
+      return points.length >= 2 ? [{ offsetMs: Math.min(durationMs, count(stroke.offsetMs)), points }] : [];
+    });
+  // Moments the reviewer marked with M, and the part of the recording they chose to keep (board 02, 7d-7e).
+  const moments = (Array.isArray(value.moments) ? value.moments : [])
+    .slice(0, 50)
+    .map((item) => Math.min(durationMs, count(item?.offsetMs ?? item)))
+    .sort((a, b) => a - b)
+    .map((offsetMs) => ({ offsetMs }));
+  const trimStart = Math.min(durationMs, count(value.trim?.startMs));
+  const trimEnd = Math.min(durationMs, count(value.trim?.endMs ?? durationMs));
+  const trim = value.trim && trimEnd - trimStart >= 1000 && (trimStart > 0 || trimEnd < durationMs)
+    ? { startMs: trimStart, endMs: trimEnd }
+    : null;
+  const title = cleanString(value.title, 120);
+  const notes = normalizeVideoNotes(value.notes, durationMs);
   return {
     version: 1,
+    ...(title ? { title } : {}),
     mode: VIDEO_MODES.has(value.mode) ? value.mode : "voice",
     startedAt,
     durationMs,
@@ -407,10 +475,123 @@ function normalizeVideo(value, targetCount, evidence) {
       scrolls: normalizeSampleList(value.pointer?.scrolls, MAX_SCROLL_SAMPLES, durationMs),
     },
     events,
+    ...(pauses.length ? { pauses } : {}),
+    ...(drawings.length ? { drawings } : {}),
+    ...(moments.length ? { moments } : {}),
+    ...(trim ? { trim } : {}),
+    ...(notes ? { notes } : {}),
+  };
+}
+
+/**
+ * What the host wrote about a posted video (board 02, 7f-7g): a summary, transcript and chapters, each a list
+ * of timestamped lines. `status: "processing"` shows that they are still being written.
+ */
+export function normalizeVideoNotes(value, durationMs = MAX_VIDEO_DURATION_MS) {
+  if (!value || typeof value !== "object") return null;
+  const lines = (list, max) => (Array.isArray(list) ? list : [])
+    .slice(0, max)
+    .flatMap((item) => {
+      const text = cleanString(item?.text ?? item?.title, 400);
+      return text ? [{ offsetMs: Math.min(durationMs, count(item.offsetMs)), text }] : [];
+    });
+  const summary = lines(value.summary, 20);
+  const transcript = lines(value.transcript, 400);
+  const chapters = lines(value.chapters, 40);
+  const status = value.status === "processing" ? "processing" : value.status === "failed" ? "failed" : "ready";
+  if (status === "ready" && !summary.length && !transcript.length && !chapters.length) return null;
+  return {
+    status,
+    ...(summary.length ? { summary } : {}),
+    ...(transcript.length ? { transcript } : {}),
+    ...(chapters.length ? { chapters } : {}),
+    ...(value.silent ? { silent: true } : {}),
   };
 }
 
 const count = (value) => Math.max(0, Math.round(cleanNumber(value)));
+
+const nameAndVersion = (value) => ({ name: cleanString(value?.name, 60) || "Unknown", version: cleanString(value?.version, 40) });
+
+/**
+ * The reviewer's browser, OS, device, screen, and settings when the comment was posted (see deviceInfo.js).
+ * Every field is bounded, so a client can't use it to smuggle anything larger than a short label.
+ */
+export function normalizeDevice(value) {
+  if (!value || typeof value !== "object") return null;
+  const size = (item) => ({ width: Math.min(100_000, count(item?.width)), height: Math.min(100_000, count(item?.height)) });
+  const device = {
+    browser: nameAndVersion(value.browser),
+    os: { ...nameAndVersion(value.os), ...(cleanString(value.os?.architecture, 20) ? { architecture: cleanString(value.os.architecture, 20) } : {}) },
+    type: DEVICE_TYPES.has(value.type) ? value.type : "desktop",
+    ...(cleanString(value.model, 80) ? { model: cleanString(value.model, 80) } : {}),
+    touch: Boolean(value.touch),
+    screen: size(value.screen),
+    viewport: size(value.viewport),
+    devicePixelRatio: Math.min(16, Math.max(0, Math.round(cleanNumber(value.devicePixelRatio) * 100) / 100)),
+    language: cleanString(value.language, 35),
+    timeZone: cleanString(value.timeZone, 64),
+    colorScheme: value.colorScheme === "dark" ? "dark" : "light",
+    reducedMotion: Boolean(value.reducedMotion),
+    forcedColors: Boolean(value.forcedColors),
+  };
+  if (value.network && typeof value.network === "object") {
+    const number = (item, max) => (item == null || !Number.isFinite(Number(item)) ? null : Math.min(max, Math.max(0, Math.round(Number(item) * 100) / 100)));
+    device.network = {
+      effectiveType: NETWORK_TYPES.has(value.network.effectiveType) ? value.network.effectiveType : null,
+      downlinkMbps: number(value.network.downlinkMbps, 100_000),
+      rttMs: number(value.network.rttMs, 600_000),
+      saveData: Boolean(value.network.saveData),
+    };
+  }
+  return device;
+}
+
+function isPlainObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function cleanMetadataValue(value, depth) {
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") return scrubCredentials(value).slice(0, 2000);
+  if (depth >= MAX_METADATA_DEPTH) return "[…]";
+  if (Array.isArray(value)) return value.slice(0, MAX_METADATA_ITEMS).map((item) => cleanMetadataValue(item, depth + 1));
+  if (value && typeof value === "object") {
+    const result = {};
+    for (const [key, item] of Object.entries(value).slice(0, MAX_METADATA_ITEMS)) {
+      const name = key.slice(0, 100);
+      result[name] = isSecretName(name) ? "[redacted]" : cleanMetadataValue(item, depth + 1);
+    }
+    return result;
+  }
+  return null;
+}
+
+/**
+ * App context a host attaches through the `metadata` prop: a plain object that survives JSON and is at most
+ * 10 KB once cleaned. Keys that name credentials and credential-shaped strings are replaced. Returns null
+ * when the value can't be used, so the comment is posted without it.
+ */
+export function normalizeMetadata(value) {
+  if (!isPlainObject(value)) return null;
+  let parsed;
+  try {
+    const text = JSON.stringify(value);
+    if (!text || text.length > MAX_METADATA_BYTES * 8) return null;
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const cleaned = cleanMetadataValue(parsed, 0);
+  if (!isPlainObject(cleaned) || !Object.keys(cleaned).length) return null;
+  const bytes = typeof TextEncoder === "function"
+    ? new TextEncoder().encode(JSON.stringify(cleaned)).length
+    : JSON.stringify(cleaned).length;
+  return bytes <= MAX_METADATA_BYTES ? cleaned : null;
+}
 
 // A replay summary an agent can read without opening the recording. URLs are sanitized again here, so a
 // host or client cannot smuggle query values or credentials into stored feedback.
@@ -435,6 +616,10 @@ function normalizeReplay(value, evidence) {
       status: Math.min(999, count(item.status)),
       durationMs: Math.min(600_000, count(item.durationMs)),
       outcome: REPLAY_OUTCOMES.has(item.outcome) ? item.outcome : "incomplete",
+      ...(typeof item.operation === "string" && GRAPHQL_OPERATION.test(item.operation) ? { operation: item.operation } : {}),
+      ...(Array.isArray(item.errorCodes) && item.errorCodes.some((code) => typeof code === "string" && ERROR_CODE.test(code))
+        ? { errorCodes: item.errorCodes.filter((code) => typeof code === "string" && ERROR_CODE.test(code)).slice(0, 5) }
+        : {}),
     }));
   return {
     version: 1,
@@ -511,6 +696,7 @@ export function createFeedbackPayload({
   evidence,
   comment,
   replies,
+  reactions,
   interaction,
   video,
   replay,
@@ -521,6 +707,11 @@ export function createFeedbackPayload({
   workflow,
   ask,
   tourStep,
+  device,
+  metadata,
+  links,
+  source,
+  aiReview,
 }) {
   const payloadId = cleanString(id, 160)
     || globalThis.crypto?.randomUUID?.()
@@ -565,6 +756,10 @@ export function createFeedbackPayload({
 
   const normalizedAsk = normalizeAsk(ask);
   if (normalizedAsk) payload.ask = normalizedAsk;
+  const normalizedDevice = normalizeDevice(device);
+  if (normalizedDevice) payload.device = normalizedDevice;
+  const normalizedMetadata = normalizeMetadata(metadata);
+  if (normalizedMetadata) payload.metadata = normalizedMetadata;
 
   const normalizedTourStep = normalizeTourStep(tourStep);
   if (normalizedTourStep) payload.tourStep = normalizedTourStep;
@@ -584,6 +779,16 @@ export function createFeedbackPayload({
       })),
     };
   }
+  if (Array.isArray(reactions)) payload.reactions = normalizeReactions(reactions);
+  // "ai": posted from an AI review or Ask AI (board 12). Shown as "From an AI review"; the author is still the person who posted it.
+  if (source === "ai" || source === "agent" || source === "ai_review") payload.source = source;
+  const reviewId = cleanString(aiReview?.reviewId, 64);
+  const findingId = cleanString(aiReview?.findingId, 8);
+  if (source === "ai_review" && /^[0-9a-f-]{36}$/i.test(reviewId) && /^f[1-8]$/.test(findingId)) {
+    payload.aiReview = { reviewId, findingId };
+  }
+  const normalizedLinks = normalizeLinks(links);
+  if (normalizedLinks.length) payload.links = normalizedLinks;
   if (Array.isArray(replies)) {
     payload.replies = replies
       .slice(0, 200)

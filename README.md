@@ -23,6 +23,10 @@ export function App() {
 
 Local review is enabled by default. Preview and staging activation require explicit configuration and a hostname allowlist; production activation is disabled in this beta. See the [SDK documentation](packages/react/README.md) for configuration, privacy controls, callbacks, and controlled annotation hydration.
 
+## Store reviews and comments
+
+The SDK does not create a database or save feedback for you. If you use Threadmark with **your own backend**, set up storage for review annotations and comments before relying on them across reloads or reviewers. The [storage setup guide](packages/react/README.md#setting-up-your-own-storage) walks through the database record, screenshot storage, API routes, and SDK callbacks. The [basic React example](examples/basic-react/README.md) uses browser IndexedDB for a single-browser trial; it is not shared team storage. An explicitly connected Threadmark Cloud service is the managed alternative.
+
 ## Repository layout
 
 | Directory | Purpose |

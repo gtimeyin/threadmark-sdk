@@ -43,7 +43,7 @@ async function mountFixture(page, query) {
 
 async function openNextSteps(page) {
   await page.locator(".tm-launcher").click();
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Feedback", exact: true });
   await panel.getByRole("tab", { name: /^Next steps/ }).click();
   return panel;
@@ -52,9 +52,10 @@ async function openNextSteps(page) {
 test("without next steps from the host, the Feedback panel has no Next steps tab", async ({ page }) => {
   await mountFixture(page, "");
   await page.locator(".tm-launcher").click();
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Feedback", exact: true });
-  await expect(panel.getByRole("tab", { name: /^Versions/ })).toBeVisible();
+  await expect(panel.getByRole("tab", { name: /^Activity/ })).toBeVisible();
+  await expect(panel.getByRole("tab", { name: /^Versions/ })).toHaveCount(0);
   await expect(panel.getByRole("tab", { name: /^Next steps/ })).toHaveCount(0);
 });
 

@@ -16,10 +16,13 @@ import {
   createRecordingClock,
   detectVideoSupport,
   formatClock,
+  openScreenStream,
   pickRecorderMimeType,
   pointerPositionAt,
   resolveVideoRecordingOptions,
   scrollPositionAt,
+  suggestVideoTitle,
+  videoOffsetAt,
 } from "../src/videoRecording.js";
 
 const target = {
@@ -77,8 +80,8 @@ function videoPayload(overrides = {}) {
 }
 
 test("the videoRecording prop is on by default, can be turned off, and clamps its duration", () => {
-  assert.deepEqual(resolveVideoRecordingOptions(undefined), { enabled: true, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS });
-  assert.deepEqual(resolveVideoRecordingOptions(true), { enabled: true, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS });
+  assert.deepEqual(resolveVideoRecordingOptions(undefined), { enabled: true, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS, countdownSeconds: 3 });
+  assert.deepEqual(resolveVideoRecordingOptions(true), { enabled: true, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS, countdownSeconds: 3 });
   assert.equal(resolveVideoRecordingOptions(false).enabled, false);
   assert.equal(resolveVideoRecordingOptions({ maxDurationMs: 60_000 }).maxDurationMs, 60_000);
   assert.equal(resolveVideoRecordingOptions({ maxDurationMs: 99 * 60_000 }).maxDurationMs, MAX_VIDEO_DURATION_MS);
@@ -125,8 +128,45 @@ test("clock labels and the recording clock exclude paused time", () => {
   clock.resume();
   now = 10_000;
   assert.equal(clock.elapsed(), 4_000);
+  assert.deepEqual(clock.pauses, [{ offsetMs: 3_000, durationMs: 5_000 }], "each pause is kept in recording time");
   clock.reset();
   assert.equal(clock.elapsed(), 0);
+  assert.deepEqual(clock.pauses, []);
+});
+
+test("clock-time moments land on the right second of a paused video", () => {
+  const video = {
+    startedAt: new Date(100_000).toISOString(),
+    durationMs: 20_000,
+    pauses: [{ offsetMs: 5_000, durationMs: 10_000 }, { offsetMs: 12_000, durationMs: 3_000 }],
+  };
+  assert.equal(videoOffsetAt(99_000, video), null, "before the recording");
+  assert.equal(videoOffsetAt(104_000, video), 4_000);
+  assert.equal(videoOffsetAt(108_000, video), 5_000, "during the first pause: where it paused");
+  assert.equal(videoOffsetAt(116_000, video), 6_000, "after it, ten seconds less");
+  assert.equal(videoOffsetAt(123_500, video), 12_000, "during the second pause");
+  assert.equal(videoOffsetAt(131_000, video), 18_000, "after both, thirteen seconds less");
+  assert.equal(videoOffsetAt(160_000, video), null, "after the recording");
+  assert.equal(videoOffsetAt(104_000, { durationMs: 20_000 }), null, "a video without a start time has no clock");
+});
+
+test("pauses travel with a video's payload, ordered and inside the recording", () => {
+  const payload = videoPayload({
+    video: {
+      version: 1,
+      mode: "tab",
+      startedAt: "2026-10-16T10:00:00.000Z",
+      durationMs: 12_400,
+      evidenceId: "evidence_video",
+      viewport: { width: 1280, height: 720 },
+      pointer: { samples: [], scrolls: [] },
+      events: [],
+      pauses: [{ offsetMs: 9_000, durationMs: 2_000 }, { offsetMs: 99_000, durationMs: 1_000 }, { offsetMs: 1_000, durationMs: 0 }, "junk"],
+    },
+  });
+  assert.deepEqual(payload.video.pauses, [{ offsetMs: 9_000, durationMs: 2_000 }, { offsetMs: 12_400, durationMs: 1_000 }]);
+  const unpaused = videoPayload();
+  assert.equal("pauses" in unpaused.video, false);
 });
 
 test("pointer samples are throttled, need real movement, stay ordered, and are capped", () => {
@@ -295,9 +335,12 @@ test("video payload normalization rejects leaks, unknown containers, and orphane
   assert.deepEqual(leaky.video.pointer.samples, [[500, 1, 1], [500, 2, 2], [500, 3, 3]]);
   assert.deepEqual(leaky.video.pointer.scrolls, []);
 
+  const avi = videoPayload({ evidence: [{ ...recordingEvidence, mimeType: "video/x-msvideo" }] });
+  assert.equal(avi.evidence[0].quality, "unavailable");
+  assert.equal(avi.evidence[0].mimeType, null);
+  // Videos from a phone's or Mac's own screen recorder are QuickTime.
   const quicktime = videoPayload({ evidence: [{ ...recordingEvidence, mimeType: "video/quicktime" }] });
-  assert.equal(quicktime.evidence[0].quality, "unavailable");
-  assert.equal(quicktime.evidence[0].mimeType, null);
+  assert.deepEqual([quicktime.evidence[0].quality, quicktime.evidence[0].mimeType], ["captured", "video/quicktime"]);
 
   const orphaned = videoPayload({ evidence: [{ ...recordingEvidence, id: "someone_else" }] });
   assert.equal(orphaned.video, undefined, "a video without its recording evidence is dropped");
@@ -310,4 +353,115 @@ test("Markdown export gives agents a timed, code-searchable step list for videos
   assert.match(markdown, /- 0:07 · click · Checkout \(`checkout-submit`\)/);
   assert.match(markdown, /- 0:08 · keydown · Enter/);
   assert.match(markdown, /omits input values and printable keystrokes/);
+});
+
+test("drawings travel with a video's payload, bounded", () => {
+  const payload = videoPayload({
+    video: {
+      version: 1,
+      mode: "voice",
+      startedAt: "2026-10-16T10:00:00.000Z",
+      durationMs: 12_400,
+      evidenceId: "evidence_video",
+      viewport: { width: 1280, height: 720 },
+      pointer: { samples: [], scrolls: [] },
+      events: [],
+      drawings: [
+        { offsetMs: 3_000, points: [[0, 10, 10], [40, 30.4, 12], [20, 50, 14], [90_000, 60, 20]] },
+        { offsetMs: 99_000, points: [[0, 1, 1], [10, 2, 2]] },
+        { offsetMs: 1_000, points: [[0, 1, 1]] },
+        "junk",
+      ],
+    },
+  });
+  assert.deepEqual(payload.video.drawings, [
+    { offsetMs: 3_000, points: [[0, 10, 10], [40, 30, 12], [40, 50, 14], [10_000, 60, 20]] },
+    { offsetMs: 12_400, points: [[0, 1, 1], [10, 2, 2]] },
+  ], "times stay in order and within ten seconds; one-point strokes are dropped");
+  assert.equal("drawings" in videoPayload().video, false);
+});
+
+test("screen recordings ask for any screen or window, never this page, and fall back on older engines", async () => {
+  const requests = [];
+  const stream = { id: "screen" };
+  const mediaDevices = {
+    getDisplayMedia: async (constraints) => {
+      requests.push(constraints);
+      if (requests.length === 1) throw new TypeError("Unknown capture hint");
+      return stream;
+    },
+  };
+  assert.equal(await openScreenStream(mediaDevices), stream);
+  assert.deepEqual(requests[0], {
+    video: { frameRate: { ideal: 30 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    audio: false,
+    selfBrowserSurface: "exclude",
+    surfaceSwitching: "include",
+    monitorTypeSurfaces: "include",
+  });
+  assert.deepEqual(requests[1], { video: requests[0].video, audio: false });
+  const declined = { getDisplayMedia: async () => { throw new DOMException("No", "NotAllowedError"); } };
+  await assert.rejects(openScreenStream(declined), { name: "NotAllowedError" });
+});
+
+test("a screen recording keeps its mode, and exports name it", () => {
+  const payload = createFeedbackPayload({
+    projectKey: "lumen",
+    route: "/checkout",
+    targets: [{ tagName: "html", locatorCandidates: { domPath: "html" } }],
+    captureKind: "video",
+    evidence: [{ id: "rec", kind: "recording", mimeType: "video/webm", byteSize: 10, durationMs: 4_000 }],
+    video: { mode: "screen", startedAt: "2026-10-23T10:00:00.000Z", durationMs: 4_000, evidenceId: "rec", events: [] },
+    comment: "Pay does nothing",
+  });
+  assert.equal(payload.video.mode, "screen");
+  assert.match(formatAnnotationsMarkdown([{ payload }]), /screen recording · 0:04/);
+});
+
+test("video titles, moments, trim and host notes survive normalisation (board 02, 7e-7g)", () => {
+  const base = videoPayload().video;
+  const payload = videoPayload({
+    video: {
+      ...base,
+      title: "  Checkout walkthrough  ",
+      moments: [{ offsetMs: 9_000 }, { offsetMs: 2_000 }, { offsetMs: 99_000 }],
+      trim: { startMs: 1_000, endMs: 11_000 },
+      notes: {
+        status: "ready",
+        summary: [{ offsetMs: 4_000, text: "Asks for a company name too early." }, { offsetMs: 1, text: "" }],
+        chapters: [{ offsetMs: 0, title: "Sign-up" }],
+        evil: "<script>",
+      },
+    },
+  });
+  assert.equal(payload.video.title, "Checkout walkthrough");
+  assert.deepEqual(payload.video.moments, [{ offsetMs: 2_000 }, { offsetMs: 9_000 }, { offsetMs: 12_400 }]);
+  assert.deepEqual(payload.video.trim, { startMs: 1_000, endMs: 11_000 });
+  assert.deepEqual(payload.video.notes, {
+    status: "ready",
+    summary: [{ offsetMs: 4_000, text: "Asks for a company name too early." }],
+    chapters: [{ offsetMs: 0, text: "Sign-up" }],
+  });
+});
+
+test("an untrimmed or too-short trim and empty notes are dropped; processing notes are kept", () => {
+  const base = videoPayload().video;
+  const whole = videoPayload({ video: { ...base, trim: { startMs: 0, endMs: 12_400 }, notes: { status: "ready" } } });
+  assert.equal("trim" in whole.video, false);
+  assert.equal("notes" in whole.video, false);
+  const tiny = videoPayload({ video: { ...base, trim: { startMs: 5_000, endMs: 5_400 }, notes: { status: "processing" } } });
+  assert.equal("trim" in tiny.video, false);
+  assert.deepEqual(tiny.video.notes, { status: "processing" });
+});
+
+test("suggested video titles come from the page title, or the route", () => {
+  assert.equal(suggestVideoTitle("Sign-up | Northstar", "/signup"), "Sign-up walkthrough");
+  assert.equal(suggestVideoTitle("", "/"), "Home walkthrough");
+  assert.equal(suggestVideoTitle("", "/account/billing-settings"), "Billing settings walkthrough");
+});
+
+test("the countdown defaults to three seconds and stays between 0 and 5", () => {
+  assert.equal(resolveVideoRecordingOptions({ countdownSeconds: 0 }).countdownSeconds, 0);
+  assert.equal(resolveVideoRecordingOptions({ countdownSeconds: 30 }).countdownSeconds, 5);
+  assert.equal(resolveVideoRecordingOptions({}).countdownSeconds, 3);
 });

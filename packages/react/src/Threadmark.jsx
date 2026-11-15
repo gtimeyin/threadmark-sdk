@@ -1,3 +1,7 @@
+import { normalizeNotifications } from "./notifications.js";
+import { nearestBarPosition, readBarPrefs, readHiddenPages, writeBarPrefs, writeHiddenPages } from "./barPrefs.js";
+import { normalizeSurveys, surveyPageMatches } from "./surveys/schema.js";
+import { normalizeReactions } from "./reactions.js";
 import { createAnnotationHydrator } from "./annotationHydration.js";
 import { captureEnvironment } from "./captureEnvironment.js";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -11,9 +15,11 @@ import {
   suppressHostEvent,
 } from "./annotation.js";
 import {
+  MAX_METADATA_BYTES,
   createFeedbackPayload,
   isLocalHostname,
   isThreadmarkEnabled,
+  normalizeMetadata,
   normalizeReviewer,
   sanitizeRoute,
   normalizePollResults,
@@ -51,6 +57,7 @@ import { resolveStableTarget } from "./resolveStableTarget.js";
 import { THREADMARK_TARGET_ATTRIBUTE, isValidThreadmarkTargetId } from "./targetId.js";
 import { getMountedTourPlayer } from "./tours/playerRegistry.js";
 const ThreadmarkTours = lazy(() => import("./tours/ThreadmarkTours.jsx").then(module => ({ default: module.ThreadmarkTours })));
+import { loadClientHints, readDeviceInfo } from "./deviceInfo.js";
 import { resolveSessionReplayOptions, startSessionReplay } from "./sessionReplay.js";
 import {
   CAMERA_VIDEO_BITS_PER_SECOND,
@@ -68,10 +75,27 @@ import {
   readRecordingMetadata,
   resolveVideoRecordingOptions,
   stopStream,
+  suggestVideoTitle,
 } from "./videoRecording.js";
 
+import { AgentReview } from "./AgentReview.jsx";
+import { HostedPageReview } from "./HostedPageReview.jsx";
+import { Presence } from "./Presence.jsx";
 
 const MAX_MULTI_TARGETS = 20;
+
+/** The host's dashboard, opened from the Bar. Only http(s) or a same-site path. */
+function safeDashboardUrl(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  if (/^\/(?!\/)/.test(value)) return value;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+const EMPTY_IGNORED_SELECTORS = [];
 const MIN_REGION_SIZE = 12;
 const ANNOTATION_QUERY_PARAM = "threadmark";
 const MAX_INTERACTION_DURATION_MS = 15_000;
@@ -107,7 +131,17 @@ function rectFromElement(element) {
 function rectFromRange(range) {
   const rect = range?.getBoundingClientRect?.();
   if (!rect || rect.width <= 0 || rect.height <= 0) return null;
-  return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+  // A quote's pin sits at the end of its last line, next to the words, not at the far corner of
+  // the box around every line it covers.
+  const lines = [...(range.getClientRects?.() || [])].filter((line) => line.width > 0 && line.height > 0);
+  const last = lines[lines.length - 1];
+  return {
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+    ...(last && lines.length > 1 ? { pinX: last.right, pinY: last.top + Math.min(18, last.height / 2) } : {}),
+  };
 }
 
 function rectFromTarget(target) {
@@ -194,13 +228,19 @@ function recordToAnnotation(record, reusablePayload = null) {
       workflow: source.workflow,
       ask: source.ask,
       tourStep: source.tourStep,
+      links: source.links,
+      source: source.source,
+      aiReview: source.aiReview,
       comment: source.comment,
       replies: source.replies,
+      reactions: source.reactions,
       interaction: source.interaction,
       video: source.video,
       replay: source.replay,
       author: source.author,
       lastEditedBy: source.lastEditedBy,
+      device: source.device,
+      metadata: source.metadata,
     });
     const evidence = (record.context?.evidence || []).flatMap((item) => {
       const metadata = payload.evidence?.find((candidate) => candidate.id === item?.id);
@@ -366,6 +406,34 @@ function positionRestoration(annotation, restoration) {
   return { ...restoration, rect };
 }
 
+function sameRect(left, right) {
+  return left === right || Boolean(left && right && left.top === right.top && left.left === right.left
+    && left.width === right.width && left.height === right.height);
+}
+
+function sameRects(current, next) {
+  const ids = Object.keys(next);
+  return ids.length === Object.keys(current).length && ids.every((id) => sameRect(current[id], next[id]));
+}
+
+function sameRestorations(current, next) {
+  const ids = Object.keys(next);
+  return ids.length === Object.keys(current).length && ids.every((id) => {
+    const left = current[id];
+    const right = next[id];
+    return Boolean(left)
+      && left.status === right.status && left.ghost === right.ghost && left.total === right.total
+      && left.resolvedCount === right.resolvedCount && left.suggestion === right.suggestion
+      && left.suggestionLabel === right.suggestionLabel && sameRect(left.rect, right.rect)
+      && left.results.length === right.results.length
+      && left.results.every((result, index) => (
+        result.status === right.results[index].status
+        && result.element === right.results[index].element
+        && result.range === right.results[index].range
+      ));
+  });
+}
+
 function describeMediaError(error, { camera, microphone }) {
   const sources = camera && microphone ? "camera and microphone" : camera ? "camera" : "microphone";
   if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
@@ -380,6 +448,19 @@ function describeMediaError(error, { camera, microphone }) {
 
 function makeId(prefix) {
   return globalThis.crypto?.randomUUID?.() || `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** "Cards", "Pricing table": a short name for what sits under the middle of a boxed region. */
+function regionPlaceLabel(rect) {
+  if (typeof document === "undefined" || !document.elementsFromPoint) return "";
+  const element = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    .find((node) => !node.closest?.("[data-threadmark-root]") && node !== document.documentElement && node !== document.body);
+  if (!element) return "";
+  const labelled = element.closest?.("[aria-label], section, article, nav, header, footer, form, h1, h2, h3, button, a") || element;
+  const raw = labelled.getAttribute?.("aria-label") || labelled.querySelector?.("h1, h2, h3")?.textContent || labelled.textContent || "";
+  const words = raw.replace(/\s+/g, " ").trim();
+  if (!words) return "";
+  return words.length > 28 ? `${words.slice(0, 28).replace(/\s+\S*$/, "")}…` : words;
 }
 
 function revokePreview(regionSelection) {
@@ -430,18 +511,28 @@ export function Threadmark({
   projectKey,
   reviewer,
   reviewers = [],
+  presence,
   enabled,
   environment,
   buildId,
   route,
   allowedHosts,
-  ignoredSelectors = [],
+  ignoredSelectors = EMPTY_IGNORED_SELECTORS,
   styleNonce,
   annotations: persistedAnnotations,
   pageVersions,
+  dashboardUrl,
   nextSteps,
+  notifications,
+  surveys,
+  surveyResults,
+  faces,
+  notificationSettings,
+  projectName,
   videoRecording,
   sessionReplay,
+  deviceDetails = true,
+  metadata,
   onReady,
   onStatusChange,
   onOpenChange,
@@ -450,13 +541,39 @@ export function Threadmark({
   onFeedbackCreate,
   onFeedbackDelete,
   onFeedbackClear,
+  onPageReviewRequested,
+  onPageReview,
+  onPageReviewDismiss,
   onPageVersionSelect,
   onFeedbackCarryForward,
   onPollVote,
+  onReactionChange,
+  onAiReview,
+  onAskAi,
+  onAiDismiss,
   onNextStepDone,
   onNextStepsCopy,
+  onNotificationOpen,
+  onNotificationsRead,
+  onSurveyPublish,
+  onSurveyEnd,
+  onReviewerChange,
+  onNotificationSettingsChange,
+  onLeaveProject,
+  onSignOut,
+  inviteSuggestions,
+  shareUrl,
+  linkAccess,
+  members,
+  onInvite,
+  onMemberChange,
+  onResendInvite,
+  onLinkAccessChange,
   tours,
   onTourSave,
+  aiConnection,
+  onTourSendToAi,
+  onConnectAi,
   onError,
 }) {
   const [portalRoot, setPortalRoot] = useState(null);
@@ -482,6 +599,13 @@ export function Threadmark({
   const [videoSetup, setVideoSetup] = useState(null);
   const [videoRecordingState, setVideoRecordingState] = useState(null);
   const [videoSelection, setVideoSelection] = useState(null);
+  // 3-2-1 before recording (7c) and the review after Stop (7e): title, trim and where it posts.
+  const [videoCountdown, setVideoCountdown] = useState(null);
+  const [videoReview, setVideoReview] = useState(null);
+  // What the reviewer chose to blur in a tab recording, and the tool in use (blur or draw).
+  const [videoBlurred, setVideoBlurred] = useState([]);
+  const [videoTool, setVideoTool] = useState(null);
+  const blurPausedRef = useRef(false);
   const [replayDraft, setReplayDraft] = useState(null);
   const [drawRect, setDrawRect] = useState(null);
   const [commentSnapshot, setCommentSnapshot] = useState(null);
@@ -501,9 +625,20 @@ export function Threadmark({
   const [paused, setPaused] = useState(false);
   const [editingAnnotationId, setEditingAnnotationId] = useState(null);
   const [toolbarPosition, setToolbarPosition] = useState(null);
+  const [toolbarDragging, setToolbarDragging] = useState(false);
+  const [barPrefs, setBarPrefs] = useState(() => (typeof window === "undefined" ? { position: "bottom-center", shrunk: false } : readBarPrefs()));
+  const [hiddenPages, setHiddenPages] = useState(() => (typeof window === "undefined" ? [] : readHiddenPages()));
+  const [hostedReviewOpen, setHostedReviewOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const updateBarPrefs = useCallback((change) => setBarPrefs((current) => {
+    const next = { ...current, ...change };
+    writeBarPrefs(next);
+    return next;
+  }), []);
   const [comment, setComment] = useState("");
   const [composerMode, setComposerMode] = useState("new");
-  // A new comment can instead ask a question (answered in replies) or run a poll (answered by votes).
+  const [editingReplyId, setEditingReplyId] = useState(null);
+  // A new comment can carry a poll (answered by votes). Older comments may hold `ask: { kind: "question" }`; they still show as questions.
   const [askKind, setAskKind] = useState("comment");
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [pollMultiple, setPollMultiple] = useState(false);
@@ -514,13 +649,15 @@ export function Threadmark({
   const [discardPending, setDiscardPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
-  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [nextStepsOpen, setNextStepsOpen] = useState(false);
   // Ticks shown at once while the host stores them; the next `nextSteps` from the host replaces them.
   const [nextStepTicks, setNextStepTicks] = useState({});
   const [carryingVersionId, setCarryingVersionId] = useState(null);
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Share of a new comment's files sent so far (0–1), when the host reports uploads; null otherwise.
+  const [uploadProgress, setUploadProgress] = useState(null);
+  useEffect(() => { if (!submitting) setUploadProgress(null); }, [submitting]);
   const [composingScreenshot, setComposingScreenshot] = useState(false);
   const launcherRef = useRef(null);
   const returnFocusRef = useRef(null);
@@ -542,8 +679,15 @@ export function Threadmark({
   const videoPreviewStreamRef = useRef(null);
   const videoPreviewGenerationRef = useRef(0);
   const finishVideoRecordingRef = useRef(null);
+  const removeAnnotationRef = useRef(null);
+  const videoCountdownCancelRef = useRef(null);
+  const postVideoPendingRef = useRef(null);
   const replayRecorderRef = useRef(null);
+  const clientHintsRef = useRef(null);
+  const metadataRef = useLatest(metadata);
 
+  const normalizedNotifications = useMemo(() => normalizeNotifications(notifications), [notifications]);
+  const normalizedSurveys = useMemo(() => normalizeSurveys(surveys), [surveys]);
   const callbacks = {
     onReady: useLatest(onReady),
     onStatusChange: useLatest(onStatusChange),
@@ -556,9 +700,15 @@ export function Threadmark({
     onPageVersionSelect: useLatest(onPageVersionSelect),
     onFeedbackCarryForward: useLatest(onFeedbackCarryForward),
     onPollVote: useLatest(onPollVote),
+    onReactionChange: useLatest(onReactionChange),
     onNextStepDone: useLatest(onNextStepDone),
     onNextStepsCopy: useLatest(onNextStepsCopy),
+    onNotificationOpen: useLatest(onNotificationOpen),
+    onNotificationsRead: useLatest(onNotificationsRead),
+    onSurveyPublish: useLatest(onSurveyPublish),
+    onSurveyEnd: useLatest(onSurveyEnd),
     onTourSave: useLatest(onTourSave),
+    onTourSendToAi: useLatest(onTourSendToAi),
     onError: useLatest(onError),
   };
   const toursRef = useLatest(tours);
@@ -588,10 +738,11 @@ export function Threadmark({
   const ignoredSelectorsKey = useMemo(() => ignoredSelectors.join("\n"), [ignoredSelectors]);
   const videoOptions = useMemo(
     () => resolveVideoRecordingOptions(videoRecording),
-    [videoRecording === false, videoRecording?.maxDurationMs],
+    [videoRecording === false, videoRecording?.maxDurationMs, videoRecording?.countdownSeconds],
   );
   const replayOptions = resolveSessionReplayOptions(sessionReplay);
   const replayProviderRef = useLatest(replayOptions.provider);
+  const replayNetworkRef = useLatest(replayOptions.network);
   const hasReplayProvider = Boolean(replayOptions.provider);
   const browserHref = typeof window === "undefined" ? "https://threadmark.invalid/" : window.location.href;
   const activeRoute = sanitizeRoute(
@@ -643,6 +794,7 @@ export function Threadmark({
     captureControllerRef.current = null;
     setScreenshotSelection((current) => {
       revokePreview(current);
+      if (current?.original?.previewUrl && typeof URL !== "undefined") URL.revokeObjectURL(current.original.previewUrl);
       return null;
     });
     setComposingScreenshot(false);
@@ -659,6 +811,9 @@ export function Threadmark({
     const session = videoSessionRef.current;
     videoSessionRef.current = null;
     videoPreviewGenerationRef.current += 1;
+    videoCountdownCancelRef.current?.();
+    postVideoPendingRef.current = null;
+    setVideoReview(null);
     session?.recorder?.discard();
     stopStream(session?.displayStream);
     stopStream(videoPreviewStreamRef.current);
@@ -666,6 +821,9 @@ export function Threadmark({
     setVideoSetup(null);
     setVideoRecordingState(null);
     setVideoSelection(null);
+    setVideoBlurred([]);
+    setVideoTool(null);
+    blurPausedRef.current = false;
   }, []);
 
   const clearCapture = useCallback(() => {
@@ -900,13 +1058,14 @@ export function Threadmark({
         capture: () => replayProviderRef.current?.capture?.(),
         hold: () => replayProviderRef.current?.hold?.(),
         release: () => replayProviderRef.current?.release?.(),
+        configure: (options) => replayProviderRef.current?.configure?.(options),
       };
       return () => { replayRecorderRef.current = null; };
     }
     let active = true;
     let session = null;
     startSessionReplay({
-      bufferMs: replayOptions.bufferMs, blockSelectors: ignoredSelectors,
+      bufferMs: replayOptions.bufferMs, blockSelectors: ignoredSelectors, network: replayNetworkRef.current, canvas: replayOptions.canvas,
       onError: () => safeCall(callbacks.onError, { code: "replay_unavailable", message: "Session replay could not start on this page." }),
     })
       .then((started) => {
@@ -916,7 +1075,6 @@ export function Threadmark({
         }
         session = started;
         replayRecorderRef.current = started;
-        if (modeRef.current !== "idle") started.hold();
       })
       .catch(() => {
         safeCall(callbacks.onError, { code: "replay_unavailable", message: "Session replay could not start on this page." });
@@ -926,9 +1084,64 @@ export function Threadmark({
       replayRecorderRef.current = null;
       session?.stop();
     };
-  }, [portalRoot, replayOptions.enabled, replayOptions.bufferMs, hasReplayProvider, ignoredSelectorsKey]);
+  }, [portalRoot, replayOptions.enabled, replayOptions.bufferMs, replayOptions.canvas?.fps, replayOptions.canvas?.quality, hasReplayProvider, ignoredSelectorsKey]);
 
   useEffect(() => () => { annotationHydrator.clear(); otherPageHydrator.clear(); }, [annotationHydrator, otherPageHydrator]);
+
+  // A video's console and network activity must cover the whole recording, so the replay buffer keeps
+  // everything from the moment a video starts until it's posted or discarded. Nothing else holds it: a held
+  // buffer grows by a full page snapshot at every checkout, and each comment would carry all of it.
+  const holdReplay = Boolean(videoRecordingState || videoSelection);
+  useEffect(() => {
+    if (!holdReplay) return undefined;
+    replayRecorderRef.current?.hold?.();
+    return () => replayRecorderRef.current?.release?.();
+  }, [holdReplay]);
+
+  // Whether request bodies are kept can change while recording (the extension learns a project's setting
+  // after the page has started), without restarting the recorder.
+  const keepBodies = replayOptions.network.bodies;
+  const sanitizeBodies = replayOptions.network.sanitize;
+  useEffect(() => {
+    replayRecorderRef.current?.configure?.({ network: { bodies: keepBodies, sanitize: sanitizeBodies } });
+  }, [portalRoot, keepBodies, sanitizeBodies, hasReplayProvider]);
+
+  // Exact browser and OS versions come from Chromium's client hints, which only answer asynchronously.
+  useEffect(() => {
+    if (!portalRoot || deviceDetails === false) return undefined;
+    let active = true;
+    loadClientHints(window).then((hints) => { if (active) clientHintsRef.current = hints; });
+    return () => { active = false; };
+  }, [portalRoot, deviceDetails]);
+
+  /**
+   * The host's app context for a new comment, read when it's posted. A failing or unusable `metadata`
+   * never blocks the comment: it's posted without it and `onError` explains why.
+   */
+  const readMetadata = useCallback(async () => {
+    const source = metadataRef.current;
+    if (source == null) return undefined;
+    const fail = (message) => {
+      safeCall(callbacks.onError, { code: "metadata_failed", message });
+      return undefined;
+    };
+    let value;
+    try {
+      value = typeof source === "function"
+        ? await Promise.race([
+          Promise.resolve().then(() => source()),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000)),
+        ])
+        : source;
+    } catch (error) {
+      return fail(error?.message === "timeout"
+        ? "The metadata function took longer than 2 seconds. The comment was posted without app context."
+        : "The metadata function threw. The comment was posted without app context.");
+    }
+    if (value == null) return undefined;
+    const normalized = normalizeMetadata(value);
+    return normalized || fail(`Metadata must be a plain object that JSON can hold, under ${Math.round(MAX_METADATA_BYTES / 1024)} KB. The comment was posted without app context.`);
+  }, [callbacks.onError, safeCall]);
 
   useEffect(() => {
     if (!Array.isArray(persistedAnnotations)) { annotationHydrator.clear(); otherPageHydrator.clear(); setOtherPageAnnotations([]); return; }
@@ -966,7 +1179,6 @@ export function Threadmark({
     if (modeRef.current === "tour-preview") getMountedTourPlayer()?.stopPreview?.();
     setTourPreview(null);
     tourCommentRef.current = null;
-    replayRecorderRef.current?.release?.();
     invalidateSubmission();
     modeRef.current = "idle";
     restoreFocusRef.current = true;
@@ -974,7 +1186,6 @@ export function Threadmark({
     setMode("idle");
     setPaused(false);
     setClearArmed(false);
-    setVersionHistoryOpen(false);
     setAllCommentsOpen(false);
     setEditingAnnotationId(null);
     setComment("");
@@ -988,7 +1199,7 @@ export function Threadmark({
   }, [callbacks.onOpenChange, clearCapture, emitStatus, invalidateSubmission, safeCall]);
 
   const startReview = useCallback(() => {
-    replayRecorderRef.current?.hold?.();
+    getMountedTourPlayer()?.pause?.();
     returnFocusRef.current = document.activeElement;
     restoreFocusRef.current = false;
     clearCapture();
@@ -1007,7 +1218,6 @@ export function Threadmark({
   const startTourMode = useCallback(() => {
     clearCapture();
     setAllCommentsOpen(false);
-    setVersionHistoryOpen(false);
     setTourDrafts((current) => current ?? (Array.isArray(toursRef.current)
       ? toursRef.current.filter((tour) => tour && typeof tour === "object").map((tour) => JSON.parse(JSON.stringify(tour)))
       : []));
@@ -1085,9 +1295,11 @@ export function Threadmark({
     else backToSelection();
   }, [backToSelection, hasUnsavedComment, submitting]);
 
+  // Only clear it when it is showing: an unconditional setState here re-rendered on every keystroke, and
+  // fast typing that wrapped the text could pile those up until React gave up and dropped a key.
   useEffect(() => {
-    setDiscardPending(false);
-  }, [comment, composerMode, editingAnnotationId, mode]);
+    if (discardPending) setDiscardPending(false);
+  }, [comment, composerMode, editingAnnotationId, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openComposer = useCallback(() => {
     const targets = textRef.current
@@ -1103,10 +1315,12 @@ export function Threadmark({
     emitStatus("selected");
   }, [emitStatus, regionRef, selectionsRef, textRef]);
 
-  const showNotice = useCallback((message) => {
-    setNotice(message);
+  // A notice is words, or { message, action: { label, run } } for one follow-up such as Undo or Open.
+  // Notices with an action stay a little longer so there's time to use it.
+  const showNotice = useCallback((message, action = null) => {
+    setNotice(action ? { message, action: { label: action.label, run: () => { setNotice(""); action.run(); } } } : message);
     clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = setTimeout(() => setNotice(""), 2200);
+    noticeTimerRef.current = setTimeout(() => setNotice(""), action ? 6000 : 2200);
   }, []);
 
   const commentOnTourStep = useCallback(({ tourId, stepId, target }) => {
@@ -1159,7 +1373,7 @@ export function Threadmark({
         await Promise.all(existing.map((annotation) => callbacks.onFeedbackDelete.current(annotation.payload)));
       }
     } catch {
-      showNotice("Annotations weren’t cleared. Try again.");
+      showNotice("Comments weren’t cleared. Try again.");
       safeCall(callbacks.onError, {
         code: "feedback_delete_failed",
         message: "The feedback clear callback did not complete successfully.",
@@ -1183,7 +1397,7 @@ export function Threadmark({
       setMode("picking");
       emitStatus("selecting");
     }
-    showNotice("Annotations cleared");
+    showNotice("Comments cleared");
   }, [annotationsRef, callbacks.onError, callbacks.onFeedbackClear, callbacks.onFeedbackDelete, clearCapture, emitStatus, invalidateSubmission, modeRef, safeCall, showNotice]);
 
   const requestClearAll = useCallback(() => {
@@ -1247,20 +1461,25 @@ export function Threadmark({
     setPendingDelete(null);
   }, [comment, composerMode, editingIdRef, submitting]);
 
-  const beginEdit = useCallback(() => {
+  // Edits the original comment, or (board 07, 23a) one of your own replies when given its id.
+  const beginEdit = useCallback((replyId = null) => {
     const annotation = annotationsRef.current.find((item) => item.id === editingIdRef.current);
     if (!annotation || submitting || composerMode === "edit") return;
+    const reply = typeof replyId === "string" ? (annotation.payload.replies || []).find((item) => item.id === replyId) : null;
+    if (typeof replyId === "string" && (!reply || reply.author?.id !== normalizedReviewer?.id)) return;
     replyDraftRef.current = { comment, target: replyTarget };
+    setEditingReplyId(reply ? reply.id : null);
     setComposerMode("edit");
     setReplyTarget(null);
     setPendingDelete(null);
-    setComment(editDraftRef.current ?? annotation.payload.comment);
+    setComment(reply ? reply.comment : editDraftRef.current ?? annotation.payload.comment);
     editDraftRef.current = null;
-  }, [annotationsRef, comment, composerMode, editingIdRef, replyTarget, submitting]);
+  }, [annotationsRef, comment, composerMode, editingIdRef, normalizedReviewer?.id, replyTarget, submitting]);
 
   // Leaving an inline edit or a targeted reply returns to replying to the thread.
   const cancelReply = useCallback(() => {
     if (!editingIdRef.current || submitting) return;
+    setEditingReplyId(null);
     if (composerMode === "edit") {
       setComment(replyDraftRef.current?.comment || "");
       setReplyTarget(replyDraftRef.current?.target || null);
@@ -1273,10 +1492,17 @@ export function Threadmark({
     setComposerMode("reply");
   }, [composerMode, editingIdRef, submitting]);
 
+  // 23d: a comment nobody has replied to goes straight away, with Undo. A thread asks first (23e).
   const requestDelete = useCallback((intent) => {
     if (!intent?.id || !["annotation", "reply"].includes(intent.kind)) return;
+    const annotation = intent.kind === "annotation" ? annotationsRef.current.find((item) => item.id === intent.id) : null;
+    if (annotation && !(annotation.payload.replies || []).length) {
+      setPendingDelete(null);
+      removeAnnotationRef.current?.(intent.id);
+      return;
+    }
     setPendingDelete(intent);
-  }, []);
+  }, [annotationsRef]);
 
   const recheckAnnotation = useCallback((id) => {
     if (!annotationsRef.current.some((annotation) => annotation.id === id)) return;
@@ -1291,7 +1517,7 @@ export function Threadmark({
       const url = new URL(window.location.origin + window.location.pathname);
       url.searchParams.set(ANNOTATION_QUERY_PARAM, id);
       await navigator.clipboard.writeText(url.toString());
-      showNotice("Annotation link copied");
+      showNotice("Link copied");
     } catch {
       showNotice("Couldn’t copy annotation link");
     }
@@ -1303,7 +1529,6 @@ export function Threadmark({
     try {
       if (callbacks.onPageVersionSelect.current) {
         await callbacks.onPageVersionSelect.current(version, context);
-        setVersionHistoryOpen(false);
         showNotice(`Opened ${version.label}`);
       } else {
         window.location.assign(version.url);
@@ -1341,10 +1566,6 @@ export function Threadmark({
   }, [activeRoute, annotationsRef, callbacks.onError, callbacks.onFeedbackCarryForward, editingIdRef, safeCall, showNotice]);
 
   useEffect(() => {
-    if (mode !== "picking" && versionHistoryOpen) setVersionHistoryOpen(false);
-  }, [mode, versionHistoryOpen]);
-
-  useEffect(() => {
     if (!portalRoot || !observedLocation) return;
     const url = new URL(observedLocation);
     const id = url.searchParams.get(ANNOTATION_QUERY_PARAM);
@@ -1363,13 +1584,33 @@ export function Threadmark({
     editAnnotation(id);
   }, [annotations, callbacks.onOpenChange, editAnnotation, modeRef, observedLocation, portalRoot, safeCall]);
 
-  const removeAnnotation = useCallback(async (id) => {
+  // Undo for a deleted comment (board 07, 23d): it is created again with the same id, text and evidence,
+  // back in its old place in the list.
+  const restoreAnnotation = useCallback(async (snapshot, index) => {
+    if (annotationsRef.current.some((item) => item.id === snapshot.id)) return;
+    try {
+      const evidence = snapshot.runtime?.evidence || [];
+      const accepted = acceptAuthoritative(snapshot.payload, evidence, await callbacks.onFeedbackCreate.current?.(snapshot.payload, { evidence }));
+      const restored = { ...snapshot, id: accepted.payload.id, payload: accepted.payload, runtime: { ...snapshot.runtime, evidence: accepted.evidence } };
+      setAnnotations((current) => {
+        const rest = current.filter((item) => item.id !== restored.id);
+        return [...rest.slice(0, index), restored, ...rest.slice(index)];
+      });
+      showNotice("Comment restored");
+    } catch {
+      showNotice("Couldn’t bring the comment back. Try again.");
+      safeCall(callbacks.onError, { code: "feedback_submit_failed", message: "The feedback callback did not complete successfully." });
+    }
+  }, [annotationsRef, callbacks.onError, callbacks.onFeedbackCreate, safeCall, showNotice]);
+
+  const removeAnnotation = useCallback(async (id, { undoable = true } = {}) => {
     const annotation = annotationsRef.current.find((item) => item.id === id);
     if (!annotation) return false;
+    const index = annotationsRef.current.indexOf(annotation);
     try {
       await callbacks.onFeedbackDelete.current?.(annotation.payload);
     } catch {
-      showNotice("Annotation wasn’t removed. Try again.");
+      showNotice("Comment wasn’t deleted. Try again.");
       safeCall(callbacks.onError, {
         code: "feedback_delete_failed",
         message: "The feedback delete callback did not complete successfully.",
@@ -1389,9 +1630,12 @@ export function Threadmark({
       setMode("picking");
       emitStatus("selecting");
     }
-    showNotice("Annotation removed");
+    if (undoable) showNotice("Comment deleted", { label: "Undo", run: () => restoreAnnotation(annotation, index) });
+    else showNotice("Comment removed");
     return true;
-  }, [annotationsRef, callbacks.onError, callbacks.onFeedbackDelete, editingIdRef, emitStatus, modeRef, safeCall, showNotice]);
+  }, [annotationsRef, callbacks.onError, callbacks.onFeedbackDelete, editingIdRef, emitStatus, modeRef, restoreAnnotation, safeCall, showNotice]);
+
+  removeAnnotationRef.current = removeAnnotation;
 
   const removeReply = useCallback(async (annotationId, replyId) => {
     const annotation = annotationsRef.current.find((item) => item.id === annotationId);
@@ -1438,15 +1682,18 @@ export function Threadmark({
 
   const onToolbarPointerDown = useCallback((event) => {
     if (event.button !== 0) return;
-    const toolbar = event.currentTarget.closest(".tm-modebar");
+    const toolbar = event.currentTarget.closest(".tm-modebar, .tm-bar");
     const bounds = toolbar?.getBoundingClientRect();
     if (!bounds) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    setToolbarDragging(true);
     toolbarDragRef.current = {
       pointerId: event.pointerId,
       offsetX: event.clientX - bounds.left,
       offsetY: event.clientY - bounds.top,
+      startX: event.clientX,
+      startY: event.clientY,
       width: bounds.width,
       height: bounds.height,
     };
@@ -1466,13 +1713,19 @@ export function Threadmark({
     const drag = toolbarDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     toolbarDragRef.current = null;
+    setToolbarDragging(false);
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* Capture may already be released. */ }
-  }, []);
+    // It snaps to the nearest of six places and remembers it (board 09, 29a). A tap without moving keeps it put.
+    const moved = Math.abs(event.clientX - (drag.startX ?? event.clientX)) + Math.abs(event.clientY - (drag.startY ?? event.clientY)) > 4;
+    if (!moved) return;
+    updateBarPrefs({ position: nearestBarPosition(event.clientX, event.clientY, window.innerWidth, window.innerHeight) });
+    setToolbarPosition(null);
+  }, [updateBarPrefs]);
 
   useEffect(() => {
     if (!toolbarPosition) return undefined;
     const clampToolbar = () => {
-      const toolbar = portalRoot?.querySelector(".tm-modebar");
+      const toolbar = portalRoot?.querySelector(".tm-modebar, .tm-bar--idle");
       const bounds = toolbar?.getBoundingClientRect();
       if (!bounds) return;
       setToolbarPosition((current) => current ? {
@@ -1510,6 +1763,8 @@ export function Threadmark({
         y: rect.top + Math.min(18, rect.height / 2) + window.scrollY,
       },
       strokes: [],
+      // 6d: what is under the box, for the composer's "Region · Cards" chip.
+      placeLabel: regionPlaceLabel(rect),
       snapshot: {
         status: "capturing",
         approved: false,
@@ -1605,9 +1860,15 @@ export function Threadmark({
           URL.revokeObjectURL(previewUrl);
           return selection;
         }
-        revokePreview(selection);
+        // Keep the unsketched capture so Esc in the composer can go back to drawing (6d).
+        if (selection.original) revokePreview(selection);
         return {
           ...selection,
+          original: selection.original || {
+            previewUrl: selection.snapshot.previewUrl,
+            blob: selection.snapshot.blob,
+            metadata: selection.snapshot.metadata,
+          },
           snapshot: {
             ...selection.snapshot,
             status: "ready",
@@ -1632,6 +1893,24 @@ export function Threadmark({
       if (markupGeneration === markupGenerationRef.current) setComposingScreenshot(false);
     }
   }, [callbacks.onError, composingScreenshot, emitStatus, safeCall, screenshotRef, showNotice]);
+
+  // 6d: Esc in the composer goes back to the sketch, strokes and all.
+  const backToDrawing = useCallback(() => {
+    const current = screenshotRef.current;
+    if (!current?.original || modeRef.current !== "selected") return;
+    setScreenshotSelection((selection) => {
+      if (!selection?.original) return selection;
+      revokePreview(selection);
+      return {
+        ...selection,
+        original: null,
+        snapshot: { ...selection.snapshot, status: "ready", approved: false, ...selection.original },
+      };
+    });
+    modeRef.current = "markup";
+    setMode("markup");
+    emitStatus("selected");
+  }, [emitStatus, modeRef, screenshotRef]);
 
   const startInteractionRecording = useCallback(() => {
     clearCapture();
@@ -1810,6 +2089,26 @@ export function Threadmark({
     emitStatus("selecting");
   }, [emitStatus, modeRef, releaseVideo]);
 
+  // Resolves true when the count reaches zero, false when Esc cancels it.
+  const runVideoCountdown = useCallback((seconds) => new Promise((resolve) => {
+    let left = seconds;
+    setVideoCountdown(left);
+    let timer = null;
+    const finish = (finished) => {
+      clearInterval(timer);
+      videoCountdownCancelRef.current = null;
+      setVideoCountdown(null);
+      resolve(finished);
+    };
+    timer = setInterval(() => {
+      left -= 1;
+      if (left <= 0) finish(true);
+      else setVideoCountdown(left);
+    }, 1000);
+    videoCountdownCancelRef.current = () => finish(false);
+  }), []);
+  const cancelVideoCountdown = useCallback(() => { videoCountdownCancelRef.current?.(); }, []);
+
   const beginVideoRecording = useCallback(async () => {
     const setup = videoSetupRef.current;
     if (!setup || modeRef.current !== "video-setup" || ["requesting", "starting", "error"].includes(setup.status)) return;
@@ -1838,6 +2137,17 @@ export function Threadmark({
       stopStream(displayStream);
       return;
     }
+    // The tab is already shared, so what the reviewer sees during the count is what will be recorded.
+    if (videoOptions.countdownSeconds > 0) {
+      setVideoSetup((current) => current && { ...current, status: "countdown" });
+      const finished = await runVideoCountdown(videoOptions.countdownSeconds);
+      const current = generation === videoPreviewGenerationRef.current && modeRef.current === "video-setup";
+      if (!finished || !current) {
+        stopStream(displayStream);
+        if (current) setVideoSetup((value) => value && { ...value, status: "ready", error: "" });
+        return;
+      }
+    }
     const preview = videoPreviewStreamRef.current;
     const audioTracks = setup.microphone ? preview?.getAudioTracks?.() || [] : [];
     const cameraTracks = setup.camera ? preview?.getVideoTracks?.() || [] : [];
@@ -1861,6 +2171,8 @@ export function Threadmark({
       maxDurationMs: videoOptions.maxDurationMs,
       maxEvents: MAX_VIDEO_EVENTS,
       events: [],
+      drawings: [],
+      moments: [],
       targets: [],
       targetKeys: new Map(),
       lastScrollAt: 0,
@@ -1904,12 +2216,40 @@ export function Threadmark({
       paused: false,
       finishing: false,
       eventCount: 0,
+      moments: 0,
+      lastMomentMs: null,
       mode: session.mode,
       maxDurationMs: session.maxDurationMs,
+      microphone: session.microphone,
+      camera: session.camera,
+      microphoneOn: true,
+      cameraOn: true,
     });
     modeRef.current = "video-recording";
     setMode("video-recording");
-  }, [callbacks.onError, modeRef, safeCall, videoOptions.maxDurationMs, videoSetupRef]);
+  }, [callbacks.onError, modeRef, runVideoCountdown, safeCall, videoOptions.countdownSeconds, videoOptions.maxDurationMs, videoSetupRef]);
+
+  // Mute the microphone or turn the camera off mid-recording without stopping (7d). The recorder keeps
+  // the same tracks, so the video carries silence or a still frame for that stretch.
+  const toggleVideoSource = useCallback((kind) => {
+    const session = videoSessionRef.current;
+    if (!session || session.finishing) return;
+    const preview = videoPreviewStreamRef.current;
+    const tracks = kind === "microphone" ? preview?.getAudioTracks?.() || [] : preview?.getVideoTracks?.() || [];
+    if (!tracks.length) return;
+    const next = !tracks[0].enabled;
+    for (const track of tracks) track.enabled = next;
+    setVideoRecordingState((current) => current && { ...current, [kind === "microphone" ? "microphoneOn" : "cameraOn"]: next });
+  }, []);
+
+  // M marks a moment worth talking about later; moments become ticks on the trim bar and chapters.
+  const markVideoMoment = useCallback(() => {
+    const session = videoSessionRef.current;
+    if (!session || session.finishing || session.clock.paused || session.moments.length >= 50) return;
+    const offsetMs = session.clock.elapsed();
+    session.moments.push({ offsetMs });
+    setVideoRecordingState((current) => current && { ...current, moments: session.moments.length, lastMomentMs: offsetMs });
+  }, []);
 
   const toggleVideoPause = useCallback(() => {
     const session = videoSessionRef.current;
@@ -1928,38 +2268,44 @@ export function Threadmark({
     });
   }, []);
 
-  const restartVideoRecording = useCallback(() => {
+  // Choosing what to blur pauses the recording (so the choosing isn't in the video) and resumes it after.
+  const chooseVideoTool = useCallback((tool) => {
     const session = videoSessionRef.current;
-    if (!session || session.finishing) return;
-    session.recorder.restart();
-    session.clock.reset();
-    session.startedAt = new Date().toISOString();
-    session.events = [];
-    session.targets = [];
-    session.targetKeys = new Map();
-    session.lastScrollAt = 0;
-    session.pointer = createPointerTrack({
-      width: window.innerWidth,
-      height: window.innerHeight,
-      scrollX: window.scrollX,
-      scrollY: window.scrollY,
-    });
-    setVideoRecordingState((current) => current && { ...current, elapsedMs: 0, paused: false, eventCount: 0 });
-    showNotice("Recording restarted");
-  }, [showNotice]);
+    if (tool === "blur" && session && !session.finishing && !session.clock.paused) {
+      toggleVideoPause();
+      blurPausedRef.current = true;
+    } else if (tool !== "blur" && blurPausedRef.current) {
+      blurPausedRef.current = false;
+      if (session && !session.finishing && session.clock.paused) toggleVideoPause();
+    }
+    setVideoTool(tool || null);
+  }, [toggleVideoPause]);
+
+  const toggleVideoBlur = useCallback((element) => {
+    setVideoBlurred((current) => (current.includes(element) ? current.filter((item) => item !== element) : [...current.slice(-59), element]));
+  }, []);
+
+  // A finished stroke, placed where it started in the recording, so voice recordings can replay it.
+  const recordVideoStroke = useCallback(({ points, durationMs }) => {
+    const session = videoSessionRef.current;
+    if (!session || session.finishing || session.clock.paused || session.drawings.length >= 100) return;
+    session.drawings.push({ offsetMs: Math.max(0, session.clock.elapsed() - durationMs), points });
+  }, []);
 
   const discardVideoRecording = useCallback(() => {
     releaseVideo();
     modeRef.current = "picking";
     setMode("picking");
     emitStatus("selecting");
-    showNotice("Video discarded");
+    showNotice("Video deleted");
   }, [emitStatus, modeRef, releaseVideo, showNotice]);
 
   const finishVideoRecording = useCallback(async () => {
     const session = videoSessionRef.current;
     if (!session || session.finishing) return;
     session.finishing = true;
+    setVideoTool(null);
+    blurPausedRef.current = false;
     const elapsedMs = Math.min(session.maxDurationMs, session.clock.elapsed());
     session.clock.pause();
     setVideoRecordingState((current) => current && { ...current, elapsedMs, paused: false, finishing: true });
@@ -2020,6 +2366,9 @@ export function Threadmark({
         viewport: session.pointer.viewport,
         pointer: { samples: session.pointer.samples, scrolls: session.pointer.scrolls },
         events: session.events,
+        pauses: session.clock.pauses,
+        drawings: session.drawings,
+        moments: session.moments,
       },
       evidence: {
         id: session.evidenceId,
@@ -2039,6 +2388,13 @@ export function Threadmark({
       },
     };
     setVideoSelection(selection);
+    setVideoReview({
+      id: session.id,
+      title: suggestVideoTitle(document.title, sanitizeRoute(route || window.location.pathname || "/")),
+      startMs: 0,
+      endMs: durationMs,
+      element: primaryItem?.element || null,
+    });
     setComment("");
     modeRef.current = "selected";
     setMode("selected");
@@ -2162,9 +2518,15 @@ export function Threadmark({
       });
     };
     const onSubmit = (event) => appendEvent("submit", event);
-    const onNavigation = () => appendEvent("navigation", { target: document.documentElement, composedPath: () => [] }, {
-      route: sanitizeRoute(window.location.pathname || "/"),
-    });
+    // One move can fire popstate, hashchange and navigatesuccess together: record it once per address.
+    let lastHref = window.location.href;
+    const onNavigation = () => {
+      if (window.location.href === lastHref) return;
+      lastHref = window.location.href;
+      appendEvent("navigation", { target: document.documentElement, composedPath: () => [] }, {
+        route: sanitizeRoute(window.location.pathname || "/"),
+      });
+    };
     // The pointer path is what a voice + cursor recording replays, and what an agent reads to follow a tab video.
     const onPointer = (event) => {
       const recording = activeRecording();
@@ -2221,8 +2583,31 @@ export function Threadmark({
       if (mode === "video-recording") return;
       if (action === "toggle") {
         event.preventDefault();
+        // A bar hidden on this page comes back with the same keys (board 09, 29c).
+        if (hiddenPages.includes(activeRoute)) {
+          const next = hiddenPages.filter((page) => page !== activeRoute);
+          setHiddenPages(next);
+          writeHiddenPages(next);
+        }
         if (mode === "idle") startReview();
         else closeReview();
+        return;
+      }
+      if (action === "shrink") {
+        event.preventDefault();
+        updateBarPrefs({ shrunk: !barPrefs.shrunk });
+        if (!barPrefs.shrunk && mode !== "idle" && mode !== "video-recording") closeReview();
+        return;
+      }
+      if (action === "shortcuts") {
+        if (mode === "video-recording" || mode === "recording") return;
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+        return;
+      }
+      if (action === "escape" && shortcutsOpen) {
+        event.preventDefault();
+        setShortcutsOpen(false);
         return;
       }
       // An open @mention list or menu handles its own Escape.
@@ -2235,8 +2620,7 @@ export function Threadmark({
           if (mode === "tour") exitTourMode();
           else if (allCommentsOpen && mode === "picking") {
             setAllCommentsOpen(false);
-            setVersionHistoryOpen(false);
-            portalRoot.querySelector(".tm-all-comments-trigger")?.focus();
+            (portalRoot.querySelector(".tm-all-comments-trigger.is-active") || portalRoot.querySelector(".tm-all-comments-trigger"))?.focus();
           }
           else if (mode === "recording") cancelInteractionRecording();
           else if (mode === "video-setup") cancelVideoSetup();
@@ -2247,7 +2631,15 @@ export function Threadmark({
         }
         return;
       }
-      if (mode === "idle") return;
+      if (mode === "idle") {
+        // C starts commenting from the resting Bar too (2026-11-15), unless the Bar is hidden on this page.
+        // shortcutAction has already ignored it while someone is typing.
+        if (action === "comment" && !hiddenPages.includes(activeRoute)) {
+          event.preventDefault();
+          startReview();
+        }
+        return;
+      }
       if (mode === "recording" || mode === "video-setup" || mode === "tour") return;
       // Tool keys switch away from Comment only from the toolbar's own state; anywhere else they
       // belong to the open composer or capture and pass through.
@@ -2269,6 +2661,11 @@ export function Threadmark({
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [
+    hiddenPages,
+    activeRoute,
+    barPrefs.shrunk,
+    updateBarPrefs,
+    shortcutsOpen,
     portalRoot,
     mode,
     submitting,
@@ -2287,7 +2684,6 @@ export function Threadmark({
     startInteractionRecording,
     startVideoSetup,
     videoOptions.enabled,
-    versionHistoryOpen,
     allCommentsOpen,
     exitTourMode,
   ]);
@@ -2474,9 +2870,11 @@ export function Threadmark({
       position: positionRestoration,
       onChange: (results) => {
         markerPositions.update(results);
-        setAnnotationRestorations(results);
-        setAnnotationRects(Object.fromEntries(Object.entries(results).filter(([, result]) => result.rect)
-          .map(([id, result]) => [id, result.rect])));
+        const rects = Object.fromEntries(Object.entries(results).filter(([, result]) => result.rect)
+          .map(([id, result]) => [id, result.rect]));
+        // An unchanged page keeps the same state objects, so the overlay doesn't re-render for nothing.
+        setAnnotationRestorations((current) => (sameRestorations(current, results) ? current : results));
+        setAnnotationRects((current) => (sameRects(current, rects) ? current : rects));
         setObservedLocation(current => current === window.location.href ? current : window.location.href);
       },
     });
@@ -3007,7 +3405,10 @@ export function Threadmark({
         }
         return;
       }
-      const result = player.preview(tourPreview.tour, { onEnd: backToTour });
+      const result = player.preview(tourPreview.tour, {
+        onEnd: backToTour,
+        onStep: (step) => { if (!cancelled) setTourPreview((current) => current && { ...current, step }); },
+      });
       if (!result.ok) {
         showNotice("Fix the tour’s problems before trying it.");
         backToTour();
@@ -3172,7 +3573,21 @@ export function Threadmark({
       updatedAt: movedAt, lastEditedBy: normalizedReviewer, pin,
       pinHistory: [...(annotation.payload.pinHistory || []), previous] });
     const evidence = annotation.runtime?.evidence || [];
-    return acceptAuthoritative(payload, evidence, await callbacks.onFeedbackCreate.current?.(payload, { evidence }));
+    const result = await callbacks.onFeedbackCreate.current?.(payload, { evidence });
+    if (!result?.feedback) return { payload, evidence };
+    const accepted = recordToAnnotation({
+      feedback: result.feedback,
+      context: { evidence: result.context?.evidence ?? evidence },
+    });
+    // A host can return its authoritative record. Never claim a location was confirmed
+    // if that record omitted, changed, or rejected the requested pin.
+    if (!accepted?.payload.pin
+      || accepted.payload.pin.route !== payload.pin.route
+      || accepted.payload.pin.buildId !== payload.pin.buildId
+      || JSON.stringify(accepted.payload.pin.target) !== JSON.stringify(payload.pin.target)) {
+      throw new Error("The host did not save the requested pin location.");
+    }
+    return { payload: accepted.payload, evidence: accepted.runtime.evidence };
   };
 
   const confirmSuggestedPin = async (id) => {
@@ -3236,12 +3651,52 @@ export function Threadmark({
       if (generation !== submitGenerationRef.current) return;
       setAnnotations((items) => items.map((item) => mergeAccepted(item, current.id, accepted)));
       if (accepted.payload.id !== current.id) setEditingAnnotationId(accepted.payload.id);
-      setSubmitting(false); showNotice("Thread updated");
+      setSubmitting(false);
+      showNotice(action === "resolved" ? "Resolved" : action === "reopened" ? "Reopened" : action === "assigned" ? `Assigned to ${member?.displayName || "nobody"}` : "Thread updated");
     } catch {
       if (generation !== submitGenerationRef.current) return;
       setSubmitting(false); showNotice("Thread wasn’t updated. Try again.");
     }
   };
+
+  // AI review (board 12): a finding is posted only when someone chooses to, as their own comment marked
+  // "From an AI review". Threadmark bundles no model; the host's onAiReview / onAskAi supply the words.
+  const postAiComment = async ({ element, comment }) => {
+    if (!element?.isConnected || !normalizedReviewer) throw new Error("That element isn’t on the page any more.");
+    const target = createTargetDescriptor(element, { route: activeRoute, ignoredSelectors });
+    let payload = createFeedbackPayload({
+      projectKey, environment: environment || "local", buildId, route: activeRoute, target, comment,
+      author: normalizedReviewer, lastEditedBy: normalizedReviewer, source: "ai",
+      workflow: { status: "open", assignee: null, mentions: [], history: [] },
+    });
+    const accepted = acceptAuthoritative(payload, [], await callbacks.onFeedbackCreate.current?.(payload, { evidence: [] }));
+    payload = accepted.payload;
+    setAnnotations((current) => [
+      ...current.filter((annotation) => annotation.id !== payload.id),
+      { id: payload.id, payload, runtime: { kind: "element", elements: [element], evidence: accepted.evidence || [] }, poll: emptyPoll(payload.ask) },
+    ]);
+    return payload.id;
+  };
+
+  const changeReaction = useCallback(async (annotationId, messageId, emoji, active) => {
+    const annotation = annotationsRef.current.find((item) => item.id === annotationId);
+    if (!annotation || !normalizedReviewer || !callbacks.onReactionChange.current) return;
+    const generation = submitGenerationRef.current;
+    try {
+      const result = await callbacks.onReactionChange.current(annotation.payload, { messageId, emoji, active });
+      if (generation !== submitGenerationRef.current) return;
+      if (!Array.isArray(result)) throw new Error("The reaction callback must return saved reactions.");
+      const reactions = normalizeReactions(result);
+      setAnnotations((items) => items.map((item) => item.id !== annotationId ? item : { ...item, payload: {
+        ...item.payload,
+        ...(messageId === annotationId ? { reactions } : { replies: (item.payload.replies || []).map((reply) => reply.id === messageId ? { ...reply, reactions } : reply) }),
+      } }));
+    } catch (error) {
+      showNotice("Your reaction wasn’t saved. Try again.");
+      safeCall(callbacks.onError, { code: "reaction_failed", message: error?.message || "The reaction could not be saved." });
+      throw error;
+    }
+  }, [annotationsRef, normalizedReviewer, callbacks.onReactionChange, callbacks.onError, safeCall, showNotice]);
 
   // Votes go to the host, which returns the poll's new results.
   const votePoll = useCallback(async (annotationId, optionIds) => {
@@ -3303,6 +3758,14 @@ export function Threadmark({
     editAnnotation(source.feedbackId);
   };
 
+  // Runs the ordinary submit once the review's title and trim are in state.
+  useEffect(() => {
+    const pending = postVideoPendingRef.current;
+    if (!pending || comment !== pending || videoSelection?.video?.title !== pending) return;
+    postVideoPendingRef.current = null;
+    submitFeedback({ preventDefault() {} });
+  });
+
   const submitFeedback = async (event) => {
     event.preventDefault();
     const editing = annotationsRef.current.find((annotation) => annotation.id === editingIdRef.current) || null;
@@ -3358,6 +3821,31 @@ export function Threadmark({
         return;
       }
       if (repinningId) throw new Error("The original comment is no longer available.");
+      if (editing && composerMode === "edit" && editingReplyId) {
+        const updatedAt = new Date().toISOString();
+        let payload = createFeedbackPayload({
+          ...editing.payload,
+          now: editing.payload.createdAt,
+          updatedAt,
+          replies: (editing.payload.replies || []).map((reply) => reply.id === editingReplyId
+            ? { ...reply, comment, updatedAt, lastEditedBy: normalizedReviewer }
+            : reply),
+          lastEditedBy: normalizedReviewer,
+        });
+        const context = { evidence: editing.runtime?.evidence || [] };
+        const accepted = acceptAuthoritative(payload, context.evidence, await callbacks.onFeedbackCreate.current?.(payload, context));
+        if (submissionGeneration !== submitGenerationRef.current) return;
+        setAnnotations((current) => current.map((annotation) => mergeAccepted(annotation, editing.id, accepted)));
+        setEditingReplyId(null);
+        setComment(replyDraftRef.current?.comment || "");
+        setReplyTarget(replyDraftRef.current?.target || null);
+        replyDraftRef.current = null;
+        setComposerMode("reply");
+        setSubmitting(false);
+        showNotice("Reply updated");
+        emitStatus("selected");
+        return;
+      }
       if (editing && composerMode === "reply") {
         const createdAt = new Date().toISOString();
         const reply = {
@@ -3373,6 +3861,7 @@ export function Threadmark({
           ...editing.payload,
           now: editing.payload.createdAt,
           updatedAt: createdAt,
+          reactions: editing.payload.reactions,
           replies: [...(editing.payload.replies || []), reply],
           workflow: withInlineMentions(editing.payload.workflow, comment, reviewers, normalizedReviewer, buildId),
           lastEditedBy: normalizedReviewer,
@@ -3410,7 +3899,12 @@ export function Threadmark({
         || (currentVideo ? [currentVideo.evidence.metadata] : null)
         || (approvedSnapshot?.metadata ? [approvedSnapshot.metadata] : activeSnapshotSelection?.snapshot?.status === "failed" ? [activeSnapshotSelection.snapshot.metadata] : []);
       const draftReplay = replayDraftRef.current;
-      const replayAttachment = !editing && draftReplay?.status === "ready" && !draftReplay.removed ? draftReplay : null;
+      const replayAttachment = !editing && !currentVideo && !currentInteraction && draftReplay?.status === "ready" && !draftReplay.removed ? draftReplay : null;
+      const device = editing
+        ? editing.payload.device
+        : deviceDetails === false ? undefined : readDeviceInfo(window, clientHintsRef.current);
+      const appMetadata = editing ? editing.payload.metadata : await readMetadata();
+      if (submissionGeneration !== submitGenerationRef.current) return;
       const evidenceMetadata = replayAttachment
         ? [...snapshotMetadata, {
           id: replayAttachment.id,
@@ -3422,7 +3916,7 @@ export function Threadmark({
         }]
         : snapshotMetadata;
       let payload = createFeedbackPayload({
-        captureEnvironment: editing ? editing.payload.captureEnvironment : captureEnvironment(window),
+        captureEnvironment: editing ? editing.payload.captureEnvironment : deviceDetails === false ? undefined : captureEnvironment(window),
         id: editing?.payload.id,
         now: editing?.payload.createdAt,
         updatedAt: new Date().toISOString(),
@@ -3432,6 +3926,9 @@ export function Threadmark({
         route: editing ? editing.payload.route : sanitizeRoute(route || window.location.pathname || "/"),
         pin: editing?.payload.pin,
         pinHistory: editing?.payload.pinHistory,
+        links: editing?.payload.links,
+        source: editing?.payload.source,
+        aiReview: editing?.payload.aiReview,
         workflow: withInlineMentions(editing?.payload.workflow, comment, reviewers, normalizedReviewer, buildId),
         ask: editing
           ? editing.payload.ask
@@ -3441,7 +3938,7 @@ export function Threadmark({
               multiple: pollMultiple,
               options: pollOptions.map((label) => label.trim()).filter(Boolean).map((label, index) => ({ id: `option-${index + 1}`, label })),
             }
-            : askKind === "question" ? { kind: "question" } : undefined,
+            : undefined,
         tourStep: editing ? editing.payload.tourStep : tourCommentRef.current?.tourStep,
         target: targets[0],
         targets,
@@ -3452,9 +3949,12 @@ export function Threadmark({
         replay: editing?.payload.replay
           || (replayAttachment ? { evidenceId: replayAttachment.id, startedAt: replayAttachment.startedAt, ...replayAttachment.summary } : undefined),
         comment,
+        reactions: editing?.payload.reactions,
         replies: editing?.payload.replies,
         author: editing ? editing.payload.author : normalizedReviewer,
         lastEditedBy: normalizedReviewer,
+        device,
+        metadata: appMetadata,
       });
       let contextEvidence = editing?.runtime?.evidence
         || (currentVideo ? [{ id: currentVideo.evidence.id, blob: currentVideo.evidence.blob }] : null)
@@ -3468,9 +3968,19 @@ export function Threadmark({
         if (!matches) throw new Error("Saved evidence metadata did not match its Blob.");
       }
       const context = { evidence: contextEvidence };
+      // Hosts that upload the files while saving report it here, and the composer shows the share sent.
+      const sizes = new Map(contextEvidence.filter((item) => item.blob?.size).map((item) => [item.id, item.blob.size]));
+      const totalBytes = [...sizes.values()].reduce((sum, size) => sum + size, 0);
+      const sentBytes = new Map();
+      const onUploadProgress = (progress) => {
+        if (submissionGeneration !== submitGenerationRef.current || !sizes.has(progress?.evidenceId)) return;
+        const sent = Math.min(sizes.get(progress.evidenceId), Math.max(0, Number(progress.sentBytes) || 0));
+        sentBytes.set(progress.evidenceId, Math.max(sentBytes.get(progress.evidenceId) || 0, sent));
+        setUploadProgress([...sentBytes.values()].reduce((sum, value) => sum + value, 0) / totalBytes);
+      };
 
       let acceptedPoll = null;
-      ({ payload, evidence: contextEvidence, poll: acceptedPoll } = acceptAuthoritative(payload, contextEvidence, await callbacks.onFeedbackCreate.current?.(payload, context)));
+      ({ payload, evidence: contextEvidence, poll: acceptedPoll } = acceptAuthoritative(payload, contextEvidence, await callbacks.onFeedbackCreate.current?.(payload, context, { onUploadProgress })));
       if (submissionGeneration !== submitGenerationRef.current) return;
       const runtime = editing?.runtime || (captureKind === "text"
         ? { kind: "text", range: currentText.range.cloneRange() }
@@ -3523,14 +4033,27 @@ export function Threadmark({
         emitStatus("selected");
         return;
       }
-      showNotice("Annotation added");
+      // Board 01, 2d: "Comment added · Undo".
+      {
+        const addedId = payload.id;
+        showNotice(captureKind === "video" ? "Video posted" : "Comment added", { label: "Undo", run: () => removeAnnotation(addedId, { undoable: false }) });
+      }
       clearCapture();
-      setEditingAnnotationId(null);
       setComment("");
-      setComposerMode("new");
       setReplyTarget(null);
       setPendingDelete(null);
       setSubmitting(false);
+      if (captureKind === "video") {
+        // 7f: the posted video opens as its thread, so it plays straight away.
+        setEditingAnnotationId(payload.id);
+        setComposerMode("reply");
+        modeRef.current = "selected";
+        setMode("selected");
+        emitStatus("selected");
+        return;
+      }
+      setEditingAnnotationId(null);
+      setComposerMode("new");
       modeRef.current = "picking";
       setMode("picking");
       emitStatus("selecting");
@@ -3544,6 +4067,19 @@ export function Threadmark({
         message: "The feedback callback did not complete successfully.",
       });
     }
+  };
+
+  // Post from the review (7e): the title becomes the comment and the trim travels with the video.
+  const postVideo = ({ title, startMs, endMs }) => {
+    const current = videoRef.current;
+    if (!current || submitting) return;
+    const text = String(title || "").trim().slice(0, 120) || "Video walkthrough";
+    setVideoSelection((selection) => selection && {
+      ...selection,
+      video: { ...selection.video, title: text, trim: { startMs, endMs } },
+    });
+    setComment(text);
+    postVideoPendingRef.current = text;
   };
 
   if (!portalRoot) return null;
@@ -3574,7 +4110,61 @@ export function Threadmark({
     });
   }
 
+  const acceptPageReviewFinding = async ({ finding, review, element, target }) => {
+    if (!element.isConnected || !review?.reviewId || !finding?.id || !callbacks.onFeedbackCreate.current) throw new Error("That suggestion can’t be kept.");
+    let shot = null;
+    const rect = element.getBoundingClientRect();
+    const left = Math.max(0, rect.left), top = Math.max(0, rect.top);
+    const width = Math.min(window.innerWidth, rect.right) - left, height = Math.min(window.innerHeight, rect.bottom) - top;
+    if (width >= 4 && height >= 4) {
+      try {
+        shot = await captureRegionSnapshot({ id: makeId("snapshot"), region: { left, top, width, height }, ignoredSelectors: [...ignoredSelectors, "[data-private]"] });
+      } catch { /* A missing screenshot never blocks keeping the comment. */ }
+    }
+    const payload = createFeedbackPayload({
+      captureEnvironment: deviceDetails === false ? undefined : captureEnvironment(window),
+      projectKey,
+      environment: environment || "local",
+      buildId,
+      route: activeRoute,
+      workflow: withInlineMentions(undefined, finding.comment, reviewers, normalizedReviewer, buildId),
+      target,
+      targets: [target],
+      captureKind: "element",
+      evidence: shot ? [shot.metadata] : [],
+      comment: finding.comment,
+      author: normalizedReviewer,
+      lastEditedBy: normalizedReviewer,
+      device: deviceDetails === false ? undefined : readDeviceInfo(window, clientHintsRef.current),
+      source: "ai_review",
+      aiReview: { reviewId: review.reviewId, findingId: finding.id },
+    });
+    const contextEvidence = shot ? [{ id: shot.metadata.id, blob: shot.blob }] : [];
+    if (!element.isConnected) throw new Error("That element isn’t on the page any more.");
+    const accepted = acceptAuthoritative(payload, contextEvidence, await callbacks.onFeedbackCreate.current?.(payload, { evidence: contextEvidence }));
+    setAnnotations((current) => [
+      ...current.filter((annotation) => annotation.id !== accepted.payload.id),
+      { id: accepted.payload.id, payload: accepted.payload, runtime: { kind: "element", elements: [element], evidence: accepted.evidence }, poll: emptyPoll(accepted.payload.ask) },
+    ]);
+    showNotice("Suggestion kept as a comment");
+  };
+
   const overlay = createPortal(
+    <>
+    {/* Inside a tm-root so the widget gets the brand tokens. */}
+    {onPageReview && hostedReviewOpen && mode === "picking" && <div className="tm-root">
+      <HostedPageReview key={JSON.stringify([projectKey, activeRoute, buildId])} onClose={() => setHostedReviewOpen(false)}
+        route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
+        existing={annotations.filter((item) => item.payload.route === activeRoute)
+          .map((item) => ({ comment: item.payload.comment, target: item.payload.target }))}
+        onAiReview={onPageReview} onAccept={acceptPageReviewFinding} onDismiss={onPageReviewDismiss} />
+    </div>}
+    {!onPageReview && onPageReviewRequested && mode === 'picking' && <div className="tm-root"><AgentReview route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
+      onReview={onPageReviewRequested} onRecords={(records) => {
+        const accepted = records.filter(record => record.feedback?.projectKey === projectKey && record.feedback?.route === activeRoute).map(record => recordToAnnotation(record)).filter(Boolean);
+        setAnnotations(current => [...current.filter(item => !accepted.some(next => next.id === item.id)), ...accepted]);
+      }} /></div>}
+    {presence && <Presence transport={presence} route={activeRoute} buildId={buildId} projectKey={projectKey} ignoredSelectors={ignoredSelectors} />}
     <Overlay
       mode={mode}
       onStartTour={startTourMode}
@@ -3585,7 +4175,11 @@ export function Threadmark({
       tourPick={tourPick}
       onTourPreview={previewTour}
       onStopTourPreview={stopTourPreview}
+      tourPreviewInfo={tourPreview ? { title: tourPreview.tour?.title || tourPreview.tour?.name || "", step: tourPreview.step || 0, total: tourPreview.tour?.steps?.length || 0 } : null}
       onTourSave={callbacks.onTourSave.current ? (tour, file) => callbacks.onTourSave.current(tour, file) : undefined}
+      onTourSendToAi={callbacks.onTourSendToAi.current ? (tour, file) => callbacks.onTourSendToAi.current(tour, file) : undefined}
+      aiConnection={aiConnection && typeof aiConnection.name === "string" ? { name: aiConnection.name.slice(0, 60), connected: aiConnection.connected === true, detail: typeof aiConnection.detail === "string" ? aiConnection.detail.slice(0, 120) : null } : null}
+      onConnectAi={onConnectAi}
       onCopyText={copyText}
       tourStepComments={tourStepComments}
       tourCodeRules={tourCodeRules}
@@ -3614,8 +4208,8 @@ export function Threadmark({
           region: { left, top, width: right - left, height: bottom - top } });
       }}
       allCommentsOpen={allCommentsOpen}
-      onToggleAllComments={() => { setAllCommentsOpen((open) => !open); setVersionHistoryOpen(false); }}
-      onCloseAllComments={() => { setAllCommentsOpen(false); setVersionHistoryOpen(false); portalRoot.querySelector(".tm-all-comments-trigger")?.focus(); }}
+      onToggleAllComments={() => { setAllCommentsOpen((open) => !open); }}
+      onCloseAllComments={() => { setAllCommentsOpen(false); (portalRoot.querySelector(".tm-all-comments-trigger.is-active") || portalRoot.querySelector(".tm-all-comments-trigger"))?.focus(); }}
       onOpenListedAnnotation={openListedAnnotation}
       repinning={Boolean(repinningId)}
       repinTargetCount={(() => {
@@ -3644,9 +4238,20 @@ export function Threadmark({
       onBeginVideoRecording={beginVideoRecording}
       onCancelVideoSetup={cancelVideoSetup}
       onToggleVideoPause={toggleVideoPause}
-      onRestartVideo={restartVideoRecording}
+      videoBlurred={videoBlurred}
+      videoTool={videoTool}
+      onVideoTool={chooseVideoTool}
+      onToggleVideoBlur={toggleVideoBlur}
+      onVideoStroke={recordVideoStroke}
       onDiscardVideo={discardVideoRecording}
       onStopVideo={finishVideoRecording}
+      onToggleVideoSource={toggleVideoSource}
+      onMarkVideoMoment={markVideoMoment}
+      videoCountdown={videoCountdown}
+      onCancelVideoCountdown={cancelVideoCountdown}
+      videoReview={videoReview}
+      onPostVideo={postVideo}
+      onRetakeVideo={startVideoSetup}
       replayEnabled={replayOptions.enabled}
       replayDraft={replayDraft}
       onToggleReplay={toggleReplayAttachment}
@@ -3661,10 +4266,28 @@ export function Threadmark({
       editingAnnotation={editingAnnotation}
       pageVersions={normalizedPageVersions}
       pageVersionRoute={activeRoute}
-      versionHistoryOpen={versionHistoryOpen}
       carryingVersionId={carryingVersionId}
       reviewer={normalizedReviewer}
       toolbarPosition={toolbarPosition}
+      toolbarDragging={toolbarDragging}
+      barPosition={barPrefs.position}
+      barShrunk={barPrefs.shrunk}
+      barHidden={hiddenPages.includes(activeRoute)}
+      onBarShrink={(shrunk) => updateBarPrefs({ shrunk })}
+      onBarHide={() => {
+        const next = [...new Set([...hiddenPages, activeRoute])];
+        setHiddenPages(next);
+        writeHiddenPages(next);
+        closeReview();
+        const keys = /Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌘⇧F" : "Ctrl+Shift+F";
+        // Board 09, 29c: say which page, and offer Undo.
+        showNotice(`Hidden on ${activeRoute === "/" ? "Home" : activeRoute}. ${keys} brings it back.`, {
+          label: "Undo",
+          run: () => { setHiddenPages(next.filter((page) => page !== activeRoute)); writeHiddenPages(next.filter((page) => page !== activeRoute)); },
+        });
+      }}
+      shortcutsOpen={shortcutsOpen}
+      onShortcutsOpenChange={setShortcutsOpen}
       comment={comment}
       setComment={setComment}
       composerMode={composerMode}
@@ -3683,6 +4306,7 @@ export function Threadmark({
       onScreenshotAreaComplete={captureScreenshotArea}
       onScreenshotCancel={cancelScreenshotMarkup}
       onScreenshotConfirm={confirmScreenshotMarkup}
+      onBackToDrawing={backToDrawing}
       onScreenshotStrokesChange={updateScreenshotStrokes}
       onSubmit={submitFeedback}
       onPause={togglePause}
@@ -3691,9 +4315,45 @@ export function Threadmark({
       onEditAnnotation={editAnnotation}
       onRecheckAnnotation={recheckAnnotation}
       onCopyAnnotationLink={copyAnnotationLink}
-      onShowVersions={setVersionHistoryOpen}
       onSelectPageVersion={selectPageVersion}
       nextSteps={shownNextSteps}
+      notifications={Array.isArray(notifications) ? normalizedNotifications : null}
+      onOpenNotification={(notification) => {
+        safeCall(callbacks.onNotificationOpen, notification);
+        if (notification.annotationId && projectAnnotations.some((item) => item.id === notification.annotationId)) {
+          openListedAnnotation(notification.annotationId);
+        } else if (notification.route && notification.route !== activeRoute) {
+          // The host's onNotificationOpen navigates; without one, at least say where it is.
+          if (!callbacks.onNotificationOpen.current) showNotice(`That’s on ${notification.route === "/" ? "Home" : notification.route}.`);
+        } else {
+          showNotice("That comment isn’t on this page any more.");
+        }
+      }}
+      onNotificationsSeen={(ids) => { if (ids.length) safeCall(callbacks.onNotificationsRead, ids); }}
+      surveys={Array.isArray(surveys) ? normalizedSurveys.filter((survey) => survey.pages.some((page) => surveyPageMatches(page, activeRoute))) : null}
+      surveyResults={surveyResults && typeof surveyResults === "object" ? surveyResults : {}}
+      onSurveyPublish={onSurveyPublish ? async (survey) => {
+        await callbacks.onSurveyPublish.current?.(survey);
+        showNotice(`Your question is live on ${survey.pages.join(", ")}`);
+      } : null}
+      onSurveyEnd={onSurveyEnd ? (survey) => safeCall(callbacks.onSurveyEnd, survey.id) : null}
+      surveyRoute={activeRoute}
+      faces={Array.isArray(faces) ? faces.filter((face) => face && typeof face.url === "string") : []}
+      reviewerEmail={typeof reviewer?.email === "string" ? reviewer.email : null}
+      notificationSettings={notificationSettings}
+      projectName={typeof projectName === "string" ? projectName : null}
+      onReviewerChange={onReviewerChange}
+      onNotificationSettingsChange={onNotificationSettingsChange}
+      onLeaveProject={onLeaveProject}
+      onSignOut={onSignOut}
+      inviteSuggestions={Array.isArray(inviteSuggestions) ? inviteSuggestions : undefined}
+      shareUrl={typeof shareUrl === "string" && shareUrl ? shareUrl : null}
+      linkAccess={["comment", "view", "off"].includes(linkAccess) ? linkAccess : null}
+      members={Array.isArray(members) ? members.filter((member) => member && member.id != null && (member.displayName || member.email)) : []}
+      onInvite={onInvite}
+      onMemberChange={onMemberChange}
+      onResendInvite={onResendInvite}
+      onLinkAccessChange={onLinkAccessChange}
       nextStepsOpen={nextStepsOpen}
       onShowNextSteps={setNextStepsOpen}
       canTickNextSteps={Boolean(shownNextSteps?.canEdit && callbacks.onNextStepDone.current)}
@@ -3704,6 +4364,7 @@ export function Threadmark({
       onBeginReply={beginReply}
       onCancelReply={cancelReply}
       onBeginEdit={beginEdit}
+      editingReplyId={composerMode === "edit" ? editingReplyId : null}
       onRequestDelete={requestDelete}
       onCancelDelete={() => setPendingDelete(null)}
       discardPending={discardPending}
@@ -3722,11 +4383,24 @@ export function Threadmark({
       onPollMultipleChange={setPollMultiple}
       pollsEnabled={Boolean(callbacks.onPollVote.current)}
       onVote={votePoll}
+      onReactionChange={callbacks.onReactionChange.current ? changeReaction : undefined}
+      dashboardUrl={safeDashboardUrl(dashboardUrl)}
+      onStartHostedReview={onPageReview ? () => setHostedReviewOpen(true) : undefined}
+      onAiReview={onAiReview}
+      onAskAi={onAskAi}
+      onAiDismiss={onAiDismiss}
+      onPostAiComment={postAiComment}
+      aiRoute={activeRoute}
+      aiBuildId={buildId}
+      aiIgnoredSelectors={ignoredSelectors}
+      onAiNotice={showNotice}
       notice={notice}
       submitting={submitting}
+      uploadProgress={uploadProgress}
       composingScreenshot={composingScreenshot}
       launcherRef={launcherRef}
-    />,
+    />
+    </>,
     portalRoot,
   );
   // A temporary player for "Try it" when the app doesn't mount <ThreadmarkTours> itself.

@@ -1,17 +1,4 @@
-const BUILT_IN_REDACTION_SELECTOR = [
-  "input",
-  "textarea",
-  "select",
-  "option",
-  "[contenteditable]:not([contenteditable='false'])",
-  "[data-threadmark-sensitive]",
-  "[data-threadmark-ignore]",
-  "iframe",
-  "video",
-  "object",
-  "embed",
-  "canvas",
-].join(",");
+import { CAPTURE_PRIVATE_SELECTOR } from "./privacy.js";
 
 const MAX_PIXEL_AREA = 4_000_000;
 const MAX_BLOB_BYTES = 2_000_000;
@@ -127,7 +114,7 @@ function matchesAny(element, selectors) {
 }
 
 function snapshotSelectors(ignoredSelectors) {
-  return [BUILT_IN_REDACTION_SELECTOR, ...(ignoredSelectors || [])];
+  return [CAPTURE_PRIVATE_SELECTOR, ...(ignoredSelectors || [])];
 }
 
 function isExcludedNode(node, selectors) {

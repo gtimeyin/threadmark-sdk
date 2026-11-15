@@ -47,12 +47,15 @@ const RECORDER_CANDIDATES = {
 
 /** `videoRecording` prop → effective options. `false` turns the capability off. */
 export function resolveVideoRecordingOptions(value) {
-  if (value === false) return { enabled: false, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS };
+  if (value === false) return { enabled: false, maxDurationMs: DEFAULT_VIDEO_MAX_DURATION_MS, countdownSeconds: 3 };
   const requested = Number(value && typeof value === "object" ? value.maxDurationMs : NaN);
   const maxDurationMs = Number.isFinite(requested)
     ? Math.round(Math.min(MAX_VIDEO_DURATION_MS, Math.max(MIN_VIDEO_DURATION_MS, requested)))
     : DEFAULT_VIDEO_MAX_DURATION_MS;
-  return { enabled: true, maxDurationMs };
+  // Three seconds to get ready once the tab is shared (board 02, 7c). 0 starts straight away.
+  const countdown = Number(value && typeof value === "object" ? value.countdownSeconds : NaN);
+  const countdownSeconds = Number.isFinite(countdown) ? Math.round(Math.min(5, Math.max(0, countdown))) : 3;
+  return { enabled: true, maxDurationMs, countdownSeconds };
 }
 
 /** What this browser can record. Tab capture needs getDisplayMedia, which phones do not offer. */
@@ -183,33 +186,62 @@ export function activeEventIndex(events, offsetMs) {
   return active;
 }
 
-/** Elapsed recording time that excludes paused spans. */
+/**
+ * Elapsed recording time that excludes paused spans. `pauses` lists each finished pause as its position in
+ * recording time and its length, so clock-time events (console, network) can be placed on the video.
+ */
 export function createRecordingClock(now = () => Date.now()) {
   let startedAt = now();
   let pausedAt = null;
   let pausedTotal = 0;
+  let pauses = [];
+  const elapsed = () => Math.max(0, (pausedAt ?? now()) - startedAt - pausedTotal);
   return {
-    elapsed() {
-      const reference = pausedAt ?? now();
-      return Math.max(0, reference - startedAt - pausedTotal);
-    },
+    elapsed,
     pause() {
       if (pausedAt == null) pausedAt = now();
     },
     resume() {
       if (pausedAt == null) return;
-      pausedTotal += now() - pausedAt;
+      const offsetMs = elapsed();
+      const durationMs = now() - pausedAt;
+      pausedTotal += durationMs;
       pausedAt = null;
+      if (durationMs > 0) pauses.push({ offsetMs, durationMs });
     },
     reset() {
       startedAt = now();
       pausedAt = null;
       pausedTotal = 0;
+      pauses = [];
     },
     get paused() {
       return pausedAt != null;
     },
+    get pauses() {
+      return pauses.map((pause) => ({ ...pause }));
+    },
   };
+}
+
+/**
+ * Where a clock-time moment falls in a video: milliseconds into the recording, or null when it happened
+ * before the recording started or after it ended. A moment during a pause maps to where the pause began.
+ */
+export function videoOffsetAt(timestamp, video) {
+  const start = Date.parse(video?.startedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(timestamp)) return null;
+  let wall = timestamp - start;
+  if (wall < 0) return null;
+  let skipped = 0;
+  for (const pause of video.pauses || []) {
+    const pausedAtWall = pause.offsetMs + skipped;
+    if (wall < pausedAtWall) break;
+    if (wall < pausedAtWall + pause.durationMs) return pause.offsetMs;
+    skipped += pause.durationMs;
+  }
+  wall -= skipped;
+  return wall > (Number(video.durationMs) || 0) + 1000 ? null : Math.min(wall, Number(video.durationMs) || wall);
 }
 
 function stopStream(stream) {
@@ -291,6 +323,31 @@ export async function openTabStream(mediaDevices = globalThis.navigator?.mediaDe
     if (error?.name !== "TypeError") throw error;
     return mediaDevices.getDisplayMedia({ video, audio: false });
   }
+}
+
+/**
+ * Any screen, window, or tab the person picks, for recording outside the page being reviewed (a customer showing
+ * a problem from Threadmark's recorder page). The browser asks them to choose; a refusal rejects.
+ */
+export async function openScreenStream(mediaDevices = globalThis.navigator?.mediaDevices) {
+  const video = { frameRate: { ideal: 30 }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+  try {
+    return await mediaDevices.getDisplayMedia({
+      video,
+      audio: false,
+      selfBrowserSurface: "exclude",
+      surfaceSwitching: "include",
+      monitorTypeSurfaces: "include",
+    });
+  } catch (error) {
+    if (error?.name !== "TypeError") throw error;
+    return mediaDevices.getDisplayMedia({ video, audio: false });
+  }
+}
+
+/** The microphone alone, for narrating a screen recording. */
+export function openMicrophoneStream(mediaDevices = globalThis.navigator?.mediaDevices) {
+  return mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
 }
 
 /**
@@ -411,4 +468,11 @@ export async function readRecordingMetadata(blob, { fallbackDurationMs = 0, docu
     element.removeAttribute("src");
     URL.revokeObjectURL(url);
   }
+}
+
+/** "Sign-up walkthrough" from the page title, or the route when the page has none (7e). */
+export function suggestVideoTitle(title, route = "/") {
+  const name = String(title || "").split(/\s[|–—·-]\s/)[0].trim().slice(0, 60);
+  const place = name || (route === "/" ? "Home" : String(route).split("/").filter(Boolean).pop()?.replace(/[-_]+/g, " ") || "Page");
+  return `${place[0].toUpperCase()}${place.slice(1)} walkthrough`;
 }

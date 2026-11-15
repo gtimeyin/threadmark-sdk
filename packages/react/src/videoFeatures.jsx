@@ -10,8 +10,13 @@ function styled(Component) {
     return <span ref={ref} style={{ display: 'contents' }}><Component {...props} /></span>;
   };
 }
+export const BlurPicker = styled(video.BlurPicker);
+export const VideoBlurLayer = styled(video.VideoBlurLayer);
+export const VideoDrawLayer = styled(video.VideoDrawLayer);
 export const VideoSetupPanel = styled(video.VideoSetupPanel);
 export const VideoRecorderBar = styled(video.VideoRecorderBar);
+export const VideoCountdown = styled(video.VideoCountdown);
+export const VideoReviewCard = styled(video.VideoReviewCard);
 export const CameraBubble = styled(video.CameraBubble);
 export const RecordingCursorLayer = styled(video.RecordingCursorLayer);
 export const VideoPreview = styled(video.VideoPreview);

@@ -6,6 +6,9 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 const sdk = fileURLToPath(new URL('../../', import.meta.url));
+// They compare with 0.1.0-beta.12 from threadmark-sdk's history, which this repository doesn't have; run them there.
+const hasBaseline = (() => { try { execFileSync('git', ['rev-parse', '--verify', '--quiet', 'v0.1.0-beta.12^{commit}'], { cwd: sdk, stdio: 'ignore' }); return true; } catch { return false; } })();
+test.skip(!hasBaseline, 'Needs the v0.1.0-beta.12 tag from threadmark-sdk.');
 let current, previous;
 async function consumerBuild(baseline) {
   const files = new Set(['Threadmark.jsx', 'ThreadmarkOverlay.jsx', 'tours/ThreadmarkTours.jsx', 'ReplayPlayer.jsx', 'snapshot.js']);
@@ -44,15 +47,15 @@ test('real chunks load on demand and preserve strict CSP styling', async ({ page
     return route.fulfill({ contentType: 'text/html', headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'" }, body: '<div id="root"></div><script type="module" src="/entry.js"></script>' });
   });
   await page.goto('http://localhost/');
-  await expect(page.getByRole('button', { name: 'Review page' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ })).toBeVisible();
   expect(requests.some(name => name.startsWith('fonts-'))).toBe(false);
   expect(requests.some(name => name.startsWith('videoFeatures-'))).toBe(false);
-  await page.getByRole('button', { name: 'Review page' }).click();
+  await page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ }).click();
   await expect.poll(() => requests.some(name => name.startsWith('fonts-'))).toBe(true);
   expect(requests.some(name => name.startsWith('videoFeatures-'))).toBe(false);
   await page.getByRole('button', { name: /Feedback tools/ }).click();
   await page.getByRole('menuitemradio', { name: /Record a video/ }).click();
-  await expect(page.getByRole('dialog', { name: /Record video/ })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: /Record a video/ })).toBeVisible();
   await expect.poll(() => requests.some(name => name.startsWith('videoFeatures-'))).toBe(true);
   expect(await page.evaluate(() => document.querySelector('[data-threadmark-root]').shadowRoot.adoptedStyleSheets.length)).toBeGreaterThan(1);
   expect(errors).toEqual([]);

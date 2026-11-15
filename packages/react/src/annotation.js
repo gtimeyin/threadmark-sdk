@@ -55,7 +55,9 @@ export function shortcutAction(event) {
   if (typing) return null;
 
   if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === "f") return "toggle";
+  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && key === ".") return "shrink";
   if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  if (key === "?") return "shortcuts";
   if (event.shiftKey) return key === "c" ? "copy" : null;
 
   return {
@@ -126,7 +128,7 @@ export function formatAnnotationsMarkdown(annotations) {
             : kind === "interaction"
               ? `${payload.interaction?.events?.length || 0} steps over ${((payload.interaction?.durationMs || 0) / 1000).toFixed(1)}s`
             : kind === "video"
-              ? `${payload.video?.mode === "tab" ? "tab recording" : "voice + cursor recording"} · ${formatClockLabel(payload.video?.durationMs)}`
+              ? `${payload.video?.mode === "tab" ? "tab recording" : payload.video?.mode === "screen" ? "screen recording" : "voice + cursor recording"} · ${formatClockLabel(payload.video?.durationMs)}`
             : target.accessibleName || target.visibleText || target.tagName || "Element";
     const locator = target.locatorCandidates?.stableId || target.locatorCandidates?.domPath;
 
@@ -174,6 +176,15 @@ export function formatAnnotationsMarkdown(annotations) {
     }
     if (locator) lines.push(`   - Target: \`${locator}\``);
     if (payload.route) lines.push(`   - Route: \`${payload.route}\``);
+    const device = payload.device;
+    if (device?.browser?.name) {
+      const software = (item) => [item?.name, item?.version].filter(Boolean).join(" ");
+      const viewport = device.viewport?.width ? ` · viewport ${device.viewport.width}×${device.viewport.height}` : "";
+      lines.push(`   - Browser: ${software(device.browser)} on ${software(device.os) || "an unknown OS"} · ${device.type}${viewport}`);
+    }
+    if (payload.metadata && typeof payload.metadata === "object") {
+      lines.push(`   - App context: \`${JSON.stringify(payload.metadata).replace(/`/g, "'").slice(0, 2000)}\``);
+    }
     lines.push("");
   });
   return lines.join("\n").trim();

@@ -2,7 +2,7 @@
 
 An isolated, in-page review overlay for collecting structured feedback on live product UI. Threadmark lets a reviewer click an element, highlight native text, drag across eligible elements for grouped feedback, drag across empty space for region evidence, or select and mark up a privacy-filtered screenshot area before returning a normalized payload to the host application.
 
-> **Beta candidate:** This package provides local capture plus controlled hydration and lifecycle callbacks. Storage, evidence upload, authentication, and service communication remain consumer-owned.
+> **Beta:** This package captures feedback in the page and hands it to your app through callbacks. It makes no network requests and saves nothing by itself: storage, screenshot upload, sign-in and notifications are yours to provide (see [Setting up your own storage](#setting-up-your-own-storage)). Hosted Threadmark projects use the script tag from the dashboard instead; this package does not connect to them yet.
 
 ## Install
 
@@ -10,19 +10,9 @@ An isolated, in-page review overlay for collecting structured feedback on live p
 npm install -D threadmark-react@beta
 ```
 
-Until the first registry release is complete, contributors can install the packed tarball or use the local workspace dependency shown below.
+Always install with `@beta`. Releases are published under the `beta` tag.
 
 React and React DOM 18.2 or 19 are peer dependencies.
-
-For local development in this repository, use a file dev dependency:
-
-```json
-{
-  "devDependencies": {
-    "threadmark-react": "file:../../packages/react"
-  }
-}
-```
 
 ## Quick start
 
@@ -55,14 +45,44 @@ export function App() {
 }
 ```
 
-On a local hostname, Threadmark renders a **Review page** launcher. Reviewers can also toggle Review mode with <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>. Once active, one compact toolbar can be dragged by its grip to a convenient position.
+On a local hostname, Threadmark shows the **Bar**, a small dark bar at the bottom of the page. It is the same bar you comment with: a grip, **Tools**, **⋯ More**, then **Comments** with the comment count (its badge turns Lime when something is new) and **Inbox** with the unread count when the host passes `notifications`, and a dot to shrink it. Choosing a tool or a More item starts commenting with that menu open. Click Comments, or press <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>, to open the review; screen readers hear what is waiting (new comments, questions, offline) in its name. The Bar can be dragged to one of six spots, shrunk to a dot (<kbd>Command/Ctrl</kbd> + <kbd>.</kbd>) or hidden on a page; those choices are saved per browser.
+
+## Setting up your own storage
+
+The quick-start callback above only logs feedback. Threadmark does **not** include a database, create tables, or save comments automatically. For reviews and comments that survive reloads and can be shared with your team, connect the SDK to storage owned by your application. The local [basic React example](../../examples/basic-react/README.md) uses IndexedDB, which stays in one browser and is useful for trying the SDK without a server.
+
+1. **Create storage in your backend.** Use your existing database or provision one with a provider you control. Store each annotation under its `projectKey` and `id`, with its `route` and the **entire** `feedback` JSON. The original comment and `replies[]` live in that feedback record; edits, replies, resolution changes, and repins update the same record. For example, a PostgreSQL starting table is:
+
+   ```sql
+   CREATE TABLE review_annotations (
+     project_key text NOT NULL,
+     id text NOT NULL,
+     route text NOT NULL,
+     feedback jsonb NOT NULL,
+     PRIMARY KEY (project_key, id)
+   );
+   CREATE INDEX review_annotations_project_route
+     ON review_annotations (project_key, route);
+   ```
+
+   If your application has workspaces or review sessions, add those IDs to the table and use them in every authorization check and query. Keep database credentials on the server, never in React props or browser code.
+
+2. **Create private screenshot storage.** `feedback.evidence` contains image metadata, while `context.evidence` contains `{ id, blob }` pairs with the actual screenshot bytes. Put the Blobs in private object or file storage keyed by project, feedback ID, and evidence ID. Record their storage keys alongside the annotation. On reads, fetch only evidence the signed-in reviewer may access and return it as `context.evidence`; storing only the JSON loses screenshot previews after reload.
+
+3. **Add authenticated API operations.** Your server needs to list authorized annotations, upsert a whole annotation, delete one annotation and its evidence, and clear only the authorized records passed by the SDK. On every request, derive the reviewer identity and project access from your session, validate the submitted record, and scope reads and writes to that project. Do not trust a browser-supplied `projectKey`, author, or annotation ID as proof of access.
+
+4. **Wire the SDK to those operations.** Load `{ feedback, context }` records into `annotations` when the page opens, and keep the array current after writes. `onFeedbackCreate` runs for new comments, edits, replies, and other thread changes; upsert the complete record. Connect `onFeedbackDelete` and `onFeedbackClear` to your delete operations. Await the server response so a failed save stays visible as a failure to the reviewer. The [persistence example below](#persist-and-restore-annotations) shows the callback shape; replace its `reviewStore` with your authenticated API client.
+
+5. **Verify with two signed-in reviewers.** Post a comment with a screenshot, reload, add a reply, and confirm both reviewers can see the same thread. Then verify that a reviewer outside the project cannot list, edit, or fetch its screenshot. This checks both persistence and the access boundary.
+
+If you'd rather not run this yourself, add the script tag from your Threadmark dashboard instead of this package. It brings hosted storage, sign-in and notifications. Using this npm package with a hosted Threadmark project is not supported yet.
 
 ## Gesture-first annotations
 
 - Click an eligible element to open its anchored comment popover without activating the host control. Keyboard reviewers can focus an element and press Enter or Space.
 - Highlight page text with the browser's native text selection to annotate the exact quote.
 - Drag a marquee across eligible elements to collect them into one ordered group of up to 20 targets. If the marquee contains no eligible element, the same drag creates a viewport-clamped region and a privacy-filtered local snapshot preview.
-- Hold <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> while clicking to add or remove individual elements from an ordered group. Once at least two elements are selected, choose **Comment** in the toolbar.
+- Hold <kbd>Command/Ctrl</kbd> + <kbd>Shift</kbd> while clicking to add or remove individual elements from an ordered group. Once at least two elements are selected, choose **Comment** on the Bar.
 - Choose **Sketch on a screenshot** from the feedback tools menu and drag around the exact area. Releasing the drag opens that crop directly in the in-page markup tools—there is no separate capture confirmation. Automatic snapshot masking remains part of the capture pipeline, while crop adjustment and reviewer-facing Privacy controls are deferred. Choosing **Use screenshot** finishes the markup and approves that exact crop for attachment; the universal comment popover does not add a second approval checkbox.
 - Choose **Record an interaction**, use the page normally, then stop the recording. Threadmark captures a bounded, structured trace of clicks, safe input-change markers, command keys, scrolls, submissions, and same-document navigation. The trace can be played inside the standard comment popover and restored after reload; input values and printable keystrokes are never recorded.
 - Choose **Record a video** for a Loom-style walkthrough. See [Video feedback](#video-feedback).
@@ -76,14 +96,24 @@ Threadmark derives `captureKind` from the gesture or Pencil action instead of as
 1. An in-page setup card previews the camera and lets the reviewer pick a camera and microphone, turn either off, and choose what to record.
 2. **This tab** records the current tab with `getDisplayMedia` (the browser asks for confirmation) plus the microphone. The camera appears as a draggable bubble on the page, so it is part of the recording. A cursor halo and click ripples make pointer movement unmistakable in the video.
 3. **Voice + cursor** records the microphone (and camera, when on) without screen pixels. It is the automatic fallback when tab capture is unavailable, such as on phones or when the reviewer declines sharing. Saved recordings offer **Replay on page**, which moves a ghost cursor carrying the reviewer's camera or initials along the recorded path over the live page and follows the recorded scroll. Nothing on the page is clicked or changed.
-4. A floating recorder shows the elapsed time against the limit (5 minutes by default) with pause, restart, discard, and stop. Restart and discard ask for confirmation, and <kbd>Escape</kbd> and other Threadmark shortcuts pass through to the host page while recording, so a walkthrough is never lost by accident.
-5. Stopping opens the usual comment popover with the recording and a timed step list. Each step (clicks, form-field changes, command keys, scrolls, submissions, navigation) seeks the recording. The step list follows the interaction-trace privacy rules: no input values and no printable keystrokes. Tab videos are not masked, so they show everything that was visible in the tab.
+4. A floating recorder shows the elapsed time against the limit (5 minutes by default) with blur, draw, pause, restart, discard, and stop. Restart and discard ask for confirmation, and <kbd>Escape</kbd> and other Threadmark shortcuts pass through to the host page while recording, so a walkthrough is never lost by accident.
+5. Stopping opens the usual comment popover with the recording and a timed step list. Each step (clicks, form-field changes, command keys, scrolls, submissions, navigation) seeks the recording. The step list follows the interaction-trace privacy rules: no input values and no printable keystrokes.
+6. Tab videos blur what the site marked private: `[data-threadmark-sensitive]`, the privacy markers of other session tools (FullStory, Hotjar, Clarity, Sentry, LogRocket, and others), and card fields. **Blur** lets the reviewer pick more parts of the page, from the setup card or during the recording (which pauses while they choose); clicking a blurred part again shows it. Everything else visible in the tab is recorded.
+7. **Draw** lets the reviewer circle or underline things: strokes appear in coral and fade after three seconds, and the page doesn't receive the pointer while drawing. They're kept as `feedback.video.drawings` (where each began, then `[ms, x, y]` points), so voice recordings replay them over the page too.
+
+Blur boxes and strokes are drawn in Threadmark's own layer above the page, so the tab capture records them and the page itself never changes.
 
 The media never leaves the browser until the reviewer posts. It is handed to `onFeedbackCreate(feedback, context)` as a Blob in `context.evidence`, next to `feedback.evidence[]` metadata with `kind: "recording"`, the container type (`video/webm`, `video/mp4`, `audio/webm`, …), byte size, duration, and dimensions. `feedback.video` carries the mode, the pointer track (`pointer.samples` as `[offsetMs, x, y]`, `pointer.scrolls` as `[offsetMs, scrollX, scrollY]`), and the step `events[]`. Uploading, transcoding, transcription, and summaries belong to your storage or review service. **Copy as Markdown** includes each video's timed steps with their stable IDs, so an agent can follow a walkthrough without watching it.
 
 Recordings use about 1.2 Mbps for tab video, so a 5-minute take stays under common 50 MB upload limits.
 
-Once your service has stored a file, hydrate it as `{ id, url }` in `context.evidence` instead of a Blob. The URL must be `https:` (or `http:` on localhost), for example a signed storage URL. Threadmark plays or shows the URL and passes the same `{ id, url }` back to `onFeedbackCreate` when someone replies or edits, so stored files are never uploaded twice.
+If you upload the files while saving, report it so the composer shows how far along it is. For a new comment, `onFeedbackCreate` gets a third argument with `onUploadProgress({ evidenceId, sentBytes, totalBytes })`. Call it as often as your upload allows, and **Post** shows "Uploading 42%" with a progress bar until every file is sent. The Supabase adapter's `store.upsert(feedback, context, saving)` does this for you.
+
+```jsx
+onFeedbackCreate={(feedback, context, saving) => store.upsert(feedback, context, saving)}
+```
+
+Once your service has stored a file, hydrate it as `{ id, url }` in `context.evidence` instead of a Blob. The URL must be `https:` (or `http:` on localhost), for example a signed storage URL. Threadmark plays or shows the URL and passes the same `{ id, url }` back to `onFeedbackCreate` when someone replies or edits, so stored files are never uploaded twice. `integrations/supabase` is a complete adapter built this way.
 
 Turn the recorder off with `videoRecording={false}`, or change the limit with `videoRecording={{ maxDurationMs: 120_000 }}` (5 seconds to 10 minutes).
 
@@ -96,25 +126,88 @@ With `sessionReplay` on, Threadmark keeps a rolling recording of the last 30 sec
 ```
 
 - Recording uses [rrweb](https://github.com/rrweb-io/rrweb) DOM snapshots, not video. It is loaded on demand and starts when Threadmark mounts. The buffer is trimmed continuously; nothing leaves the browser unless a comment is posted.
-- When a new comment opens, the buffer is frozen and attached as **Playback attached**, with counts of console errors and failed requests. The reviewer can preview it, remove it, or attach it again before posting. Saved threads show **View playback**, which opens a player with **Console**, **Network**, and **Actions** tabs.
+- While review mode is open, the buffer keeps everything since it opened (up to 11 minutes), so a video recorded in review mode carries its console and network activity too. When a new comment opens, the buffer is attached as **Playback attached**, with counts of console errors and failed requests. The reviewer can preview it, remove it, or attach it again before posting. Saved threads show **View playback**, which opens a player with **Console**, **Network**, and **Actions** tabs.
 - Every input, select, and textarea value is masked. `[data-threadmark-sensitive]` and `[data-threadmark-ignore]` regions are blocked from the recording, and sensitive text is masked. Threadmark's own UI is never recorded.
-- Console errors and warnings and failed `fetch`/XHR requests are captured with their timing. Request URLs keep the origin, path, and query parameter names, but every query value is replaced with `…`. Request and response bodies and headers are never captured.
+- Console messages of every level and `fetch`/XHR requests are captured with their timing; the summary lists errors, warnings, and failed requests. Request URLs keep the origin, path, and query parameter names, but every query value is replaced with `…`.
+- Each request keeps the browser's timing phases (queued, DNS, connect, TLS, waiting, download), its transfer size, and protocol. GraphQL requests keep their operation (`mutation ApplyPromo`), and a response that carries `errors` with HTTP 200 counts as a failed request (`graphql_error`) with its `extensions.code` values.
+- The page's own resources (scripts, stylesheets, images, fonts, media, frames) are listed from the browser's resource timing, with their status where the browser exposes it.
+- WebSocket connections keep when they opened and closed (with the close code) and each message's direction and size. Message text is kept only with `network.bodies`, filtered like a body.
+- Request and response bodies and headers are not kept unless you opt in (see below).
 - Console text is scrubbed before it is kept: URLs in messages and stacks keep only their origin, path, and query names; bearer credentials, JWTs, key-looking strings (`sk-…`, `sb_…`, `xox…`, `ghp_…`, `tmk_…` and similar), `password=`/`token:`-style values, email addresses, and long hex or base64 runs are replaced with `[redacted]` or `[email]`.
 
 Replay URL metadata and URL-bearing snapshot/mutation attributes remove query values, fragments, and URL credentials before buffering. Console messages and error stacks redact recognized credential fields and authorization tokens. This is best-effort scrubbing, not detection of arbitrary unlabelled personal data; mark sensitive page regions and inspect the playback before posting. If the event budget is exceeded, replay starts a fresh snapshot and drops older history. Recorder startup failure restores the instrumented browser APIs.
 
 The recording is handed to `onFeedbackCreate` as a gzipped JSON Blob in `context.evidence`, with `feedback.evidence[]` metadata of `kind: "replay"`. `feedback.replay` carries a summary (duration, viewport, console errors, failed requests, and action counts) that agents and issue trackers can use without opening the recording. **Copy as Markdown** includes that summary.
 
+To debug requests in detail, keep their bodies:
+
+```jsx
+<Threadmark
+  projectKey="pk_checkout"
+  sessionReplay={{
+    network: {
+      bodies: true,
+      // Optional, runs last: return the entry (edited) or null to drop this request's bodies.
+      sanitize: (entry) => (entry.url.includes("/api/billing") ? null : entry),
+    },
+  }}
+/>
+```
+
+Bodies are filtered in the reviewer's browser before they are kept: only JSON, form, and text bodies; fields named
+like credentials (`password`, `token`, `apiKey`, `cvc`, `cardNumber`, …) are replaced at any depth; emails, card
+numbers, JWTs, and key-shaped strings are scrubbed; nothing is kept from sign-in, token, password, or session
+endpoints; only `content-type`, `accept`, and a few response headers (`cache-control`, `etag`, `x-request-id`,
+`traceparent`, `server-timing`, …) are kept, never cookies or authorization; and each body is at most 16,000
+characters, within a rolling memory budget. If `sanitize` throws or returns anything else, the bodies are dropped.
+
 Change the history length with `sessionReplay={{ bufferMs: 60_000 }}` (5 seconds to 2 minutes). `provider` replaces the built-in recorder; the Threadmark browser extension uses it to record in the page's own JavaScript context.
 
 Under a strict Content Security Policy, the overlay loads its styles through a constructed stylesheet and its fonts as binary data, so it needs no `'unsafe-inline'`. rrweb 2.1.6 itself sets a style attribute on a detached element whenever it records a style change, which a `style-src` without `'unsafe-inline'` or `'unsafe-hashes'` reports as a violation. The browser extension patches that call at build time. If you enable `sessionReplay` on a page with such a policy, expect those reports, or apply the same one-line change (`old.setAttribute("style", m.oldValue)` → `old.style.cssText = m.oldValue`) in your bundler.
 
-## Questions and polls
+## Browser details and app context
 
-Pass `onPollVote` and the new-comment composer offers **Comment**, **Question**, and **Poll**. A question is
-a thread answered with replies; a poll has two to eight answers (optionally several per person) that
-reviewers vote on in the thread. The feedback carries `ask: { kind: "question" }` or
-`ask: { kind: "poll", options: [{ id, label }], multiple }`, and option ids stay stable.
+Every new comment records the reviewer's browser and device as `feedback.device`: browser and version, operating
+system and version (with CPU architecture), desktop/mobile/tablet, touch, screen and viewport size, pixel ratio,
+language, time zone, light or dark mode, reduced motion, forced colors, and the browser's own network estimate. In
+Chromium browsers the exact versions come from client hints, because the user-agent string freezes them (macOS
+always reads 10.15.7, and Windows 11 reads as 10). Nothing is fetched or measured; `deviceDetails={false}` leaves it
+out, along with the shorter `feedback.captureEnvironment`.
+
+Add your app's own context with `metadata`. A function is called when the comment is posted, so the values are
+current:
+
+```jsx
+<Threadmark
+  projectKey="pk_checkout"
+  metadata={() => ({
+    appVersion: import.meta.env.VITE_APP_VERSION,
+    workspace: store.workspace.slug,
+    flags: featureFlags.enabled(),
+    cart: store.cart.items.slice(0, 5).map(({ sku, qty }) => ({ sku, qty })),
+  })}
+/>
+```
+
+- The result must be a plain object that JSON can hold, at most 10 KB once cleaned. Strings are kept to 2,000
+  characters and nesting to six levels.
+- Keys that name credentials (`password`, `apiKey`, `accessToken`, `csrf_token`, `Authorization`, `cookie`, …) and
+  credential-shaped strings (JWTs, `Bearer …`, well-known API key formats) are replaced with `[redacted]`. Leave out
+  anything else you wouldn't want reviewers and agents to read.
+- The function may return a promise and gets 2 seconds. If it throws, times out, or returns something unusable, the
+  comment is posted without it and `onError` reports `metadata_failed`.
+- It's stored as `feedback.metadata`, never changes after posting, and **Copy annotations** includes it.
+
+Threadmark for Chrome and the script tag read the same context from the page: set
+`window.threadmarkMetadata = () => ({ … })` (or a plain object) on your site.
+
+## Polls
+
+Pass `onPollVote` and the new-comment composer gets **Add a poll**. A poll is attached to a comment: two to
+eight answers (or several per person with **Pick any**) that reviewers vote on in the thread. Results show
+after you vote, and you can change or take back your vote. The feedback carries
+`ask: { kind: "poll", options: [{ id, label }], multiple }`, and option ids stay stable. Comments saved before
+beta.15 may carry `ask: { kind: "question" }`; they still show a "Question" label, but new comments can't create one.
 
 Votes are host-owned, like everything else Threadmark stores:
 
@@ -129,7 +222,29 @@ Votes are host-owned, like everything else Threadmark stores:
 />
 ```
 
-Supply current results as `context.poll` on each record. Resolving a poll closes it.
+Supply current results as `context.poll` on each record. Resolving a poll closes it. The Supabase adapter
+implements this as `store.vote` (see `integrations/supabase`).
+
+## Surveys
+
+Ask the people on a page one short question: a poll, a 1–3/5/7/10 scale (numbers, stars, faces or a slider), or an open question, with an optional follow-up. Reviewers write them in the overlay (**Tools → Ask a question**: Question, Where, Who and when), and visitors answer them through a separate, production-safe player. Surveys and answers are yours to store, like comments.
+
+```jsx
+// Review overlay: let your team publish and end questions, and read the answers.
+<Threadmark
+  surveys={surveys}
+  surveyResults={results}                 // { [surveyId]: { total, counts, average, texts, summary? } }
+  onSurveyPublish={(survey) => save(survey)}
+  onSurveyEnd={(id) => end(id)}
+/>
+
+// Your live site: shows at most one question per page, once per person by default.
+import { ThreadmarkSurveys, summarizeSurveyAnswers } from "threadmark-react/surveys";
+
+<ThreadmarkSurveys surveys={liveSurveys} answerCounts={counts} onAnswer={(answer) => storeAnswer(answer)} />
+```
+
+The player waits a few seconds before showing the card, never covers the page with more than one question, and keeps an answer that fails to send on the device, retrying it quietly. `summarizeSurveyAnswers(survey, answers)` turns stored answers into the `surveyResults` shape. A survey stops when you end it, at `endsAt`, or after `stopAfterAnswers` answers.
 
 ## Next steps
 
@@ -152,30 +267,37 @@ it (each opens its thread, here or on its own page through the thread link), and
 
 Tags are `bug`, `polish`, `copy`, `idea`, and `question`. Everything is shown as plain text. Without
 `onNextStepDone`, or with `canEdit: false`, the list is read-only. Like the rest of Threadmark, the SDK never
-loads or stores steps itself: supply the updated `nextSteps` after a tick.
+loads or stores steps itself: supply the updated `nextSteps` after a tick. `integrations/supabase` has a
+ready-made hook (`useThreadmarkNextSteps`) for Threadmark's hosted service.
 
-## Toolbar and markers
+## The Bar and pins
 
-The draggable toolbar has two menus beside the **Feedback** panel and Close.
+In comment mode the Bar shows its grip, then **Tools**, **⋯ More**, **Comments**, **Inbox** (when the host passes `notifications`) and Close. It adds a short hint only while something is happening: several elements selected, a drag in progress, or a comment being repinned.
 
-The **feedback tools** menu (the cursor icon) lists the ways to leave feedback. **Comment** is the default; the others start a one-off capture and return to Comment when it is posted, or when the reviewer chooses **Back to Comment** or presses <kbd>Escape</kbd>:
+**Tools** lists the ways to leave feedback. **Comment** is the default; the others start a one-off capture and return to Comment when it is posted or when the reviewer presses <kbd>Escape</kbd>:
 
 - <kbd>C</kbd> **Comment**: click, select text, or drag an area;
-- <kbd>S</kbd> **Sketch on a screenshot**: releasing a valid rectangle opens the in-page markup tools immediately;
-- <kbd>R</kbd> **Record an interaction**: a maximum 15-second structured trace while the host page stays usable; and
-- <kbd>V</kbd> **Record a video**: the in-page video recorder (camera, microphone, and capture mode).
+- <kbd>S</kbd> **Sketch on a screenshot**: a Capture bar with Box (<kbd>B</kbd>), Pen (<kbd>P</kbd>), Whole view (<kbd>W</kbd>) and three colours;
+- <kbd>R</kbd> **Record an interaction**: up to 15 seconds of clicks and steps while the page stays usable;
+- <kbd>V</kbd> **Record a video**: your tab, voice and camera (when `videoRecording` is on);
+- **Ask a question**: a poll, scale or open question for visitors (with `onSurveyPublish`);
+- **Ask AI to review this page** (with `onAiReview`); and
+- **Build a tour**.
 
-The **More actions** menu (**⋯**) holds everything else. A dot on it shows when the page is paused or pins are hidden, and a coral dot when comments need repair:
+**⋯ More** holds everything else. A dot on it shows when the page is paused or pins are hidden, and an Orange dot when comments need repair:
 
 - <kbd>P</kbd> pauses or resumes page animations and media;
-- <kbd>H</kbd> hides or shows saved comment pins;
-- <kbd>Shift</kbd> + <kbd>C</kbd> copies the current annotations as structured Markdown;
+- <kbd>H</kbd> hides or shows comment pins;
+- **Shrink to a dot** and **Hide on this page**;
+- **Share** and **Your settings**, when the host supplies them, and **Open the dashboard** with `dashboardUrl`;
+- <kbd>?</kbd> **Keyboard shortcuts**;
+- <kbd>Shift</kbd> + <kbd>C</kbd> copies the comments as Markdown;
 - **Repair lost comments** opens the first comment whose target needs repair; and
-- <kbd>X</kbd> arms a destructive clear and opens the menu to show it; repeat it within 3.5 seconds to remove the current draft and saved annotations.
+- <kbd>X</kbd> arms a clear; press it again within 3.5 seconds to remove the draft and every saved comment.
 
-<kbd>Escape</kbd> closes an open menu, cancels the current popover, or exits Review mode. Both menus work with the arrow keys, <kbd>Home</kbd>, and <kbd>End</kbd>.
+<kbd>Escape</kbd> closes the innermost menu or sheet, cancels the current comment, or leaves comment mode. Menus work with the arrow keys, <kbd>Home</kbd> and <kbd>End</kbd>.
 
-Letter shortcuts are disabled while typing in an input or editable field; <kbd>Escape</kbd> remains available. Added annotations stay as numbered markers. Click a marker to open its discussion, edit the original comment, reply to any previous message, or start the visible delete flow. Threadmark keeps records in memory by default; consumers can persist callback results and pass them back through `annotations` after reload. Reopened records resolve stable IDs first, validate saved DOM paths, and use conservative fingerprints only when there is one unambiguous match.
+Letter shortcuts are off while typing in an input or editable field; <kbd>Escape</kbd> still works. Saved comments stay on the page as numbered pins. Click a marker to open its discussion, edit the original comment, reply to any previous message, or start the visible delete flow. Threadmark keeps records in memory by default; consumers can persist callback results and pass them back through `annotations` after reload. Reopened records resolve stable IDs first, validate saved DOM paths, and use conservative fingerprints only when there is one unambiguous match.
 
 ## Stable target IDs
 
@@ -278,7 +400,7 @@ export default function Projects() {
 
 ### Build tours in Tour mode
 
-Pass your tour files to the review overlay as well, and the toolbar gains **Build a tour**. With Vite, add the dev-server plugin so **Save to code** writes files straight into your project:
+Pass your tour files to the review overlay as well, and the Bar's Tools menu gains **Build a tour**. With Vite, add the dev-server plugin so **Save to code** writes files straight into your project:
 
 ```js
 // vite.config.js
@@ -387,16 +509,17 @@ const [annotations, setAnnotations] = useState([]);
     await reviewStore.remove(feedback.id);
     setAnnotations(await reviewStore.list());
   }}
-  onFeedbackClear={async () => {
-    await reviewStore.clear();
-    setAnnotations([]);
+  onFeedbackClear={async (feedback) => {
+    const ids = feedback.map((item) => item.id);
+    await reviewStore.clear(ids);
+    setAnnotations((current) => current.filter((item) => !ids.includes(item.feedback.id)));
   }}
 />
 ```
 
 Each `annotations` entry has the shape `{ feedback, context }`. Hydration normalizes payloads and replies, verifies evidence metadata against each Blob, restores exact text ranges when the quote still has one match, and repairs every member of a multi-target annotation independently. Region and screenshot records retain their saved page geometry. Records are scoped to the active `projectKey` and canonical route. Create, edit, reply, reply-delete, annotation-delete, and clear mutations may return promises; a rejected mutation leaves the existing discussion visible.
 
-Comments stay visible when a page is updated or opened on another deployment. If the exact target no longer matches but one likely element does (same tag and role with similar text, or the same DOM position), its marker appears there in a dashed **element changed** style; nothing is attached until a reviewer chooses **Confirm location**, which is saved as a repin with the previous location in `pinHistory`, or **Choose another**. If nothing matches, a faded ghost marker and outline show the element's last known page position (`target.pageBounds`, recorded for new comments) with its original build, and the thread offers **Repin comment**. Region and Pencil comments from another build use the same ghost treatment. If a target matches more than one live element, Threadmark refuses to guess. The toolbar exposes the affected annotation, the popover shows **Target needs repair**, and the original comment and approved evidence remain available. Partial groups report how many members restored without silently shrinking `targets[]`. **Recheck** reruns resolution after the host page changes.
+Comments stay visible when a page is updated or opened on another deployment. If the exact target no longer matches but one likely element does (same tag and role with similar text, or the same DOM position), its marker appears there in a dashed **element changed** style; nothing is attached until a reviewer chooses **Confirm location**, which is saved as a repin with the previous location in `pinHistory`, or **Choose another**. If nothing matches, a faded ghost marker and outline show the element's last known page position (`target.pageBounds`, recorded for new comments) with its original build, and the thread offers **Repin comment**. Region and Pencil comments from another build use the same ghost treatment. If a target matches more than one live element, Threadmark refuses to guess. **⋯ More → Repair lost comments** opens the affected comment, the popover shows **Target needs repair**, and the original comment and approved evidence remain available. Partial groups report how many members restored without silently shrinking `targets[]`. **Recheck** reruns resolution after the host page changes.
 
 Editing a saved annotation also offers **Copy link**. Deep links use the `threadmark` URL query parameter, for example `?threadmark=feedback-id`; after the consumer hydrates that route's records, Threadmark enters Review mode and opens the exact annotation automatically. Treat annotation IDs as non-secret identifiers and keep authorization in the hosted review service.
 
@@ -519,6 +642,12 @@ Mark an entire sensitive region when its visible copy or descendants should not 
 </section>
 ```
 
+Privacy markers you already use for other session tools work too: FullStory (`.fs-mask`, `.fs-exclude`, `.fs-block`),
+Hotjar (`[data-hj-suppress]`, `[data-hj-masked]`), LogRocket (`[data-private]`), Microsoft Clarity
+(`[data-clarity-mask]`), Sentry (`.sentry-mask`, `.sentry-block`, and their `data-` forms), rrweb (`.rr-block`,
+`.rr-mask`), OpenReplay, Highlight, ContentSquare, Matomo, Heap, Amplitude, and Jam (`[data-jam-blur]`). Screenshots
+mask those regions, session replays block or mask them, and tab videos blur them.
+
 Exclude product UI that should never receive feedback with `data-threadmark-ignore`:
 
 ```jsx
@@ -548,9 +677,9 @@ Snapshots wait briefly for the host page's fonts and embed available web-font fa
 
 ## Page version history
 
-Threadmark can show other deployments for the route currently under review. The React package does not call Vercel directly: fetch deployment records in a trusted server route, combine them with per-build feedback counts, and pass the safe result through `pageVersions`. Use immutable deployment URLs rather than mutable branch aliases.
+Threadmark can use other deployments of the route under review for **Carry forward** and **Compare with current page** in a thread's ⋯ menu. There is no separate Versions tab. The React package does not call Vercel directly: fetch deployment records in a trusted server route, combine them with per-build feedback counts, and pass the safe result through `pageVersions`. Use immutable deployment URLs rather than mutable branch aliases.
 
-This repository includes a tested, framework-neutral [Vercel host adapter](https://github.com/gtimeyin/threadmark-sdk/tree/main/integrations/vercel) that performs the provider request, membership boundary, response reduction, count merge, and unavailable-history merge outside the SDK.
+This repository includes a tested, framework-neutral [Vercel host adapter](https://github.com/gtimeyin/threadmark/tree/main/integrations/vercel) that performs the provider request, membership boundary, response reduction, count merge, and unavailable-history merge outside the SDK.
 
 ```jsx
 <Threadmark
@@ -657,8 +786,10 @@ export function ReviewLayer({
 | `annotations` | `readonly { feedback, context? }[]` | Authoritative records loaded by the consumer or review service. |
 | `pageVersions` | `readonly ThreadmarkPageVersion[]` | Host-supplied immutable deployment records, availability state, and feedback counts for the active route. |
 | `videoRecording` | `boolean \| { maxDurationMs? }` | Video feedback is on by default; `false` hides the recorder. `maxDurationMs` defaults to 5 minutes and is clamped to 5 seconds–10 minutes. |
-| `sessionReplay` | `boolean \| { bufferMs?, provider? }` | Off by default. Attaches a masked rrweb recording of the moments before a new comment, with console errors and failed requests. `bufferMs` defaults to 30 seconds (5 seconds–2 minutes). |
+| `sessionReplay` | `boolean \| { bufferMs?, provider?, network? }` | Off by default. Attaches a masked rrweb recording of the moments before a new comment, with console messages, requests (timing, GraphQL operations and errors), and actions. `bufferMs` defaults to 30 seconds (5 seconds–2 minutes). `network: { bodies: true, sanitize? }` also keeps filtered request and response bodies. |
 | `nextSteps` | `{ steps, status?, canEdit? } \| steps[] \| null` | The host's next steps checklist; supplying it adds a **Next steps** tab to the Feedback panel. |
+| `deviceDetails` | `boolean` | On by default. Records the reviewer's browser, OS, device, screen, language, time zone, display settings, and network estimate on new comments as `feedback.device`. |
+| `metadata` | `object \| () => object \| Promise<object>` | App context (feature flags, app version, workspace) for new comments, read when each is posted and stored as `feedback.metadata`. At most 10 KB; credential-named keys are redacted. |
 | `onReady` | `() => void` | Called once when the overlay is mounted. |
 | `onStatusChange` | `(status) => void` | Reports `disabled`, `ready`, `selecting`, `selected`, `submitting`, `submitted`, or `error`. |
 | `onOpenChange` | `(open) => void` | Reports entry to and exit from Review mode. |
@@ -669,7 +800,7 @@ export function ReviewLayer({
 | `onFeedbackClear` | `(feedback[]) => void \| Promise<void>` | Removes every persisted annotation; rejection keeps them visible. |
 | `onPageVersionSelect` | `(version, { route, url }) => void \| Promise<void>` | Lets the host navigate to the same route on another ready deployment; without it, Threadmark navigates in-page. |
 | `onFeedbackCarryForward` | `(feedback, version, { route, url }) => void \| Promise<void>` | Explicit host-owned copy into another deployment; providing it enables the carry-forward control. |
-| `onPollVote` | `(feedback, optionIds) => PollResults \| Promise<PollResults>` | Stores a poll vote and returns the results; providing it adds Question and Poll to the composer. |
+| `onPollVote` | `(feedback, optionIds) => PollResults \| Promise<PollResults>` | Stores a poll vote and returns the results; providing it adds **Add a poll** to the composer. |
 | `onNextStepDone` | `(step, done) => void \| Promise<void>` | Stores a next step as done or not done; the tick shows at once and a rejection puts it back. Without it, the checklist is read-only. |
 | `onNextStepsCopy` | `(steps) => void \| Promise<void>` | Adds **Copy for agent** to the Next steps tab; called from the click, so the host can put its own prompt on the clipboard. |
 | `onError` | `(error) => void` | Reports configuration, duplicate-instance, snapshot-capture, submission, or deletion errors. |
@@ -699,19 +830,19 @@ If path segments contain customer or record identifiers, pass a templated canoni
 - Keyboard reviewers can Tab to a target and press Enter or Space while Review mode is active.
 - Added annotations remain as editable markers. Reopening restores the author-attributed discussion, approved screenshot evidence, and interaction traces supplied in the hydrated record; edits and replies preserve the capture data and reuse the feedback ID so consumers can upsert the result.
 - Review controls provide visible keyboard focus and respect reduced-motion preferences.
-- Launcher, toolbar, marker, popover, reply, composer, deletion, markup, and toast state changes use short motion tokens to preserve spatial context. Under `prefers-reduced-motion: reduce`, Threadmark removes transitions and animations while keeping every state immediately available.
+- Bar, pin, popover, reply, composer, deletion, markup, and toast state changes use short motion tokens to preserve spatial context. Under `prefers-reduced-motion: reduce`, Threadmark removes transitions and animations while keeping every state immediately available.
 
 ## Current limitations
 
 - Feedback is not persisted by the package; consumers must store callback records and hydrate them through `annotations`.
 - Region and selected screenshot-area evidence are approximate DOM-rendered rasters, not operating-system screenshots. Cross-origin media, frames, WebGL/canvas content, unusual transforms, and unsupported CSS may be omitted or differ from the visible compositor output.
-- Region capture currently supports one region per draft; resizing and manual masks are not implemented yet.
+- Region capture supports one region per draft, and there are no manual masks yet.
 - Region dragging is pointer-first in this alpha; keyboard region initialization and edge adjustment remain a beta accessibility gate.
 - Grouped feedback stores one ordered target group but does not yet create a snapshot per member.
 - Interaction capture replays its structured event trace; it does not record video frames or automatically re-execute actions against the host application. Use video feedback for a recording.
-- Video feedback records tab pixels without masking. Tab capture needs a desktop browser with `getDisplayMedia`; Chromium-based browsers offer the current tab directly, while Safari and Firefox show their full sharing picker. Recordings are WebM or MP4 depending on the browser, and transcription is not included.
+- Video feedback records tab pixels as they appear, including typing, unless the reviewer uses **Blur**. Tab capture needs a desktop browser with `getDisplayMedia`; Chromium-based browsers offer the current tab directly, while Safari and Firefox show their full sharing picker. Recordings are WebM or MP4 depending on the browser, and transcription is not included.
 - Session replay rebuilds the page from DOM snapshots. Canvas, WebGL, video, cross-origin frames, and closed shadow roots appear blank, and replays of pages with cross-origin stylesheets depend on those stylesheets still being reachable.
-- Collaboration, authentication, and agent dispatch are not included yet.
+- Storage, sign-in, notifications and AI models are not included; the host supplies them through callbacks.
 - Same-origin iframes, cross-origin frames, and closed shadow roots are not selection targets.
 - Production activation is intentionally unavailable.
 
@@ -737,45 +868,54 @@ npm run dev
 
 The fixture consumes `threadmark-react` through `file:../../packages/react` and logs every submitted feedback payload in the page.
 
-## License
-
-Threadmark is available under the [MIT License](./LICENSE). Third-party software notices are listed in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
-
 ### Comment screenshots and repinning
 
 Element, text, group, and completed interaction comments automatically prepare a masked local screenshot. It is always attached through `onFeedbackCreate(feedback, context)` when the reviewer chooses **Post**; the composer does not show a preview or an approval checkbox. Region drags keep their preview and are attached automatically as well. Automatic masking covers inputs, editable fields, sensitive and ignored regions, iframes, video, embedded objects, and canvases, but does not detect arbitrary unmarked PII, so mark sensitive areas with `data-threadmark-sensitive`. Capture failures preserve the comment with unavailable evidence metadata. No evidence is sent before posting. Replies reuse the original screenshot.
 
-Persist both the serializable feedback and the Blob sidecar in `context.evidence`. Hydrate both through `annotations` to keep the preview available after reload or target removal. The basic React example uses IndexedDB; the optional Threadmark Cloud adapter also supports private shared screenshot storage. The host must explicitly connect an authenticated Cloud client; the SDK itself makes no Cloud requests. Production hosting and identity configuration remain the consumer’s responsibility.
+Persist both the serializable feedback and the Blob sidecar in `context.evidence`. Hydrate both through `annotations` to keep the preview available after reload or target removal. The basic React example uses IndexedDB. The SDK itself makes no network requests; hosting and sign-in remain the consumer’s responsibility.
 
 **Repin comment** is available on existing discussions and is the primary repair action for missing targets. Select one live element, then confirm. Cancellation or a rejected persistence callback leaves the original location unchanged. The same feedback ID, original `target`/`targets`, build, author, replies, and evidence remain intact. `feedback.pin` identifies the current location; `pinHistory` contains previous locations and reviewer/build/time context. Subsequent edits and reloads retain these fields. Consumers should treat this as an update to the existing record, validate membership and reviewer identity server-side, and persist the full normalized record. Repinning does not take or replace a screenshot.
 
+If `onFeedbackCreate` returns an authoritative record when confirming or repinning a location, it must include the requested `pin.target`, route, and build. A stale or altered return leaves the repair action open and reports that the location was not saved, so the reviewer can retry or choose another target.
+
 Coordinate-only region and Pencil pins require repair when a different known build is active; their original evidence remains available. Ordinary element pins continue using conservative stable-ID/path/fingerprint restoration. Missing or ambiguous matches never silently attach to another element.
 
-### Feedback panel
+### The side panel
 
-Choose the **Feedback panel** icon in the annotation toolbar. Its **Comments** tab lets reviewers browse supplied records for the current project, including other pages and builds. Cards show status, author, original screenshot, assignee, replies, and target-repair state. Search includes comment and reply text. The filter icon opens a floating dropdown without shifting the list: toggle resolved comments, your threads, the current page, or targets needing repair; **More filters** includes status, reviewer, page, and original build selectors. Search and applied filters remain active when the dropdown is closed. Selecting a different page navigates to its same-origin path with a thread link. Only current-page pins render on the page. The panel does not fetch other records itself: supply authorized project records through `annotations`, or use Cloud’s project-wide comments view. Escape closes the filter dropdown first, then the panel, before exiting review mode. When the host supplies `pageVersions`, a **Versions** tab lists those deployments in the same panel.
+**Comments** and **Inbox** on the Bar open a 380px dark panel on that view; clicking the one already showing closes it. The panel's tabs are icons, with their names as tooltips and for screen readers. **Activity** lists supplied records for the current project, including other pages and builds; **Inbox** appears when the host passes `notifications`, and **Next steps** when it passes `nextSteps`. With the panel open, a thread opens in the panel's place with "← All comments". Cards show status, author, original screenshot, assignee, replies, and target-repair state. Search includes comment and reply text. The filter icon opens a floating dropdown without shifting the list: toggle resolved comments, your threads, the current page, or targets needing repair; **More filters** includes status, reviewer, page, and original build selectors. Search and applied filters remain active when the dropdown is closed. Selecting a different page navigates to its same-origin path with a thread link. Only current-page pins render on the page. The panel does not fetch other records itself: supply authorized project records through `annotations`. Escape closes the filter dropdown first, then the panel, before leaving comment mode.
 
 
 ### Review workflow and deployment verification
 
-Existing discussions open as a **Comment** popover with **⋯** thread options (Repin, Copy link, Carry forward, deployment comparison, activity history), a **✓** Resolve/Reopen toggle, and close. Browse discussions through the toolbar's **Feedback** panel. Each message has its own **⋯** menu with Reply, Edit (original comment), and Delete; replies are posted from the rounded field at the bottom (Enter sends, Shift+Enter adds a line). Reviewers are mentioned inline: typing `@` suggests members from `reviewers` and inserts `@Display Name`, and saving records newly mentioned members in `workflow.mentions`. Clicking a saved screenshot opens the full image. Existing `workflow.assignee` values are preserved but there is no assignment control. Workflow changes use `onFeedbackCreate`; persist the complete record. SDK-only callbacks do not send notifications; Cloud generates in-app notifications from its authenticated assignment/mention endpoints.
+Existing discussions open as a **Comment** popover with **⋯** thread options (Repin, Copy link, Carry forward, deployment comparison, activity history), a **✓** Resolve/Reopen toggle, and close. Browse discussions in the side panel. Each message has its own **⋯** menu with Reply, Edit (original comment), and Delete; replies are posted from the rounded field at the bottom (Enter sends, Shift+Enter adds a line). Reviewers are mentioned inline: typing `@` suggests members from `reviewers` and inserts `@Display Name`, and saving records newly mentioned members in `workflow.mentions`. Clicking a saved screenshot opens the full image. Existing `workflow.assignee` values are preserved but there is no assignment control. Workflow changes use `onFeedbackCreate`; persist the complete record. The SDK does not send notifications; your backend decides who to notify from `workflow.mentions`, and can show them in the Inbox through `notifications`.
 
 **Compare with current page** captures a temporary masked view beside the original screenshot. Mark a fix verified or still needing work for the current build; verification does not automatically resolve the comment. Repair a missing target before capturing a comparison. Repinning preserves the original capture and records the new location separately.
 
-`onFeedbackCreate` may return a canonical `{ feedback, context }` record from your persistence adapter, allowing server-owned IDs and authoritative identities to replace local draft IDs. The optional Cloud adapter is in `threadmark-cloud/cloud/src/threadmark-adapter.mjs`; construction does not connect or upload. See the Cloud collaboration guide for setup and deployment limits.
-
-
-### Choose your hosting
-
-Use **Your backend** to persist SDK callbacks in your own infrastructure, or explicitly connect **Threadmark Cloud** for managed collaboration and MCP access. Core capture and repinning work with either choice; the SDK never connects automatically. The separate Cloud repository now contains an optional `threadmark-cloud-client` package, a `/setup` guide, and a review-scoped approval popup. That client package is available as a local tarball and has not been published to npm. Cloud’s initial MCP endpoint accepts short-lived bearer headers; automatic MCP OAuth discovery is not available.
+`onFeedbackCreate` may return a canonical `{ feedback, context }` record from your persistence adapter, allowing server-owned IDs and authoritative identities to replace local draft IDs.
 
 ## Icon credits
 
-Solar Linear icons by [480 Design](https://www.figma.com/community/file/1166831539721848736), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), via `@solar-icons/react` (MIT). Icon sizing and colors follow Threadmark’s interface. The open-pin logo is a separate Threadmark brand asset.
+Icons are Threadmark’s own brand set (24px grid, 1.5px stroke), generated into `src/icons.jsx` by `scripts/build-icons.mjs`. The open-pin logo is a separate Threadmark brand asset.
 
 ### Capture environment
 
-New comments include optional `feedback.captureEnvironment`: coarse browser/version, operating system, device category, viewport/pixel ratio, online status and available browser connection estimates. No raw user agent, IP address, device model, connection name or high-entropy browser hints are collected. Connection estimates are approximate and may be absent. Metadata is browser-reported context, never an authorization signal. Edits and hydration retain the original context; older comments remain without it. Consumer-managed stores should preserve this field with the original capture data.
+New comments include optional `feedback.captureEnvironment`: coarse browser/version, operating system, device category, viewport/pixel ratio, online status and available browser connection estimates. It holds no raw user agent, IP address, device model, connection name or high-entropy browser hints; the more detailed `feedback.device` (see [Browser details and app context](#browser-details-and-app-context)) does use client hints for exact versions and the phone model. `deviceDetails={false}` leaves out both. Connection estimates are approximate and may be absent. Metadata is browser-reported context, never an authorization signal. Edits and hydration retain the original context; older comments remain without it. Consumer-managed stores should preserve this field with the original capture data.
+
+### Optional live presence
+
+`presence` accepts a consumer-owned transport with `connect(scope, onMembers, onError)`, returning `publish(cursor)` and `close()`. It is mounted only when Threadmark activation succeeds. Without it, the SDK makes no presence requests and needs no account. Named cursors and the page reviewer count live in the isolated overlay, and cursor movement does not rerender the host page. Stable `data-threadmark-id` anchors align positions across viewports. Untagged content uses document coordinates, so responsive layouts may differ. Hidden tabs disconnect; idle pointers fade; Hide cursors affects local display. Presence never transmits typed values or drafts.
+
+## Built-in page checks (older API)
+
+> For AI review, use `onAiReview` and `onAskAi` (see the [changelog](https://github.com/gtimeyin/threadmark-sdk/blob/main/CHANGELOG.md)). `onPageReviewRequested` stays for compatibility and may be removed before 1.0.
+
+Mount `onPageReviewRequested` to enable **Ask Threadmark → Review this page**. The SDK captures up to five issues and supplies masked screenshots for targets inside the current viewport. It excludes hidden/protected content, form values, the overlay and configured ignored selectors. Screenshot failures do not block text comments. Traversal stops at 3,000 elements with a partial-review notice. It never clicks controls, navigates or changes the page.
+
+This starter uses built-in checks for unnamed controls, missing image alt attributes, heading jumps, text below 12px and possible horizontal overflow. It needs no model API key, and does not perform model-based design critique, comprehensive accessibility audits or interaction tests. Ordinary comment mentions do not dispatch tasks; the displayed `@threadmark review this page` command uses the explicit review button. Consumers can replace the callback with a separately authorized provider.
+
+Stop cancels local work; comments your callback already saved remain.
+
+`collectPageReview({ route, buildId, ignoredSelectors, signal })` is also exported for consumer-owned command surfaces. It returns `{ version, route, buildId, findings, truncated }` without posting feedback or making network requests.
 
 ### Saved-comment restoration performance
 
@@ -803,7 +943,7 @@ privacy exclusions and confirmation requirements are unchanged.
 ### Idle and scroll performance
 
 While review is closed, saved-comment restoration does not observe the page, read target geometry,
-match elements or compute suggestions. The launcher still shows the supplied comment count. Opening
+match elements or compute suggestions. The Bar still shows what is waiting. Opening
 review refreshes targets in slices, including changes made while closed; opening a thread through a
 comment link still checks that thread immediately. Explicitly enabled session replay is independent
 of this pause.
@@ -865,3 +1005,13 @@ Run `npm run benchmark:list-hydration` for 60-, 200- and 1,000-comment fixtures.
 counts, normalization counts on fresh host arrays and individual edits, scroll retention, keyboard
 navigation, full-list search/filtering, and thumbnail cleanup. Reported poll duration includes host
 JSON copying and browser frame settling; it is not an isolated normalization CPU measurement.
+
+### Message reactions
+
+Supply `onReactionChange(feedback, { messageId, emoji, active })` to enable reactions on comments and replies. Return the saved message's full array of `{ emoji, reviewer: { id, displayName } }` records. Hydrate those records as `feedback.reactions` or `feedback.replies[].reactions`; the SDK renders counts and the current reviewer's pressed state. Supported reactions are 👍, ❤️, 🎉, 👀, and ✅. Each person can add each reaction once, and click again to remove it. The callback should set the requested `active` state rather than blindly toggle, so retries are safe.
+
+Authenticate the actor in your backend; never accept the browser's reviewer identity as authority. Validate that the message belongs to the authorized discussion. Without the callback, saved reactions remain visible but cannot be changed. The SDK makes no network requests itself.
+
+## License
+
+Threadmark is available under the [MIT License](./LICENSE). Third-party software notices are listed in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

@@ -146,41 +146,18 @@ test("picking a custom text control does not invoke its host pointer handlers", 
   await expect.poll(() => page.evaluate(() => window.__threadmarkHostEvents)).toEqual([]);
 });
 
-test("shows host-supplied page versions and carries a comment only when requested", async ({ page }) => {
+// The Versions tab is gone from the panel; host-supplied versions still power Carry forward.
+test("carries a comment to another page version only when requested", async ({ page }) => {
   await mountPickingFixture(page);
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot
-      .querySelector('button[aria-label="Feedback panel"]').click();
+      .querySelector('button[aria-label="Comments"]').click();
   });
-  await page.getByRole("tab", { name: /^Versions/ }).click();
-
-  await expect.poll(() => page.evaluate(() => {
-    const shadow = document.querySelector("[data-threadmark-root]")?.shadowRoot;
-    return {
-      labels: [...shadow.querySelectorAll(".tm-version-row__title strong")].map((node) => node.textContent),
-      current: shadow.querySelector(".tm-version-state--current")?.textContent,
-      feedback: [...shadow.querySelectorAll(".tm-version-feedback")].map((node) => node.textContent.trim()),
-      openActions: shadow.querySelectorAll(".tm-version-open").length,
-    };
-  })).toEqual({
-    labels: ["Current preview", "Previous preview", "Expired preview"],
-    current: "Current",
-    feedback: ["0", "3", "2"],
-    openActions: 1,
-  });
-
+  await expect(page.getByRole("tab", { name: /^Versions/ })).toHaveCount(0);
   await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-version-open").click();
+    document.querySelector("[data-threadmark-root]").shadowRoot
+      .querySelector('button[aria-label="Comments"]').click();
   });
-  await expect.poll(() => page.evaluate(() => window.__threadmarkVersionSelections.map((item) => ({
-    id: item.version.id,
-    route: item.context.route,
-    url: item.context.url,
-  })))).toEqual([{
-    id: "fixture-previous",
-    route: "/picking-events",
-    url: "http://localhost/picking-events",
-  }]);
 
   await page.locator("#custom-target").click({ position: { x: 80, y: 25 } });
   await waitForComposer(page);
@@ -213,43 +190,38 @@ test("shows host-supplied page versions and carries a comment only when requeste
   }]);
 });
 
-test("Feedback uses readable glass in both tabs and a solid high-contrast fallback", async ({ page }) => {
+test("Feedback is a solid dark panel in every tab, with a high-contrast fallback", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 700 });
   await mountPickingFixture(page);
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Feedback", exact: true });
-  const glassStyle = () => panel.evaluate((element) => {
+  const panelStyle = () => panel.evaluate((element) => {
     const style = getComputedStyle(element);
     const bounds = element.getBoundingClientRect();
     return {
       background: style.backgroundColor,
       blur: style.backdropFilter,
       opacity: style.opacity,
-      headingColor: getComputedStyle(element.querySelector("h2")).color,
-      metadataColor: getComputedStyle(element.querySelector("header p")).color,
+      selectedTabColor: getComputedStyle(element.querySelector('[role="tab"][aria-selected="true"]')).color,
       withinViewport: bounds.left >= 0 && bounds.right <= innerWidth && bounds.bottom <= innerHeight,
     };
   });
   await expect(panel).toBeVisible();
-  const expectedGlass = {
-    background: "rgba(251, 250, 246, 0.74)",
-    blur: "blur(10px) saturate(1.2)",
+  const expected = {
+    background: "rgb(14, 23, 20)",
+    blur: "none",
     opacity: "1",
-    headingColor: "rgb(26, 30, 27)",
-    metadataColor: "rgb(26, 30, 27)",
+    selectedTabColor: "rgb(251, 250, 246)",
     withinViewport: true,
   };
-  expect(await glassStyle()).toEqual(expectedGlass);
-  await panel.getByRole("tab", { name: /^Versions/ }).click();
-  await expect(panel.getByRole("tabpanel", { name: "Page versions" })).toBeVisible();
-  expect(await glassStyle()).toEqual(expectedGlass);
+  await expect.poll(panelStyle).toEqual(expected);
   await page.setViewportSize({ width: 320, height: 640 });
-  expect(await glassStyle()).toEqual(expectedGlass);
-  await panel.getByRole("tab", { name: /^Comments/ }).click();
+  await expect.poll(panelStyle).toEqual(expected);
+  await panel.getByRole("tab", { name: /^Activity/ }).click();
   await panel.getByRole("button", { name: "Show search comments" }).click();
   await expect(panel.getByRole("textbox", { name: "Search comments" })).toBeVisible();
   await page.emulateMedia({ forcedColors: "active" });
-  const accessibleStyle = await glassStyle();
+  const accessibleStyle = await panelStyle();
   expect(accessibleStyle.blur).toBe("none");
   expect(accessibleStyle.background).toBe("rgb(255, 255, 255)");
   expect(accessibleStyle.withinViewport).toBe(true);
@@ -319,41 +291,22 @@ test("keeps reviewer identity out of the composer and attributes submitted feedb
   await page.locator("#custom-target").click({ position: { x: 80, y: 25 } });
   await waitForComposer(page);
 
+  // 2c: the composer names what you picked in one mono line, and never shows who you are.
   await expect.poll(() => page.evaluate(() => {
     const shadowRoot = document.querySelector("[data-threadmark-root]")?.shadowRoot;
-    const disclosure = shadowRoot?.querySelector(".tm-context-disclosure");
+    const target = shadowRoot?.querySelector(".tm-composer__target");
     return {
-      contextIsCollapsed: disclosure?.open === false,
-      contextLabel: disclosure?.querySelector("summary")?.textContent,
+      contextLabel: target?.textContent,
+      contextFont: target ? getComputedStyle(target).fontFamily : null,
       hasVisibleReviewer: Boolean(shadowRoot?.querySelector(".tm-reviewer")),
       fieldLabelIsVisuallyHidden: shadowRoot?.querySelector('label[for="tm-comment"]')?.classList.contains("tm-sr-only"),
     };
   })).toEqual({
-    contextIsCollapsed: true,
-    contextLabel: "Selected context",
+    contextLabel: "Commenting on: Element · Select this custom text control without activating the host application.",
+    contextFont: expect.stringContaining("Mono"),
     hasVisibleReviewer: false,
     fieldLabelIsVisuallyHidden: true,
   });
-
-  await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]")
-      ?.shadowRoot.querySelector(".tm-context-disclosure > summary")
-      ?.click();
-  });
-  await expect.poll(() => page.evaluate(() => (
-    document.querySelector("[data-threadmark-root]")
-      ?.shadowRoot.querySelector(".tm-context-disclosure")?.open
-  ))).toBe(true);
-  await expect.poll(() => page.evaluate(() => {
-    const content = document.querySelector("[data-threadmark-root]")
-      ?.shadowRoot.querySelector(".tm-context-disclosure__content");
-    return content ? getComputedStyle(content).paddingBottom : null;
-  })).toBe("11px");
-  await expect.poll(() => page.evaluate(() => {
-    const tag = document.querySelector("[data-threadmark-root]")
-      ?.shadowRoot.querySelector(".tm-context-tag");
-    return tag ? getComputedStyle(tag).fontFamily : null;
-  })).toContain("ui-monospace");
 
   await setComposerComment(page, "Attribute this note to the signed-in reviewer.");
   await submitComposer(page);
@@ -404,7 +357,8 @@ test("replies to a previous comment and confirms reply or annotation deletion wi
     const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
     return Math.round(shadow.querySelector(".tm-popover").getBoundingClientRect().bottom
       - shadow.querySelector(".tm-reply").getBoundingClientRect().bottom);
-  })).toBe(15);
+  // The reply row closes the inner panel: panel border + the card's 4px inset + its border.
+  })).toBe(6);
 
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot
@@ -442,7 +396,7 @@ test("replies to a previous comment and confirms reply or annotation deletion wi
     };
   })).toEqual({
     heading: "Delete this reply?",
-    impact: "Only this reply will be removed. The annotation and 1 other comment stay.",
+    impact: "Only this reply goes. The rest of the thread stays.",
     finalAction: "Delete reply",
     standardToolbarVisible: false,
   });
@@ -451,21 +405,14 @@ test("replies to a previous comment and confirms reply or annotation deletion wi
   });
   await expect.poll(() => page.evaluate(() => window.__threadmarkFeedback.at(-1)?.replies?.length)).toBe(0);
 
+  // 23d: with no replies left, the comment goes straight away and the toast offers Undo.
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot
       .querySelector('button[aria-label="Delete annotation"]').click();
   });
-  await expect.poll(() => page.evaluate(() => {
-    const bar = document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-delete-confirm");
-    return {
-      impact: bar?.querySelector("span")?.textContent,
-      finalAction: bar?.querySelector(".tm-delete-final")?.textContent.trim(),
-    };
-  })).toEqual({ impact: "1 comment and its screenshot will be removed.", finalAction: "Delete annotation" });
-  await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-delete-final").click();
-  });
   await expect.poll(() => page.evaluate(() => window.__threadmarkDeletes.length)).toBe(1);
+  await expect(page.locator(".tm-toast")).toContainText("Comment deleted");
+  expect(await page.evaluate(() => Boolean(document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-delete-confirm")))).toBe(false);
   await expect.poll(() => page.evaluate(() => Boolean(
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-popover"),
   ))).toBe(false);
@@ -522,9 +469,12 @@ test("modifier selection creates one ordered multi-target annotation without hos
 
 test("dragging empty space captures one region and keeps its approved evidence beside the comment", async ({ page }) => {
   await mountPickingFixture(page);
+  // Keep the drag clear of the bar, which sits at the bottom centre of the page.
+  await page.locator("#region-space").evaluate((node) => node.scrollIntoView({ block: "center" }));
   const bounds = await page.locator("#region-space").boundingBox();
   const startY = bounds.y + 5;
-  const endY = Math.min(bounds.y + bounds.height - 5, 392);
+  // Stay above the bar, which sits at the bottom centre of the page.
+  const endY = Math.min(bounds.y + bounds.height - 5, 320);
   await page.mouse.move(bounds.x + 32, startY);
   await page.mouse.down();
   await page.mouse.move(bounds.x + 208, endY, { steps: 8 });
@@ -623,9 +573,9 @@ test("the toolbar groups feedback tools and other actions into keyboard-friendly
   await expect(page.locator("#animated-target")).toHaveCSS("animation-play-state", "paused");
   await expect(toolbar.locator(".tm-toolbar-more__flag")).toBeVisible();
 
-  // Tool shortcuts start a capture; Back to Comment (or Escape) returns to the toolbar.
+  // Tool shortcuts start a capture; the Capture bar's Esc (or Escape) returns to the toolbar.
   await page.keyboard.press("s");
-  const backToComment = page.getByRole("button", { name: /Back to Comment/ });
+  const backToComment = page.getByRole("button", { name: "Cancel capture" });
   await expect(backToComment).toBeVisible();
   await expect(toolbar).toHaveCount(0);
   await backToComment.click();
@@ -829,6 +779,37 @@ test("a changed element shows a suggested location that the reviewer confirms as
   expect(moved.target.visibleText).toBe("Secondary host action");
 });
 
+test("confirm location does not claim success when the host returns the old pin", async ({ page }) => {
+  await mountPickingFixture(page);
+  await page.locator("#secondary-target").click();
+  await waitForComposer(page);
+  await setComposerComment(page, "Keep this discussion attached.");
+  await submitComposer(page);
+  await page.evaluate(() => {
+    const button = document.querySelector("#secondary-target");
+    button.removeAttribute("data-threadmark-id");
+    button.textContent = "Secondary host action now";
+    const original = window.__threadmarkFeedback[0];
+    window.__threadmarkAuthoritative = () => ({ feedback: original });
+  });
+  await page.locator(".tm-marker--suggested").click();
+  await page.getByRole("button", { name: "Confirm location", exact: true }).click();
+  await expect(page.locator(".tm-toast")).toContainText("wasn’t saved");
+  await expect(page.locator(".tm-marker--suggested")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Confirm location", exact: true })).toBeEnabled();
+
+  await page.evaluate(() => {
+    window.__threadmarkAuthoritative = (feedback) => {
+      window.__threadmarkFeedback.push(feedback);
+      return { feedback };
+    };
+  });
+  await page.getByRole("button", { name: "Confirm location", exact: true }).click();
+  await expect(page.locator(".tm-marker--suggested")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__threadmarkFeedback.at(-1).pin.target.visibleText))
+    .toBe("Secondary host action now");
+});
+
 test("a removed element's comment stays visible as a ghost at its last known position", async ({ page }) => {
   await mountPickingFixture(page);
   await page.locator("#secondary-target").click();
@@ -942,7 +923,7 @@ test("outside dismiss and Escape confirm before discarding a typed draft", async
   await expect.poll(popoverOpen).toBe(false);
 });
 
-for (const action of ["Cancel", "Cancel comment"]) {
+for (const action of ["Cancel comment"]) {
   test(`${action} confirms before discarding a new comment`, async ({ page }) => {
     await mountPickingFixture(page);
     await page.locator("#custom-target").click({ position: { x: 80, y: 25 } });
@@ -1041,7 +1022,7 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
   await mountPickingFixture(page);
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const name of ["Feedback panel", "Close annotations (Esc)"]) {
+    for (const name of ["Comments", "Close annotations (Esc)"]) {
       const bounds = await page.getByRole("button", { name, exact: true }).boundingBox();
       expect(bounds.x).toBeGreaterThanOrEqual(0);
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
@@ -1050,16 +1031,16 @@ test("narrow toolbars keep Feedback, Close and group Comment visible outside scr
   await page.setViewportSize({ width: 320, height: 844 });
   await page.locator("#custom-target").click({ position: { x: 24, y: 25 }, modifiers: ["Meta", "Shift"] });
   await page.locator("#secondary-target").click({ modifiers: ["Meta", "Shift"] });
-  for (const name of ["Comment 2", "Feedback panel", "Close annotations (Esc)"]) {
+  for (const name of ["Comment 2", "Comments", "Close annotations (Esc)"]) {
     const bounds = await page.getByRole("button", { name, exact: true }).boundingBox();
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
   }
-  await page.getByRole("button", { name: "Feedback panel", exact: true }).click();
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
   await expect(page.getByRole("complementary", { name: "Feedback", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close feedback panel", exact: true }).click();
   await page.getByRole("button", { name: "Close annotations (Esc)", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Review page", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Leave feedback", exact: true })).toBeVisible();
 });
 
 test("pencil markup stays aligned to the selected crop and submits one approved Blob sidecar", async ({ page }) => {
@@ -1111,8 +1092,7 @@ test("pencil markup stays aligned to the selected crop and submits one approved 
   })).toBeGreaterThan(2);
 
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.includes("Use screenshot")).click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-capture-bar__done").click();
   });
   await waitForComposer(page);
   await setComposerComment(page, "Use the marked-up crop as visual evidence.");
@@ -1159,8 +1139,7 @@ test("pencil tools change pen style, undo, clear, and cancel without creating fe
 
   await page.evaluate(() => {
     const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
-    shadow.querySelector('button[aria-label="Coral pen"]').click();
-    shadow.querySelector('button[aria-label="Bold pen thickness"]').click();
+    shadow.querySelector('button[aria-label="Orange pen"]').click();
   });
   const drawingSurface = await page.evaluate(() => {
     const rect = document.querySelector("[data-threadmark-root]").shadowRoot
@@ -1178,28 +1157,24 @@ test("pencil tools change pen style, undo, clear, and cancel without creating fe
   await expect.poll(() => page.evaluate(() => {
     const line = document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-markup-canvas polyline");
     return line ? { stroke: line.getAttribute("stroke"), width: Number(line.getAttribute("stroke-width")) } : null;
-  })).toEqual({ stroke: "#e5483c", width: expect.any(Number) });
+  })).toEqual({ stroke: "#f15722", width: expect.any(Number) });
 
-  await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.trim() === "Undo").click();
-  });
+  // ⌘Z takes back the last stroke (board 02, 6c keeps the bar to Box, Pen, Whole view and three colours).
+  await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => page.evaluate(() => (
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelectorAll(".tm-markup-canvas polyline").length
   ))).toBe(0);
 
   await drawStroke(8);
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.trim() === "Clear").click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector('button[aria-label="Lime pen"]').click();
   });
-  await expect.poll(() => page.evaluate(() => (
-    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelectorAll(".tm-markup-canvas polyline").length
-  ))).toBe(0);
+  await drawStroke(16);
+  await expect.poll(() => page.evaluate(() => [...document.querySelector("[data-threadmark-root]").shadowRoot
+    .querySelectorAll(".tm-markup-canvas polyline")].map((line) => line.getAttribute("stroke")))).toEqual(["#f15722", "#e0f354"]);
 
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.trim() === "Cancel").click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector('button[aria-label="Cancel capture"]').click();
   });
   await expect.poll(() => page.evaluate(() => ({
     markupOpen: Boolean(document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-markup-overlay")),
@@ -1225,12 +1200,12 @@ test("reopening a screenshot annotation restores its approved preview", async ({
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-markup-canvas img"),
   ))).toBe(true);
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.includes("Use screenshot")).click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-capture-bar__done").click();
   });
 
+  // 6d: in the composer the sketch is a small chip; the reopened thread shows the full screenshot.
   await expect.poll(() => page.evaluate(() => Boolean(
-    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-popover .tm-snapshot img"),
+    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-popover .tm-composer__sketch img"),
   ))).toBe(true);
   await setComposerComment(page, "Keep this screenshot visible when reopened.");
   await submitComposer(page);
@@ -1261,8 +1236,7 @@ test("persisted screenshot annotations survive reload, edit, and delete", async 
     document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-markup-canvas img"),
   ))).toBe(true);
   await page.evaluate(() => {
-    const buttons = [...document.querySelector("[data-threadmark-root]").shadowRoot.querySelectorAll("button")];
-    buttons.find((button) => button.textContent.includes("Use screenshot")).click();
+    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-capture-bar__done").click();
   });
   await waitForComposer(page);
   await setComposerComment(page, "Persist this screenshot across reloads.");
@@ -1304,12 +1278,6 @@ test("persisted screenshot annotations survive reload, edit, and delete", async 
   await page.evaluate(() => {
     const shadow = document.querySelector("[data-threadmark-root]").shadowRoot;
     shadow.querySelector('button[aria-label="Delete annotation"]').click();
-  });
-  await expect.poll(() => page.evaluate(() => Boolean(
-    document.querySelector("[data-threadmark-root]")?.shadowRoot.querySelector(".tm-delete-final"),
-  ))).toBe(true);
-  await page.evaluate(() => {
-    document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-delete-final").click();
   });
   await expect.poll(() => page.evaluate(() => window.__threadmarkDeletes.length)).toBe(1);
   await page.reload({ waitUntil: "load" });
@@ -1508,7 +1476,9 @@ test("capture failure leaves a postable comment and a persistent unavailable sta
   expect(await page.evaluate(() => window.__threadmarkFeedback[0].evidence[0].quality)).toBe('unavailable');
   expect(await page.evaluate(() => window.__threadmarkFeedbackContexts[0].evidence)).toEqual([]);
   await page.locator('.tm-marker').click();
-  await expect(page.locator('.tm-snapshot__state--error')).toBeVisible();
+  // A saved comment says so quietly, without the composer's "you can still post".
+  await expect(page.locator('.tm-snapshot__note')).toHaveText('No screenshot. It couldn’t be taken when this was posted.');
+  await expect(page.locator('.tm-snapshot__state--error')).toHaveCount(0);
 });
 
 test("a region pin needs repair on a new build and repinning retains its original evidence", async ({ page }) => {
@@ -1541,7 +1511,7 @@ test("a region pin needs repair on a new build and repinning retains its origina
 test("all comments lists saved threads, filters, and opens missing targets without losing the list", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
   await mountPickingFixture(page);
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await expect(page.getByRole('complementary', { name: 'Feedback' })).toBeVisible();
   await expect(page.getByText('No comments yet', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close feedback panel', exact: true }).click();
@@ -1552,7 +1522,7 @@ test("all comments lists saved threads, filters, and opens missing targets witho
   await setComposerComment(page, 'Button needs contrast');
   await submitComposer(page);
   await page.evaluate(() => window.__threadmarkShowSecondary(false));
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   const panel = page.getByRole('complementary', { name: 'Feedback' });
   await expect(panel.locator('.tm-comment-card')).toHaveCount(2);
   await expect(panel.getByAltText('Saved screenshot')).toHaveCount(2);
@@ -1584,7 +1554,7 @@ test("all comments lists saved threads, filters, and opens missing targets witho
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
   await expect(page.getByRole('toolbar', { name: 'Threadmark annotation tools' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Feedback panel', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Comments', exact: true })).toBeFocused();
 });
 
 test("comment filters float over the list, retain search, and dismiss accessibly", async ({ page }) => {
@@ -1602,7 +1572,7 @@ test("comment filters float over the list, retain search, and dismiss accessibly
       { feedback: { ...feedback, id: 'resolved', comment: 'Resolved issue', workflow: { status: 'resolved' } } },
     ]);
   });
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   const panel = page.getByRole('complementary', { name: 'Feedback', exact: true });
   await expect(panel.locator('.tm-comment-card')).toHaveCount(4);
   await panel.getByRole('button', { name: 'Show search comments', exact: true }).click();
@@ -1630,7 +1600,7 @@ test("comment filters float over the list, retain search, and dismiss accessibly
   await expect(panel.getByRole('textbox', { name: 'Search comments' })).toHaveValue('issue');
   await panel.getByRole('button', { name: /^Show comment filters/ }).click();
   await expect(popup.getByRole('button', { name: 'Only your threads', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await panel.getByRole('heading', { name: 'Feedback', exact: true }).click();
+  await panel.getByRole('tab', { name: /^Activity/ }).click();
   await expect(popup).toHaveCount(0);
   await expect(panel.locator('.tm-comment-card')).toHaveCount(1);
   await panel.getByRole('button', { name: /^Show comment filters/ }).click();
@@ -1644,11 +1614,9 @@ test("comment filters float over the list, retain search, and dismiss accessibly
   expect(popupBounds.x).toBeGreaterThanOrEqual(panelBounds.x);
   expect(popupBounds.x + popupBounds.width).toBeLessThanOrEqual(panelBounds.x + panelBounds.width);
   expect(popupBounds.y + popupBounds.height).toBeLessThanOrEqual(panelBounds.y + panelBounds.height);
-  await panel.getByRole('tab', { name: /^Versions/ }).focus();
+  await panel.getByRole('tab', { name: /^Activity/ }).focus();
   await expect(popup).toHaveCount(0);
-  await panel.getByRole('tab', { name: /^Versions/ }).click();
-  await expect(popup).toHaveCount(0);
-  await panel.getByRole('tab', { name: /^Comments/ }).click();
+  await panel.getByRole('tab', { name: /^Activity/ }).click();
   await expect(popup).toHaveCount(0);
 });
 
@@ -1716,7 +1684,7 @@ test("workflow controls preserve evidence through inline mention, verification, 
   await page.getByRole('button', { name: 'Resolve comment', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Reopen comment', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel comment', exact: true }).click();
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await page.getByRole('button', { name: 'Show comment filters', exact: true }).click();
   await page.getByRole('button', { name: 'More filters', exact: true }).click();
   await page.getByRole('combobox', { name: 'Filter comments by status' }).selectOption('open');
@@ -1743,7 +1711,7 @@ test("project comments include authorized supplied pages, filter deployments and
       { feedback: { ...feedback, id: 'other-page', route: '/other', buildId: 'next-build', comment: 'Another page' } },
       { feedback: { ...feedback, id: 'foreign', projectKey: 'foreign-project', route: '/private', comment: 'Do not show' } }]);
   });
-  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Comments', exact: true }).click();
   await expect(page.locator('.tm-comment-card')).toHaveCount(2);
   await page.getByRole('button', { name: 'Show comment filters', exact: true }).click();
   await page.getByRole('button', { name: 'More filters', exact: true }).click();

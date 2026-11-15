@@ -72,9 +72,10 @@ function cached(map, element, read) {
   return map.get(element);
 }
 
+// queryDomPath gives querySelectorAll's result, found faster for recorded DOM paths.
 function candidates(documentRef, selector, context) {
-  if (!context) return [...documentRef.querySelectorAll(selector)];
-  if (!context.queries.has(selector)) context.queries.set(selector, [...documentRef.querySelectorAll(selector)]);
+  if (!context) return queryDomPath(documentRef, selector);
+  if (!context.queries.has(selector)) context.queries.set(selector, queryDomPath(documentRef, selector));
   return context.queries.get(selector);
 }
 
@@ -155,6 +156,57 @@ export function buildDomPath(element) {
     if (current?.tagName?.toLowerCase() === "body") break;
   }
   return segments.join(" > ");
+}
+
+const DOM_PATH_STEP = /^([a-z][a-z0-9-]*):nth-of-type\(([1-9]\d{0,5})\)$/;
+
+function documentOrder(left, right) {
+  return left.compareDocumentPosition(right) & 4 ? -1 : 1;
+}
+
+/**
+ * The elements a recorded DOM path (`buildDomPath`) points to: the same result as `querySelectorAll`, found by
+ * walking down from the path's first step. The browser's selector engine checks every element of the last
+ * step's tag and counts siblings for each `:nth-of-type`, which takes seconds on long lists and tables. Paths
+ * Threadmark didn't write go to the selector engine.
+ */
+export function queryDomPath(documentRef, domPath) {
+  const parts = String(domPath || "").split(" > ");
+  const startsAtStableId = parts[0].startsWith(`[${THREADMARK_TARGET_ATTRIBUTE}=`);
+  const steps = parts.slice(startsAtStableId ? 1 : 0).map((part) => DOM_PATH_STEP.exec(part));
+  if (steps.some((step) => !step || ["html", "body"].includes(step[1]))) return [...documentRef.querySelectorAll(domPath)];
+
+  let current;
+  if (startsAtStableId) {
+    current = [...documentRef.querySelectorAll(parts[0])];
+  } else {
+    const [, tag, position] = steps.shift();
+    const counted = new Set();
+    const positions = new Map();
+    current = [...documentRef.getElementsByTagName(tag)].filter((element) => {
+      const parent = element.parentElement;
+      if (!parent) return false;
+      if (!counted.has(parent)) {
+        counted.add(parent);
+        const counts = new Map();
+        for (const child of parent.children) {
+          counts.set(child.tagName, (counts.get(child.tagName) || 0) + 1);
+          positions.set(child, counts.get(child.tagName));
+        }
+      }
+      return positions.get(element) === Number(position);
+    });
+  }
+  for (const [, tag, position] of steps) {
+    current = current.flatMap((element) => {
+      let seen = 0;
+      for (let child = element.firstElementChild; child; child = child.nextElementSibling) {
+        if (child.localName === tag && (seen += 1) === Number(position)) return [child];
+      }
+      return [];
+    });
+  }
+  return current.length > 1 ? current.sort(documentOrder) : current;
 }
 
 export function isSensitiveElement(element) {
@@ -349,7 +401,7 @@ export function suggestChangedTarget(target, documentRef, ignoredSelectors = [],
   let pathElement = null;
   try {
     const path = target.locatorCandidates?.domPath;
-    const matches = path ? documentRef.querySelectorAll(path) : [];
+    const matches = path ? candidates(documentRef, path, context) : [];
     if (matches.length === 1) pathElement = matches[0];
   } catch {
     // An obsolete path simply offers no positional hint.

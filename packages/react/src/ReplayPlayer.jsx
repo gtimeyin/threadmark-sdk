@@ -1,7 +1,9 @@
 import { useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
-import { PauseIcon as Pause } from "@solar-icons/react/linear/pause";
-import { PlayIcon as Play } from "@solar-icons/react/linear/play";
-import { CloseIcon as X } from "@solar-icons/react/linear/close";
+import { PauseIcon as Pause } from "./icons.jsx";
+import { PlayIcon as Play } from "./icons.jsx";
+import { CloseIcon as X } from "./icons.jsx";
+import { buildReplayTimeline, graphqlLabel, isFailedRequest } from "./replayTimeline.js";
+import { createCanvasPainter } from "./canvasReplay.js";
 
 import replayerStyles from 'rrweb/dist/style.css?inline';
 import { videoStyles } from './videoStyles.js';
@@ -12,102 +14,6 @@ import { installFeatureStyles } from './featureStyles.js';
 
 const iconProps = { "aria-hidden": true, className: "tm-tool-icon", focusable: "false" };
 const SPEEDS = [1, 2, 4];
-
-// rrweb serialized node types.
-const ELEMENT_NODE = 2;
-const TEXT_NODE = 3;
-const MUTATION_SOURCE = 0;
-
-/** id → serialized element, read from snapshots and added nodes, so names never depend on playback state. */
-function indexSerializedNodes(events, EVENT_TYPE) {
-  const nodes = new Map();
-  const walk = (node, parentId) => {
-    if (!node || typeof node !== "object") return;
-    nodes.set(node.id, { ...node, parentId });
-    for (const child of node.childNodes || []) walk(child, node.id);
-  };
-  for (const event of events) {
-    if (event.type === EVENT_TYPE.FullSnapshot) walk(event.data?.node, null);
-    else if (event.type === EVENT_TYPE.IncrementalSnapshot && event.data?.source === MUTATION_SOURCE) {
-      for (const add of event.data.adds || []) walk(add.node, add.parentId);
-    }
-  }
-  return nodes;
-}
-
-function serializedText(node, limit = 80) {
-  if (!node) return "";
-  if (node.type === TEXT_NODE) return node.textContent || "";
-  let text = "";
-  for (const child of node.childNodes || []) {
-    text += ` ${serializedText(child, limit)}`;
-    if (text.length > limit) break;
-  }
-  return text;
-}
-
-function describeNode(node) {
-  if (!node || node.type !== ELEMENT_NODE) return "the page";
-  const tag = String(node.tagName || "element").toLowerCase();
-  const attributes = node.attributes || {};
-  const label = attributes["aria-label"] || attributes.title || attributes.alt || serializedText(node);
-  const name = String(label).replace(/\s+/g, " ").trim().slice(0, 60);
-  return name ? `${tag} “${name}”` : `<${tag}>`;
-}
-
-function pathOf(href) {
-  try {
-    const url = new URL(href);
-    return url.pathname + (url.search ? "?…" : "");
-  } catch {
-    return "a new page";
-  }
-}
-
-/** Timeline rows for the Console, Network, and Actions tabs, in recording time. */
-function buildTimeline(events, getNode, kit) {
-  const { EVENT_TYPE, INCREMENTAL_SOURCE, MOUSE_INTERACTION, REPLAY_CONSOLE_EVENT, REPLAY_NETWORK_EVENT } = kit;
-  const start = events.find((event) => event.type === EVENT_TYPE.Meta)?.timestamp || events[0]?.timestamp || 0;
-  const rows = { console: [], network: [], actions: [] };
-  let lastScroll = -Infinity;
-  let firstMeta = true;
-  for (const event of events) {
-    const offsetMs = Math.max(0, event.timestamp - start);
-    if (event.type === EVENT_TYPE.Meta) {
-      if (!firstMeta) rows.actions.push({ offsetMs, label: `Navigated to ${pathOf(event.data?.href)}` });
-      firstMeta = false;
-    } else if (event.type === EVENT_TYPE.Custom && event.data?.tag === REPLAY_CONSOLE_EVENT) {
-      const entry = event.data.payload || {};
-      rows.console.push({ offsetMs, level: entry.level || "log", message: entry.message || "", detail: entry.stack || entry.source || "" });
-    } else if (event.type === EVENT_TYPE.Custom && event.data?.tag === REPLAY_NETWORK_EVENT) {
-      const entry = event.data.payload || {};
-      rows.network.push({
-        offsetMs: Math.max(0, offsetMs - (entry.durationMs || 0)),
-        method: entry.method || "GET",
-        url: entry.url || "",
-        status: entry.status || 0,
-        durationMs: entry.durationMs || 0,
-        outcome: entry.outcome || "incomplete",
-      });
-    } else if (event.type === EVENT_TYPE.IncrementalSnapshot) {
-      const data = event.data || {};
-      if (data.source === INCREMENTAL_SOURCE.MouseInteraction
-        && [MOUSE_INTERACTION.Click, MOUSE_INTERACTION.DblClick, MOUSE_INTERACTION.TouchEnd].includes(data.type)) {
-        rows.actions.push({ offsetMs, label: `Clicked ${describeNode(getNode(data.id))}` });
-      } else if (data.source === INCREMENTAL_SOURCE.Input) {
-        const previous = rows.actions[rows.actions.length - 1];
-        if (previous?.input === data.id && offsetMs - previous.offsetMs < 3000) previous.offsetMs = offsetMs;
-        else rows.actions.push({ offsetMs, input: data.id, label: `Typed in ${describeNode(getNode(data.id))} (value hidden)` });
-      } else if (data.source === INCREMENTAL_SOURCE.Scroll && offsetMs - lastScroll > 1500) {
-        lastScroll = offsetMs;
-        rows.actions.push({ offsetMs, label: "Scrolled" });
-      } else if (data.source === INCREMENTAL_SOURCE.ViewportResize) {
-        rows.actions.push({ offsetMs, label: `Resized the window to ${data.width}×${data.height}` });
-      }
-    }
-  }
-  return rows;
-}
 
 /**
  * Plays an rrweb replay in a large dialog above the page, with its console, network, and action
@@ -172,6 +78,7 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
   useEffect(() => {
     if (!events.length || !stageRef.current) return undefined;
     let replayer = null;
+    let painter = null;
     let frame = 0;
     let observer = null;
     let cancelled = false;
@@ -183,9 +90,13 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
         showWarning: false,
         triggerFocus: false,
         mouseTail: { duration: 700, lineCap: "round", lineWidth: 3, strokeStyle: "rgba(229, 72, 60, 0.55)" },
+        // Never true: it lets scripts run in the replay's frame. Recorded canvas frames are painted below.
         UNSAFE_replayCanvas: false,
       });
       replayerRef.current = replayer;
+      painter = createCanvasPainter(events);
+      if (painter.size) replayer.on("fullsnapshot-rebuilded", () => painter.reset());
+      else painter = null;
       replayer.on("finish", () => setPlaying(false));
       const fit = () => {
         const wrapper = stageRef.current?.querySelector(".replayer-wrapper");
@@ -204,10 +115,10 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
       fit();
       observer = typeof ResizeObserver === "function" ? new ResizeObserver(fit) : null;
       observer?.observe(stageRef.current);
-      const index = indexSerializedNodes(events, EVENT_TYPE);
-      setTimeline(buildTimeline(events, (id) => index.get(id), kit));
+      setTimeline(buildReplayTimeline(events, kit));
       setStatus("ready");
       const tick = () => {
+        painter?.paint(replayer);
         setCurrent((value) => {
           const next = Math.round(replayer.getCurrentTime());
           return Math.abs(next - value) >= 100 ? next : value;
@@ -222,6 +133,7 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
       observer?.disconnect();
       replayer?.pause();
       replayer?.destroy?.();
+      painter?.destroy();
       replayerRef.current = null;
     };
   }, [events]);
@@ -324,8 +236,8 @@ function ReplayPlayer({ replay, media, kit, onClose, embedded = false }) {
                       </span>
                     )}
                     {tab === "network" && (
-                      <span className={`tm-replay-row tm-replay-row--${row.outcome === "successful" ? "ok" : "error"}`}>
-                        <strong>{row.method} {row.status || "—"}</strong> {row.url}
+                      <span className={`tm-replay-row tm-replay-row--${isFailedRequest(row) ? "error" : "ok"}`}>
+                        <strong>{row.method} {row.status || "—"}</strong> {graphqlLabel(row) ? `${graphqlLabel(row)} · ${row.url}` : row.url}
                         <small>{row.durationMs} ms · {row.outcome.replace("_", " ")}</small>
                       </span>
                     )}

@@ -1,18 +1,66 @@
+import { createLocalReactionHandler } from "./reactionsDemo.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Threadmark, saveTourToDevServer, threadmarkTarget } from "threadmark-react";
 import { ThreadmarkTours, useThreadmarkTours } from "threadmark-react/tours";
+import { ThreadmarkSurveys, summarizeSurveyAnswers } from "threadmark-react/surveys";
+import { createLocalPageReviewer } from "./localPageReviewer.js";
 import { createFeedbackStore } from "./feedbackStore.js";
+
 import welcomeTour from "./tours/welcome.tour.json";
 
+function readJson(key, fallback) {
+  try {
+    return JSON.parse(window.localStorage.getItem(key)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage is optional in the example.
+  }
+}
 
 function TourButton() {
   const tours = useThreadmarkTours();
   return <button type="button" className="tour-button" onClick={() => tours.start("parcel-welcome")}>Take the tour</button>;
 }
 
-const IGNORED_SELECTORS = [".analytics-internal"];
+const IGNORED_SELECTORS = [".analytics-internal", ".event-log"];
 const MAX_LOG_ENTRIES = 6;
 const PROJECT_KEY = "pk_threadmark_basic_react";
+// What a transcription service might send back for a video. Built from the recorded steps and moments here;
+// a real host would write it from the audio and frames.
+function exampleVideoNotes(feedback) {
+  const video = feedback.video;
+  const targets = feedback.targets || [];
+  const steps = (video.events || []).slice(0, 4).map((event) => {
+    const name = targets[event.targetIndex]?.accessibleName || targets[event.targetIndex]?.visibleText || "the page";
+    const verb = event.type === "click" ? "Clicks" : event.type === "input" ? "Types in" : event.type === "scroll" ? "Scrolls" : "Moves to";
+    return { offsetMs: event.offsetMs, text: `${verb} ${name}.` };
+  });
+  const summary = steps.length ? steps : [{ offsetMs: 0, text: "Talks through the page without clicking anything." }];
+  return {
+    status: "ready",
+    summary,
+    transcript: summary.map((line) => ({ offsetMs: line.offsetMs, text: `(Example transcript) ${line.text}` })),
+    chapters: (video.moments || []).map((moment, index) => ({ offsetMs: moment.offsetMs, text: `Moment ${index + 1}` })),
+    ...(video.microphone ? {} : { silent: true }),
+  };
+}
+
+const EXAMPLE_AI_TEXT = {
+  "unnamed-control": { category: "accessibility", title: "This control has no name", detail: "Screen readers announce it as just “button”." },
+  "missing-alt": { category: "accessibility", title: "Image has no description", detail: "Add alt text, or alt=\"\" if it's decoration." },
+  "heading-jump": { category: "layout", title: "Heading skips a level", detail: "It jumps past a level, which makes the outline hard to follow." },
+  "small-text": { category: "accessibility", title: "Text is very small", detail: "Under 12px is hard to read for many people." },
+  "horizontal-overflow": { category: "layout", title: "Runs off the side", detail: "This sticks out past the edge at this width." },
+};
+const EXAMPLE_FACES = ["maya", "jo", "ade", "kemi", "sam", "ojie", "kai", "tobi"].map((id) => ({ id, name: id[0].toUpperCase() + id.slice(1), url: `/faces/${id}.jpg` }));
+
 const REVIEWER = {
   id: "user_emily_r",
   displayName: "Emily R.",
@@ -20,6 +68,7 @@ const REVIEWER = {
 const CURRENT_BUILD_ID = "basic-react-2026-08";
 const PREVIOUS_BUILD_ID = "basic-react-2026-07";
 const feedbackStore = createFeedbackStore({ projectKey: PROJECT_KEY, route: "/" });
+const localPageReviewer = createLocalPageReviewer({ store: feedbackStore, projectKey: PROJECT_KEY });
 
 function logEntry({ feedback, context }) {
   return {
@@ -89,6 +138,34 @@ function FeedbackLog({ entries, onClear }) {
 export function App() {
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [annotations, setAnnotations] = useState([]);
+  // Your face, name and notification settings: host-owned too. Faces are served from public/faces.
+  const [me, setMe] = useState(() => readJson("example:me", REVIEWER));
+  const [notificationSettings, setNotificationSettings] = useState(() => readJson("example:notification-settings", { myPages: false, digest: "daily" }));
+  // People with access and the share link: host-owned. A real app would call its server here.
+  const [members, setMembers] = useState(() => readJson("example:members", [
+    { id: "example-sam", displayName: "Sam Okafor", email: "sam@studio.co", avatarUrl: "/faces/sam.jpg", role: "comment" },
+    { id: "example-karin", displayName: "Karin", role: "view", guest: true, note: "link expires in 7 days" },
+  ]));
+  useEffect(() => writeJson("example:members", members), [members]);
+  const [linkAccess, setLinkAccess] = useState("comment");
+  // Stand-in for the host's next steps. A real app writes these from its open feedback (with AI or by hand).
+  const [nextSteps, setNextSteps] = useState(() => [
+    { id: "step-hero", title: "Shorten the pricing hero on phones", tag: "polish", source: "ai", completed: false },
+    { id: "step-tax", title: "Show prices with and without tax for EU visitors", tag: "copy", source: "person", completed: false },
+  ]);
+  // Surveys and their answers are host-owned too; this example keeps them in localStorage.
+  const [surveys, setSurveys] = useState(() => readJson("example:surveys", []));
+  const [surveyAnswers, setSurveyAnswers] = useState(() => readJson("example:survey-answers", []));
+  useEffect(() => writeJson("example:surveys", surveys), [surveys]);
+  useEffect(() => writeJson("example:survey-answers", surveyAnswers), [surveyAnswers]);
+  const surveyResults = useMemo(() => Object.fromEntries(surveys.map((survey) => [survey.id, summarizeSurveyAnswers(survey, surveyAnswers)])), [surveys, surveyAnswers]);
+  const answerCounts = useMemo(() => Object.fromEntries(Object.entries(surveyResults).map(([id, result]) => [id, result.total])), [surveyResults]);
+  // Notifications are host-owned. This stand-in shows the Inbox tab and the bar's New reply mood.
+  const [notifications, setNotifications] = useState(() => [
+    { id: "demo-mention", kind: "mention", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "@You can we keep the word launch in the headline?", route: "/", target: "Heading · Launch", createdAt: new Date(Date.now() - 4 * 60000).toISOString() },
+    { id: "demo-reply", kind: "reply", actor: { id: "example-sam", displayName: "Sam Okafor" }, text: "Changed it on the preview, have a look.", route: "/", target: "Button · Start free", createdAt: new Date(Date.now() - 50 * 60000).toISOString(), read: true },
+  ]);
+  const handleReactionChange = useMemo(() => createLocalReactionHandler({ store: feedbackStore, reviewer: REVIEWER, onRecords: setAnnotations }), []);
   const [status, setStatus] = useState("booting");
   // Tour mode's "Save to code" writes the tour file through threadmark-react/vite; the new version also
   // replaces the bundled one for this session, so it plays right away.
@@ -119,12 +196,22 @@ export function App() {
   const handleFeedbackCreate = useCallback(async (feedback, context) => {
     // Poll votes live beside the record, so keep them when a reply or edit saves the thread again.
     const poll = context?.poll || annotations.find((item) => item.feedback.id === feedback.id)?.context?.poll;
-    const record = { feedback, context: poll ? { ...context, poll } : context };
-    await feedbackStore.upsert(feedback, record.context);
+    // A stand-in for a host that transcribes videos: notes show as "processing", then fill in (board 02, 7f-7g).
+    const newVideo = feedback.captureKind === "video" && feedback.video && !feedback.video.notes;
+    const saved = newVideo ? { ...feedback, video: { ...feedback.video, notes: { status: "processing" } } } : feedback;
+    const record = { feedback: saved, context: poll ? { ...context, poll } : context };
+    await feedbackStore.upsert(saved, record.context);
     setAnnotations((current) => [
       ...current.filter((item) => item.feedback.id !== feedback.id),
       record,
     ]);
+    if (newVideo) {
+      setTimeout(async () => {
+        const ready = { ...saved, video: { ...saved.video, notes: exampleVideoNotes(saved) } };
+        await feedbackStore.upsert(ready, record.context);
+        setAnnotations((current) => current.map((item) => (item.feedback.id === ready.id ? { ...item, feedback: ready } : item)));
+      }, 4000);
+    }
     setFeedbackEntries((current) => [
       logEntry(record),
       ...current.filter((item) => item.feedback.id !== feedback.id),
@@ -241,8 +328,47 @@ export function App() {
   return (
     <>
       <Threadmark
+        onPageReviewRequested={async (input, context) => {
+          const result = await localPageReviewer(input, context);
+          if (!context.signal.aborted) {
+            setAnnotations(result.records);
+            setFeedbackEntries(result.records.map(logEntry).reverse().slice(0, MAX_LOG_ENTRIES));
+          }
+          return result;
+        }}
         projectKey={PROJECT_KEY}
-        reviewer={REVIEWER}
+        reviewer={me}
+        faces={EXAMPLE_FACES}
+        projectName="Parcel"
+        notificationSettings={notificationSettings}
+        onReviewerChange={(change) => { const next = { ...me, ...change }; setMe(next); writeJson("example:me", next); }}
+        onNotificationSettingsChange={(settings) => { setNotificationSettings(settings); writeJson("example:notification-settings", settings); }}
+        // AI review stand-ins. A real app calls its model here; this example turns the built-in page checks into findings.
+        onAiReview={async ({ page, report }) => {
+          report({ checked: 0, total: page.findings.length });
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          report({ checked: page.findings.length });
+          return { checked: page.findings.length, findings: page.findings.map((finding, index) => ({ id: `example-${index}`, target: finding.target, ...EXAMPLE_AI_TEXT[finding.rule] })) };
+        }}
+        onAskAi={async ({ label, question }) => {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          return question
+            ? { points: [`(Example answer) Your model would answer “${question}” about ${label} here.`] }
+            : { points: [`(Example) Your model would look at ${label} here.`, "Connect one through onAskAi."], fix: "Pass onAskAi to <Threadmark> and call your AI provider." };
+        }}
+        // Sending to trackers lives in your dashboard; the overlay links there.
+        dashboardUrl="https://app.example.com/parcel"
+        shareUrl={`${window.location.origin}/r/parcel`}
+        linkAccess={linkAccess}
+        onLinkAccessChange={setLinkAccess}
+        members={[{ ...me, role: "owner", you: true }, ...members]}
+        inviteSuggestions={[
+          { id: "jo", displayName: "Jo Bello", email: "jo@studio.co", note: "in your studio" },
+          { id: "joanna", displayName: "Joanna Reid", email: "joanna@client.com", note: "worked on Pricing" },
+        ]}
+        onInvite={({ entries, role }) => setMembers((list) => [...entries.map((entry) => ({ id: `invite-${entry}`, displayName: entry.includes("@") ? undefined : entry, email: entry.includes("@") ? entry : undefined, role, pending: true })), ...list])}
+        onMemberChange={(id, change) => setMembers((list) => change.remove ? list.filter((member) => member.id !== id) : list.map((member) => member.id === id ? { ...member, role: change.role } : member))}
+        onResendInvite={() => {}}
         reviewers={[REVIEWER, { id: "example-sam", displayName: "Sam Okafor" }]}
         enabled
         environment="local"
@@ -254,17 +380,47 @@ export function App() {
         onTargetSelect={handleTargetSelect}
         onSelectionChange={handleSelectionChange}
         onFeedbackCreate={handleFeedbackCreate}
+        onReactionChange={handleReactionChange}
         onFeedbackDelete={handleFeedbackDelete}
         onFeedbackClear={handleFeedbackClear}
         onPageVersionSelect={(version) => setActiveBuildId(version.buildId || CURRENT_BUILD_ID)}
         onFeedbackCarryForward={handleCarryForward}
         onPollVote={handlePollVote}
+        notifications={notifications}
+        surveys={surveys}
+        surveyResults={surveyResults}
+        onSurveyPublish={(survey) => setSurveys((list) => [...list.filter((item) => item.id !== survey.id), survey])}
+        onSurveyEnd={(id) => setSurveys((list) => list.map((item) => (item.id === id ? { ...item, status: "ended" } : item)))}
+        onNotificationOpen={(item) => console.info("[example] opened notification", item.id)}
+        nextSteps={nextSteps}
+        onNextStepDone={(step, done) => setNextSteps((list) => list.map((item) => (item.id === step.id ? { ...item, completed: done, completedVia: done ? "person" : null, completedBy: done ? { displayName: me.displayName } : null } : item)))}
+        onLeaveProject={async () => { window.alert("Your app removes you from the project here."); }}
+        onSignOut={() => window.alert("Your app signs you out here.")}
+        onAiDismiss={(finding, reason) => console.info("[example] dismissed AI finding", finding.id, reason)}
+        onConnectAi={() => window.alert("Your app connects its coding AI here.")}
+        onNotificationsRead={(ids) => setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)))}
         tours={tours}
         onTourSave={saveTour}
+        // A stand-in for a connected coding AI. A real app hands the file to its AI here.
+        aiConnection={{ name: "your AI (example)", connected: true, detail: "nothing is sent" }}
+        onTourSendToAi={async () => { await new Promise((resolve) => setTimeout(resolve, 400)); }}
         sessionReplay
         onError={(error) => setStatus(`error:${error.code}`)}
       />
       <ThreadmarkTours tours={tours} theme={{ accent: "#0b4f3a" }} />
+      <ThreadmarkSurveys
+        surveys={surveys}
+        answerCounts={answerCounts}
+        onAnswer={(answer) => setSurveyAnswers((list) => (list.some((item) => item.key === answer.key) ? list : [...list, answer]))}
+      />
+
+      {new URLSearchParams(location.search).has('agent-demo') && <section aria-label="Agent review examples" style={{ margin: '32px auto', maxWidth: 1040, padding: 24, background: '#DCEBE5', borderRadius: 12 }}>
+        <h2>Try a Threadmark Agent review</h2>
+        <p>These sample elements have intentional issues. Open Review page, then Ask Threadmark to add comments.</p>
+        <h4 data-threadmark-id="agent-demo-heading">A heading that skips a level</h4>
+        <p data-threadmark-id="agent-demo-small-text" style={{ fontSize: 11 }}>This sample text is harder to read at a small size.</p>
+        <span>An unnamed control: </span><button data-threadmark-id="agent-demo-button" style={{ width: 40, height: 32 }} />
+      </section>}
 
       <header className="site-header">
         <a className="brand" href="#top" aria-label="Parcel home">

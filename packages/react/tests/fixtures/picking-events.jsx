@@ -20,6 +20,9 @@ const fixtureParams = new URLSearchParams(window.location.search);
 const pollsEnabled = fixtureParams.get("polls") === "1";
 // ?tours=1 passes one tour to Tour mode and records what "Save to code" receives.
 const toursEnabled = fixtureParams.get("tours") === "1";
+// ?surveys=1 lets reviewers publish survey questions, kept in memory the way a host would.
+const surveysEnabled = fixtureParams.get("surveys") === "1";
+window.__threadmarkSurveys = [];
 window.__threadmarkTourSaves = [];
 const fixtureTours = [{
   id: "fixture-tour",
@@ -56,11 +59,28 @@ const FIXTURE_NEXT_STEPS = [
   },
   { id: "step-plan", title: "Pick the plan name", tag: "question", source: "person", completed: true, completedVia: "agent", completedBy: { displayName: "Emily R." }, sources: [] },
 ];
+// `?metadata=1` supplies app context read when a comment is posted (`window.__threadmarkCart` changes it);
+// `throw`, `slow`, and `window` supply a broken one. `?nodevice` turns device details off.
+window.__threadmarkCart = 1;
+const metadataMode = fixtureParams.get("metadata");
+const metadata = metadataMode === "1"
+  ? () => ({ appVersion: "2.4.1", flags: { newCheckout: true }, cartItems: window.__threadmarkCart, apiKey: "sk_live_abcdefghijklmnop" })
+  : metadataMode === "throw" ? () => { throw new Error("store not ready"); }
+    : metadataMode === "slow" ? () => new Promise(() => {})
+      : metadataMode === "window" ? () => window
+        : undefined;
 const persistenceEnabled = fixtureParams.has("persist");
-const sessionReplay = fixtureParams.has("replay") ? { bufferMs: 30_000 } : undefined;
+// `?replay=1&network=bodies` also keeps filtered request and response bodies.
+const sessionReplay = fixtureParams.has("replay")
+  ? { bufferMs: 30_000, ...(fixtureParams.get("network") === "bodies" ? { network: { bodies: true } } : {}) }
+  : undefined;
+// Tests skip the 3-2-1 unless they ask for it with `?countdown=1`.
 const videoRecording = fixtureParams.has("novideo")
   ? false
-  : fixtureParams.has("videomax") ? { maxDurationMs: Number(fixtureParams.get("videomax")) } : undefined;
+  : {
+    countdownSeconds: Number(fixtureParams.get("countdown") || 0),
+    ...(fixtureParams.has("videomax") ? { maxDurationMs: Number(fixtureParams.get("videomax")) } : {}),
+  };
 const feedbackStore = createFeedbackStore({
   databaseName: "threadmark-browser-lifecycle",
   projectKey: "privacy-browser-fixture",
@@ -71,14 +91,51 @@ function record(name) {
   return () => window.__threadmarkHostEvents.push(name);
 }
 
+// `?inbox=1` gives the reviewer an Inbox (board 05, 17b); `?inbox=empty` an empty one (19a).
+const inboxMode = fixtureParams.get("inbox");
+const FIXTURE_MEMBERS = [
+  { id: "maya", displayName: "Maya Patel", email: "maya@studio.co", role: "edit", avatarUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Crect width='20' height='20' fill='%23f15722'/%3E%3C/svg%3E" },
+];
+function fixtureNotifications() {
+  const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+  return [
+    { id: "n-mention", kind: "mention", actor: { id: "maya", displayName: "Maya Patel" }, text: "@Emily can we drop the company field here?", route: "/signup", target: "Field · Company", createdAt: ago(2) },
+    { id: "n-reply", kind: "reply", actor: { id: "sam", displayName: "Sam Okafor" }, text: "Agree, Forest reads calmer.", route: "/picking-events", target: "Button · Start free", createdAt: ago(1) },
+    { id: "n-assigned", kind: "assigned", actor: { id: "kai", displayName: "Kai" }, text: "Move the chart legend below on phones", route: "/picking-events", createdAt: ago(3) },
+    { id: "n-old", kind: "reply", actor: { id: "jo", displayName: "Jo" }, text: "Fixed on staging, can you check?", route: "/about", target: "Image · Team", createdAt: ago(3 * 24 * 60), read: true },
+  ];
+}
+
+// `?people=1` turns on You (board 08) and Share (board 04) with stand-in people and faces.
+const peopleMode = fixtureParams.get("people") === "1";
+// Reviewer avatars must be http(s) or same-origin paths (they travel with comments), so faces are paths.
+const face = (color) => `/faces/${color}.svg`;
+const FIXTURE_FACES = [{ id: "f1", name: "Lime face", url: face("e0f354") }, { id: "f2", name: "Orange face", url: face("f15722") }, { id: "f3", name: "Forest face", url: face("035d47") }];
+const FIXTURE_PEOPLE = [
+  { id: "fixture_reviewer", displayName: "Emily R.", email: "emily@studio.co", role: "owner", you: true },
+  { id: "maya", displayName: "Maya", email: "maya@studio.co", role: "comment" },
+  { id: "sam", displayName: "Sam", email: "sam@studio.co", role: "comment" },
+  { id: "karin", displayName: "Karin", role: "view", guest: true, note: "link expires in 7 days" },
+];
+const FIXTURE_SUGGESTIONS = [
+  { id: "jo", displayName: "Jo Bello", email: "jo@studio.co", note: "in Emily’s studio" },
+  { id: "joanna", displayName: "Joanna Reid", email: "joanna@studio.co", note: "in Emily’s studio" },
+];
+
 function Fixture() {
   const [buildId, setBuildId] = useState("fixture-build-current");
+  const [me, setMe] = useState({ id: "fixture_reviewer", displayName: "Emily R.", ...(peopleMode ? { email: "emily@studio.co" } : {}) });
+  const [people, setPeople] = useState(FIXTURE_PEOPLE);
+  const [linkAccess, setLinkAccess] = useState("comment");
+  const [notifications, setNotifications] = useState(() => (inboxMode === "1" ? fixtureNotifications() : []));
+  useEffect(() => { window.__threadmarkSetNotifications = setNotifications; }, []);
   const [annotations, setAnnotations] = useState([]);
   const [targetVersion, setTargetVersion] = useState(0);
   const [showSecondary, setShowSecondary] = useState(true);
   const [duplicatePrimary, setDuplicatePrimary] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [styleNonce, setStyleNonce] = useState("fixture-nonce-0");
+  const [surveys, setSurveys] = useState([]);
   const [nextSteps, setNextSteps] = useState(() => (nextStepsMode ? {
     steps: FIXTURE_NEXT_STEPS,
     status: { state: "ready", generatedAt: new Date(Date.now() - 5 * 60_000).toISOString() },
@@ -165,12 +222,45 @@ function Fixture() {
         enabled
         environment="local"
         projectKey="privacy-browser-fixture"
-        reviewer={{ id: "fixture_reviewer", displayName: "Emily R." }}
+        reviewer={me}
+        {...(peopleMode ? {
+          projectName: "Marketing site",
+          shareUrl: "https://threadmark.app/r/mkt-site/pricing",
+          linkAccess,
+          onLinkAccessChange: setLinkAccess,
+          members: people,
+          inviteSuggestions: FIXTURE_SUGGESTIONS,
+          faces: FIXTURE_FACES,
+          notificationSettings: { myPages: false, digest: "daily" },
+          onNotificationSettingsChange: (settings) => { window.__threadmarkNotificationSettings = settings; },
+          onReviewerChange: (next) => { window.__threadmarkReviewerChanges = [...(window.__threadmarkReviewerChanges || []), next]; setMe((current) => ({ ...current, ...next })); },
+          onLeaveProject: () => { window.__threadmarkLeft = true; },
+          onSignOut: () => { window.__threadmarkSignedOut = true; },
+          onInvite: (invite) => {
+            window.__threadmarkInvites = [...(window.__threadmarkInvites || []), invite];
+            setPeople((list) => [...list, ...invite.entries.map((entry) => ({ id: `invite-${entry}`, email: entry, role: invite.role, pending: true }))]);
+          },
+          onResendInvite: () => {},
+          onMemberChange: (id, change) => {
+            window.__threadmarkMemberChanges = [...(window.__threadmarkMemberChanges || []), { id, change }];
+            setPeople((list) => (change.remove ? list.filter((item) => item.id !== id) : list.map((item) => (item.id === id ? { ...item, role: change.role } : item))));
+          },
+        } : {})}
         styleNonce={styleNonce}
         reviewers={[{ id: "fixture_reviewer", displayName: "Emily R." }, { id: "sam", displayName: "Sam Okafor" }]}
+        {...(inboxMode ? {
+          notifications,
+          members: FIXTURE_MEMBERS,
+          onNotificationsRead: (ids) => {
+            window.__threadmarkNotificationsRead = [...(window.__threadmarkNotificationsRead || []), ...ids];
+            setNotifications((list) => list.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item)));
+          },
+        } : {})}
         buildId={buildId}
         videoRecording={videoRecording}
         sessionReplay={sessionReplay}
+        metadata={metadata}
+        deviceDetails={!fixtureParams.has("nodevice")}
         pageVersions={[
           {
             id: "fixture-current",
@@ -206,10 +296,17 @@ function Fixture() {
         onTourSave={toursEnabled ? async (tour, file) => { window.__threadmarkTourSaves.push({ tour, file }); } : undefined}
         onStatusChange={(status) => window.__threadmarkStatuses.push(status)}
         onError={(error) => window.__threadmarkErrors.push(error)}
-        onFeedbackCreate={async (feedback, context) => {
+        onFeedbackCreate={async (feedback, context, saving) => {
           if (window.__threadmarkRejectNextSave) {
             window.__threadmarkRejectNextSave = false;
             throw new Error("Fixture save failure");
+          }
+          // `?uploads=1` reports half of each new file sent, then waits for `__threadmarkFinishUpload()`.
+          if (fixtureParams.has("uploads") && saving) {
+            for (const item of context.evidence.filter((entry) => entry.blob)) {
+              saving.onUploadProgress({ evidenceId: item.id, sentBytes: Math.round(item.blob.size / 2), totalBytes: item.blob.size });
+            }
+            await new Promise((resolve) => { window.__threadmarkFinishUpload = resolve; });
           }
           // Simulates a host that answers with its own record instead of updating the controlled prop.
           if (window.__threadmarkAuthoritative) return window.__threadmarkAuthoritative(feedback, context);
@@ -237,6 +334,13 @@ function Fixture() {
           window.__threadmarkCarryForwards.push({ feedback, version, context });
         }}
         onPollVote={pollsEnabled ? fixturePollVote : undefined}
+        surveys={surveysEnabled ? surveys : undefined}
+        surveyResults={surveysEnabled ? Object.fromEntries(surveys.map((survey) => [survey.id, { total: 3, counts: { 5: 2, 3: 1 }, average: 4.3, texts: ["Wanted to see the price per seat."] }])) : undefined}
+        onSurveyPublish={surveysEnabled ? async (survey) => {
+          window.__threadmarkSurveys.push(survey);
+          setSurveys((current) => [...current, survey]);
+        } : undefined}
+        onSurveyEnd={surveysEnabled ? (id) => setSurveys((current) => current.map((survey) => (survey.id === id ? { ...survey, status: "ended" } : survey))) : undefined}
         nextSteps={nextSteps}
         onNextStepDone={nextStepsMode ? async (step, done) => {
           window.__threadmarkNextStepTicks.push([step.id, done]);
