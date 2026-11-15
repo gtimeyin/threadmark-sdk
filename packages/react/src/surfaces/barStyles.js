@@ -126,6 +126,10 @@ export const barStyles = `
   .tm-modebar button:hover { background: rgba(251, 250, 246, .08); color: var(--tm-text-primary); transform: none; }
   .tm-modebar button:active { transform: none; }
   .tm-modebar .tm-drag-handle { width: 20px; color: rgba(163, 173, 168, .6); }
+  /* Comment mode is on (2026-11-15): idle and comment mode share one Bar, so the Tools button says which you're in. */
+  .tm-modebar .tm-tool-switch.is-active { background: rgba(224, 243, 84, .14); color: var(--tm-action-primary); }
+  .tm-modebar .tm-tool-switch.is-active:not(.is-open) .tm-tool-switch__chevron { color: currentColor; }
+  .tm-modebar .tm-tool-switch.is-active:not(.is-open):hover { background: rgba(224, 243, 84, .22); color: var(--tm-action-primary); }
   .tm-modebar .tm-tool-switch.is-open { background: var(--tm-action-primary); color: var(--tm-ground); }
   .tm-modebar .tm-all-comments-trigger.is-active { background: rgba(251, 250, 246, .10); color: var(--tm-text-primary); }
   .tm-modebar .tm-button--primary { width: auto; padding: 0 12px; background: var(--tm-action-primary); color: var(--tm-ground); }

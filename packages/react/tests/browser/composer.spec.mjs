@@ -305,6 +305,10 @@ test("the idle Bar is the comment-mode Bar: Tools, More, Comments, and Inbox wit
   // More from the idle Bar starts commenting with the More menu already open.
   await page.getByRole("group", { name: "Threadmark" }).getByRole("button", { name: "More actions" }).click();
   await expect(page.locator("#tm-more-menu")).toBeVisible();
+  // Both states share one Bar, so the Tools button says comment mode is on; idle it isn't marked.
+  await expect(page.locator(".tm-modebar .tm-tool-switch")).toHaveClass(/is-active/);
+  await page.getByRole("button", { name: "Close annotations (Esc)" }).click();
+  await expect(page.locator(".tm-bar--idle .tm-tool-switch")).not.toHaveClass(/is-active/);
   expect(pageErrors).toEqual([]);
 });
 

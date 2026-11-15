@@ -2637,7 +2637,7 @@ function Overlay({
               <div className="tm-toolbar-divider" />
             </>}
             <div className="tm-tool-group tm-toolbar-tools">
-              <button ref={toolsTriggerRef} type="button" className={`tm-tool-switch${toolbarMenu === "tools" ? " is-open" : ""}`}
+              <button ref={toolsTriggerRef} type="button" className={`tm-tool-switch is-active${toolbarMenu === "tools" ? " is-open" : ""}`}
                 aria-label="Feedback tools: Comment" title="Feedback tools" aria-haspopup="menu" aria-expanded={toolbarMenu === "tools"}
                 aria-controls={toolbarMenu === "tools" ? "tm-tool-menu" : undefined}
                 data-menu-open={toolbarMenu === "tools" ? "true" : undefined}
