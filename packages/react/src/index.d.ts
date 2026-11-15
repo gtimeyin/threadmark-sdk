@@ -548,7 +548,7 @@ export declare function collectPageReview(options?: { documentRef?: Document; ro
 /** Something in the Inbox for the current reviewer. Host-owned, like comments. */
 export interface ThreadmarkNotification {
   id: string;
-  kind?: "reply" | "mention" | "resolved" | "reaction" | "assigned" | "question" | "other";
+  kind?: "comment" | "video" | "reply" | "mention" | "resolved" | "reopened" | "reaction" | "assigned" | "question" | "poll" | "other";
   /** Without an avatarUrl, the Inbox uses the face of the member with the same id from `members`. */
   actor: { id?: string; displayName: string; avatarUrl?: string | null };
   /** The line shown in the Inbox, e.g. the reply text. */

@@ -1,7 +1,7 @@
 // Inbox notifications are host-owned, like comments: the host passes them in through the
 // `notifications` prop and hears about opens and reads through callbacks. This module only
 // validates the shape so the overlay never renders something it can't trust.
-const KINDS = new Set(["reply", "mention", "resolved", "reaction", "assigned", "question", "other"]);
+const KINDS = new Set(["comment", "video", "reply", "mention", "resolved", "reopened", "reaction", "assigned", "question", "poll", "other"]);
 
 const text = (value, max) => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
@@ -45,7 +45,7 @@ export function normalizeNotifications(list) {
   return out.sort((a, b) => (Date.parse(b.createdAt || 0) || 0) - (Date.parse(a.createdAt || 0) || 0));
 }
 
-const VERBS = { reply: "replied", mention: "mentioned you", resolved: "resolved a thread", reaction: "reacted", assigned: "assigned you", question: "asked a question" };
+const VERBS = { comment: "commented", video: "posted a video", reply: "replied", mention: "mentioned you", resolved: "resolved a thread", reopened: "reopened a thread", reaction: "reacted", assigned: "assigned you", question: "asked a question", poll: "started a poll" };
 
 /** "Maya mentioned you" — the short line the bar shows for the newest unread notification. */
 export function notificationHeadline(notification) {
@@ -56,7 +56,11 @@ export function notificationHeadline(notification) {
 
 // The longer form for Inbox rows (board 05, 17b): "Sam replied to your comment".
 const INBOX_VERBS = {
+  comment: "left a comment",
+  video: "posted a video",
   reply: "replied to your comment",
+  reopened: "reopened a thread",
+  poll: "started a poll",
   mention: "mentioned you",
   resolved: "resolved your comment",
   reaction: "reacted to your comment",

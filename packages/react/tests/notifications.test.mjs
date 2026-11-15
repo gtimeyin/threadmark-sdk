@@ -39,3 +39,16 @@ test("Inbox rows say what happened, where, and on which day (board 05, 17b)", as
   assert.equal(notificationDay(assigned, now), "Earlier");
   assert.equal(notificationDay({ createdAt: null }, now), "Earlier");
 });
+
+test("the platform's own kinds read as what happened, not \"left a note\"", async () => {
+  const { notificationVerb } = await import("../src/notifications.js");
+  const list = normalizeNotifications(["comment", "video", "reopened", "poll", "brand-new"].map((kind, index) => (
+    { id: `k${index}`, kind, actor: { displayName: "Sam Okafor" }, text: "hi", createdAt: `2026-11-15T10:0${index}:00Z` })));
+  const byId = Object.fromEntries(list.map((item) => [item.id, item]));
+  assert.equal(notificationVerb(byId.k0), "left a comment");
+  assert.equal(notificationVerb(byId.k1), "posted a video");
+  assert.equal(notificationVerb(byId.k2), "reopened a thread");
+  assert.equal(notificationVerb(byId.k3), "started a poll");
+  assert.equal(byId.k4.kind, "other");
+  assert.equal(notificationVerb(byId.k4), "left a note");
+});
