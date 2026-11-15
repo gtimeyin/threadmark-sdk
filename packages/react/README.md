@@ -2,7 +2,31 @@
 
 An isolated, in-page review overlay for collecting structured feedback on live product UI. Threadmark lets a reviewer click an element, highlight native text, drag across eligible elements for grouped feedback, drag across empty space for region evidence, or select and mark up a privacy-filtered screenshot area before returning a normalized payload to the host application.
 
-> **Beta:** This package captures feedback in the page and hands it to your app through callbacks. It makes no network requests and saves nothing by itself: storage, screenshot upload, sign-in and notifications are yours to provide (see [Setting up your own storage](#setting-up-your-own-storage)). Hosted Threadmark projects use the script tag from the dashboard instead; this package does not connect to them yet.
+> **Beta:** This package captures feedback in the page and hands it to your app through callbacks. It makes no network requests and saves nothing by itself: storage, screenshot upload, sign-in and notifications are yours to provide (see [Setting up your own storage](#setting-up-your-own-storage)). To use Threadmark Cloud instead of your own backend, see [SDK, your backend, or Cloud](#sdk-your-backend-or-cloud).
+
+## SDK, your backend, or Cloud
+
+This package is the capture layer. Everything that involves other people needs a backend, either yours or Threadmark Cloud.
+
+| | Works with just this package | Needs your backend (props and callbacks) | With Threadmark Cloud |
+| --- | --- | --- | --- |
+| Comment on elements, text, areas, several elements | Yes, but gone on reload | `annotations`, `onFeedbackCreate`, `onFeedbackDelete`, `onFeedbackClear` | Yes |
+| Screenshots, sketches, interaction traces, video, session replay | Captured in the page, handed to you | Store the files | Yes |
+| Tours, Copy as Markdown, keyboard shortcuts, built-in page checks | Yes | — | Yes |
+| Threads, replies, resolve, deep links that last | Only while the page is open | Persist and hydrate the records | Yes |
+| Polls, reactions, @mentions that notify | — | `onPollVote`, `onReactionChange`, `reviewers` | Polls and mentions |
+| Inbox | — | `notifications`, `onNotificationsRead` | Yes |
+| Share, You, Your settings | — | `members`, `onInvite`, `onMemberChange`, `onReviewerChange`… | Not yet |
+| Next steps | — | `nextSteps`, `onNextStepDone` | Yes, written by AI |
+| Surveys, AI review, Ask AI, presence, page versions | — | `surveys`, `onAiReview`, `onAskAi`, `presence`, `pageVersions` (your own model for AI) | Not yet |
+
+Ways to use Threadmark Cloud, in order:
+
+1. **Script tag** from your project in the Cloud dashboard: no code, works on any site you can edit.
+2. **This package with `@threadmark/cloud`** for React apps: it supplies the storage, Inbox and Next steps props from your Cloud project. See its README.
+3. **The Chrome extension** for reviewing sites you can't change.
+
+In development, Threadmark logs once which of these features are switched on and what each still needs.
 
 ## Install
 
@@ -75,7 +99,7 @@ The quick-start callback above only logs feedback. Threadmark does **not** inclu
 
 5. **Verify with two signed-in reviewers.** Post a comment with a screenshot, reload, add a reply, and confirm both reviewers can see the same thread. Then verify that a reviewer outside the project cannot list, edit, or fetch its screenshot. This checks both persistence and the access boundary.
 
-If you'd rather not run this yourself, add the script tag from your Threadmark dashboard instead of this package. It brings hosted storage, sign-in and notifications. Using this npm package with a hosted Threadmark project is not supported yet.
+If you'd rather not run this yourself, use Threadmark Cloud: add the script tag from your dashboard, or keep this package and add `@threadmark/cloud` for hosted storage, sign-in and notifications (see [SDK, your backend, or Cloud](#sdk-your-backend-or-cloud)).
 
 ## Gesture-first annotations
 

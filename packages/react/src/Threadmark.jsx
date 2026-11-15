@@ -79,6 +79,7 @@ import {
 } from "./videoRecording.js";
 
 import { HostedPageReview } from "./HostedPageReview.jsx";
+import { featureReportMessage } from "./featureReport.js";
 import { Presence } from "./Presence.jsx";
 
 const MAX_MULTI_TARGETS = 20;
@@ -4099,6 +4100,18 @@ export function Threadmark({
     setComment(text);
     postVideoPendingRef.current = text;
   };
+
+  // Once, on local hosts only: what people features are on and what the rest need (featureReport.js).
+  const reportedFeatures = useRef(false);
+  useEffect(() => {
+    if (reportedFeatures.current || typeof window === "undefined" || !isLocalHostname(window.location.hostname)) return;
+    reportedFeatures.current = true;
+    console.info(featureReportMessage({
+      annotations: persistedAnnotations, onFeedbackCreate, onPollVote, onReactionChange, reviewers, notifications,
+      shareUrl, onInvite, onReviewerChange, onNotificationSettingsChange, onLeaveProject, nextSteps, surveys,
+      onSurveyPublish, onAiReview, onPageReview, onAskAi, presence, pageVersions,
+    }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A video lives only in this tab until it's posted: leaving the page while recording, or before Post, asks first.
   const videoAtRisk = mode === "video-recording" || Boolean(videoSelection);
