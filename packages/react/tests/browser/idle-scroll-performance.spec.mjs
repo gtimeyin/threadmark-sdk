@@ -94,7 +94,7 @@ for (const count of [60, 200, 1000]) {
 test('closing cancels queued work; reopening refreshes changed and removed targets', async ({ page }) => {
   await load(page, current, 60); await open(page, 60);
   await page.evaluate(() => window.burstMutations());
-  await page.getByRole('button', { name: 'Close annotations (Esc)', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop commenting (Esc)', exact: true }).click();
   await expect(page.getByRole('button', { name: /^(Leave feedback|Open feedback|Review page)/ })).toBeVisible();
   await page.waitForTimeout(50);
   await page.evaluate(() => { window.resetPerformanceCounters(); document.getElementById('target-1').remove(); document.getElementById('target-2').textContent = 'Portfolio account 2 updated'; window.burstMutations(); });

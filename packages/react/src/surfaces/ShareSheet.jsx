@@ -3,7 +3,7 @@
 // each part shows only when the host passes what it needs (`shareUrl`, `onInvite`, `onMemberChange`…).
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckIcon, ChevronDownIcon, CloseIcon, GlobeIcon, LinkIcon, ShareIcon } from "../icons.jsx";
+import { CheckIcon, ChevronDownIcon, CloseIcon, LinkIcon, LockIcon, ShareIcon } from "../icons.jsx";
 import { Avatar, Key, Tag } from "../ui/primitives.jsx";
 
 export const SHARE_ROLES = [
@@ -12,11 +12,6 @@ export const SHARE_ROLES = [
   { value: "view", label: "Can view", hint: "Read only" },
 ];
 const OWNER_ROLE = { value: "owner", label: "Make owner", hint: "Manage access and settings" };
-const LINK_ACCESS = [
-  { value: "comment", label: "can view and comment" },
-  { value: "view", label: "can view" },
-  { value: "off", label: "has no access" },
-];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Splits "kai@studio.co, Jo Bello" into entries; anything with an @ must be a real email. */
@@ -111,13 +106,11 @@ function RoleMenu({ value, label, roles, onChange, allowRemove, onRemove, disabl
 export function ShareSheet({
   projectName,
   shareUrl,
-  linkAccess,
   members = [],
   inviteSuggestions = [],
   onInvite,
   onMemberChange,
   onResendInvite,
-  onLinkAccessChange,
   onClose,
 }) {
   const [copied, setCopied] = useState(false);
@@ -221,7 +214,7 @@ export function ShareSheet({
   const people = [...members].sort((a, b) => Number(Boolean(b.pending)) - Number(Boolean(a.pending)));
   const youOwn = members.some((member) => member.you && member.role === "owner");
   const memberRoles = (member) => [
-    ...SHARE_ROLES.filter((item) => item.value !== "edit" || member.role === "edit"),
+    ...SHARE_ROLES,
     ...(youOwn ? [OWNER_ROLE] : []),
   ];
   const inviting = chips.length > 0 || draft.trim().length > 0;
@@ -243,17 +236,11 @@ export function ShareSheet({
               <button type="button" className="tm-share__button" onClick={copy}>{copied ? "Copied" : "Copy link"}</button>
             </div>
           )}
-          {linkAccess && (
+          {shareUrl && (
+            // Reviews are private (decided 2026-10): the link only works for people who were invited and sign in.
             <div className="tm-share__access">
-              <GlobeIcon aria-hidden="true" focusable="false" />
-              <strong>Anyone with the link</strong>
-              {onLinkAccessChange ? (
-                <span className="tm-share__select tm-share__select--inline">
-                  <select aria-label="What anyone with the link can do" value={linkAccess} onChange={(event) => onLinkAccessChange(event.target.value)}>
-                    {LINK_ACCESS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                  </select>
-                </span>
-              ) : <span>{LINK_ACCESS.find((item) => item.value === linkAccess)?.label}</span>}
+              <LockIcon aria-hidden="true" focusable="false" />
+              <span>Only people you invite can open this link, after signing in.</span>
             </div>
           )}
           {onInvite && (
@@ -294,7 +281,7 @@ export function ShareSheet({
                       }} />
                   </span>
                   <RoleMenu value={role} label="Access for people you invite" inline
-                    roles={SHARE_ROLES.filter((item) => item.value !== "edit")} onChange={setRole} />
+                    roles={SHARE_ROLES} onChange={setRole} />
                 </span>
                 <button type="submit" className={`tm-share__button${inviting ? " is-primary" : ""}`} disabled={busy || !inviting}>{busy ? "Inviting…" : "Invite"}</button>
               </div>

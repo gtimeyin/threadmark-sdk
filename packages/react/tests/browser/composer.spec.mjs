@@ -291,7 +291,7 @@ test("the Inbox shows Unread or All, grouped by day; opening an item and Mark al
 
 test("the idle Bar is the comment-mode Bar: Tools, More, Comments, and Inbox with its unread count, which opens the Inbox", async ({ page }) => {
   const pageErrors = await mountFixture(page, "inbox=1");
-  const close = page.getByRole("button", { name: "Close annotations (Esc)" });
+  const close = page.getByRole("button", { name: "Stop commenting (Esc)" });
   if (await close.isVisible()) await close.click();
   const idle = page.getByRole("group", { name: "Threadmark" });
   await expect(idle.getByRole("button", { name: "Feedback tools" })).toBeVisible();
@@ -301,26 +301,30 @@ test("the idle Bar is the comment-mode Bar: Tools, More, Comments, and Inbox wit
   await idle.getByRole("button", { name: "Inbox, 3 unread" }).click();
   await expect(page.locator("#tm-all-comments")).toBeVisible();
   await expect(page.getByRole("tab", { name: /Inbox/ })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "Close annotations (Esc)" }).click();
+  await page.getByRole("button", { name: "Stop commenting (Esc)" }).click();
   // More from the idle Bar starts commenting with the More menu already open.
   await page.getByRole("group", { name: "Threadmark" }).getByRole("button", { name: "More actions" }).click();
   await expect(page.locator("#tm-more-menu")).toBeVisible();
   // Both states share one Bar, so the Tools button says comment mode is on; idle it isn't marked.
   await expect(page.locator(".tm-modebar .tm-tool-switch")).toHaveClass(/is-active/);
-  await page.getByRole("button", { name: "Close annotations (Esc)" }).click();
+  await page.getByRole("button", { name: "Stop commenting (Esc)" }).click();
   await expect(page.locator(".tm-bar--idle .tm-tool-switch")).not.toHaveClass(/is-active/);
   expect(pageErrors).toEqual([]);
 });
 
 test("C starts commenting from the resting Bar, but not while typing in the page", async ({ page }) => {
   const pageErrors = await mountFixture(page, "inbox=1");
-  const close = page.getByRole("button", { name: "Close annotations (Esc)" });
-  if (await close.isVisible()) await close.click();
+  // The fixture opens comment mode shortly after loading; settle on the resting Bar first.
+  const close = page.getByRole("button", { name: "Stop commenting (Esc)" });
+  await expect(async () => {
+    if (await close.isVisible()) await close.click();
+    await expect(page.locator(".tm-bar--idle")).toBeVisible({ timeout: 500 });
+    await page.waitForTimeout(400);
+    await expect(page.locator(".tm-modebar")).toHaveCount(0);
+  }).toPass();
   const tools = page.locator(".tm-modebar .tm-tool-switch");
-  await expect(page.locator(".tm-bar--idle")).toBeVisible();
 
-  await page.getByLabel("Interaction search").focus();
-  await page.keyboard.press("c");
+  await page.getByLabel("Interaction search").press("c");
   await expect(page.getByLabel("Interaction search")).toHaveValue("c");
   await expect(tools).toHaveCount(0);
 
@@ -334,7 +338,7 @@ test("the Bar's Comments and Inbox buttons open the panel on their own view, and
   const pageErrors = await mountFixture(page, "inbox=1");
   await page.setViewportSize({ width: 1280, height: 800 });
   const panel = page.locator("#tm-all-comments");
-  const bar = page.getByRole("toolbar", { name: "Threadmark annotation tools" });
+  const bar = page.getByRole("toolbar", { name: "Threadmark comment tools" });
   await page.waitForTimeout(300);
   // Clicking Comments on another view switches to Comments; clicking it again closes the panel.
   for (let tries = 0; tries < 2 && await panel.isVisible(); tries += 1) await bar.getByRole("button", { name: "Comments", exact: true }).click();
@@ -348,7 +352,7 @@ test("the Bar's Comments and Inbox buttons open the panel on their own view, and
 
   const comments = bar.getByRole("button", { name: "Comments", exact: true });
   await comments.click();
-  await expect(page.getByRole("tab", { name: /Activity/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: /Comments/ })).toHaveAttribute("aria-selected", "true");
   await expect(inbox).toHaveAttribute("aria-expanded", "false");
 
   await comments.click();
@@ -363,7 +367,7 @@ test("the panel's tabs are icons with their names kept for screen readers, and t
   const panel = page.locator("#tm-all-comments");
   await page.waitForTimeout(300);
   if (!(await panel.isVisible())) await page.getByRole("button", { name: "Comments", exact: true }).click();
-  await expect(page.getByRole("tab", { name: /Activity/ })).toHaveAttribute("title", "Activity");
+  await expect(page.getByRole("tab", { name: /Comments/ })).toHaveAttribute("title", "Comments");
   await expect(page.getByRole("tab", { name: /Inbox/ })).toHaveAttribute("title", "Inbox");
   const boxes = await panel.locator(".tm-comments-header").evaluate((header) =>
     [...header.querySelectorAll(".tm-panel-tabs > button, .tm-comments-actions > button, .tm-comments-actions > * > button")]
@@ -463,6 +467,9 @@ test("Share invites several people as chips with suggestions and a note, and eac
   const panel = await openPanel(page);
   await panel.getByRole("button", { name: "Share" }).click();
   const sheet = page.getByRole("dialog", { name: "Share Marketing site" });
+  // Reviews are private: the link row says so, and there's no public setting.
+  await expect(sheet.locator(".tm-share__access")).toHaveText("Only people you invite can open this link, after signing in.");
+  await expect(sheet.getByRole("combobox", { name: "What anyone with the link can do" })).toHaveCount(0);
   const field = sheet.getByRole("combobox", { name: "Name or email to invite" });
   await field.pressSequentially("kai@studio.co,");
   await expect(sheet.locator(".tm-share__chip")).toHaveText(["kai@studio.co"]);
@@ -489,6 +496,8 @@ test("Share invites several people as chips with suggestions and a note, and eac
   await sheet.getByRole("button", { name: "Access for Sam" }).click();
   const roles = page.getByRole("menu", { name: "Access for Sam" });
   await expect(roles.getByRole("menuitemradio", { name: /Can comment/ })).toHaveAttribute("aria-checked", "true");
+  // Can edit can be granted, not only kept.
+  await expect(roles.getByRole("menuitemradio", { name: /Can edit/ })).toBeVisible();
   await roles.getByRole("menuitemradio", { name: /Can view/ }).click();
   expect(await page.evaluate(() => window.__threadmarkMemberChanges.at(-1))).toEqual({ id: "sam", change: { role: "view" } });
   await sheet.getByRole("button", { name: "Access for Sam" }).click();

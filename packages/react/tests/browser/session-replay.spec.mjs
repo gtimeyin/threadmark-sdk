@@ -55,6 +55,16 @@ test("a new comment carries a removable, privacy-safe playback with console, net
   // What happened on the page before the reviewer opened Threadmark.
   await page.waitForTimeout(400);
   await page.locator("#interaction-search").fill("private launch plan");
+  // A rich-text editor: form-field masking doesn't cover it, so the replay masks editable regions too.
+  await page.evaluate(() => {
+    const editor = document.createElement("div");
+    editor.id = "rich-editor";
+    editor.contentEditable = "true";
+    editor.style.minHeight = "20px";
+    document.body.append(editor);
+  });
+  await page.locator("#rich-editor").click();
+  await page.keyboard.type("EDITABLE_REPLAY_SECRET");
   await page.locator("#secondary-target").click();
   await page.evaluate(async () => {
     console.error("Checkout total is undefined", { cart: 3 });
@@ -114,7 +124,7 @@ test("a new comment carries a removable, privacy-safe playback with console, net
   const stored = await page.evaluate(async (id) => {
     const item = window.__threadmarkFeedbackContexts.at(-1).evidence.find((entry) => entry.id === id);
     const text = await new Response(item.blob.stream().pipeThrough(new DecompressionStream("gzip"))).text();
-    return { size: item.blob.size, type: item.blob.type, leaksTypedText: text.includes("private launch plan"), leaksCard: text.includes("4242"), leaksSecrets: /URL_REPLAY_SECRET|FRAGMENT_REPLAY_SECRET|CONSOLE_REPLAY_SECRET|OBJECT_REPLAY_SECRET|ATTRIBUTE_REPLAY_SECRET|ATTRIBUTE_FRAGMENT_SECRET/.test(text), events: JSON.parse(text).length };
+    return { size: item.blob.size, type: item.blob.type, leaksTypedText: text.includes("private launch plan"), leaksCard: text.includes("4242"), leaksSecrets: /EDITABLE_REPLAY_SECRET|URL_REPLAY_SECRET|FRAGMENT_REPLAY_SECRET|CONSOLE_REPLAY_SECRET|OBJECT_REPLAY_SECRET|ATTRIBUTE_REPLAY_SECRET|ATTRIBUTE_FRAGMENT_SECRET/.test(text), events: JSON.parse(text).length };
   }, replayEvidence.id);
   expect(stored).toMatchObject({ size: replayEvidence.byteSize, type: "application/gzip", leaksTypedText: false, leaksCard: false, leaksSecrets: false });
   expect(stored.events).toBeGreaterThan(5);

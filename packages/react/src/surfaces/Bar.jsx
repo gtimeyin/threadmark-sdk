@@ -2,28 +2,31 @@
 // When nobody is reviewing it is the same bar as comment mode (grip, Tools, More | Comments, Inbox) with the
 // shrink dot in Close's place. What is waiting (new, questions, offline) is in the Comments button's name and badge.
 // In comment mode the same bar carries the tools, plus a hint while something is happening (a multi-select, a drag, a repin).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDownIcon, CommentIcon, DragIcon, InboxIcon, MoreIcon, SelectIcon, ThreadsIcon } from "../icons.jsx";
 import { Key } from "../ui/primitives.jsx";
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 export const openShortcutLabel = () => (isMac() ? "⌘⇧F" : "Ctrl⇧F");
 
-const seenKey = (route) => `threadmark:seen:${route || "/"}`;
+// Which comments this browser has seen, by id and per project: a count went wrong when one comment was deleted
+// and another added. Anything not in the set is new. The overlay marks the whole list seen whenever the
+// Comments panel opens, however it was opened.
+const seenKey = (scope) => `threadmark:seen-ids:${scope || "default"}`;
 
-function readSeen(route) {
+export function readSeenIds(scope) {
   try {
-    const value = Number(window.localStorage.getItem(seenKey(route)));
-    return Number.isFinite(value) ? value : 0;
+    const list = JSON.parse(window.localStorage.getItem(seenKey(scope)) || "[]");
+    return new Set(Array.isArray(list) ? list.filter((id) => typeof id === "string") : []);
   } catch {
-    return 0;
+    return new Set();
   }
 }
 
-/** Remember how many comments the reviewer has seen on this page, so the bar can say "All caught up". */
-export function markFeedbackSeen(route, count) {
+/** Remember these comments as seen, so the Comments badge stops calling them new. */
+export function markFeedbackSeen(scope, ids) {
   try {
-    window.localStorage.setItem(seenKey(route), String(Math.max(0, count | 0)));
+    window.localStorage.setItem(seenKey(scope), JSON.stringify([...new Set(ids)].slice(-1000)));
   } catch {
     // Private windows and blocked storage simply keep showing what is waiting.
   }
@@ -46,10 +49,9 @@ function useOnline() {
 const plural = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
 /** Works out what the idle bar should say. Exported for tests. */
-export function barMood({ count, questions, seen, online }) {
+export function barMood({ count, questions, fresh = 0, online }) {
   if (!online) return { mood: "offline", primary: "Offline", secondary: count ? plural(count, "comment") : "Comments will wait" };
   if (!count) return { mood: "nothing", primary: "Leave feedback" };
-  const fresh = Math.max(0, count - seen);
   if (questions > 0) return { mood: "waiting", primary: plural(questions, "question"), secondary: plural(count, "comment") };
   if (fresh > 0) return { mood: "waiting", primary: `${fresh} new`, secondary: plural(count, "comment") };
   return { mood: "caught-up", primary: "All caught up", secondary: plural(count, "comment") };
@@ -76,29 +78,24 @@ export function useScrollAway(enabled = true) {
 }
 
 /** The idle bar. `onOpen` opens the review (and the panel when there is something to read). */
-export function IdleBar({ annotations = [], notifications = null, route, launcherRef, onOpen, onOpenTools, onOpenMore, drag, style, position = "bottom-center", shrunk = false, onShrink }) {
+export function IdleBar({ annotations = [], notifications = null, seenScope, seenVersion = 0, launcherRef, onOpen, onOpenTools, onOpenMore, drag, style, position = "bottom-center", shrunk = false, onShrink }) {
   const online = useOnline();
   const away = useScrollAway(!shrunk);
   const count = annotations.length;
   const questions = annotations.filter((annotation) => annotation?.payload?.ask && !annotation?.payload?.resolvedAt && annotation?.runtime?.status !== "resolved").length;
-  const [seen, setSeen] = useState(() => readSeen(route));
-  useEffect(() => setSeen(readSeen(route)), [route]);
+  // `annotations` is the whole project, so the badge reads the same here and in comment mode.
+  const seen = useMemo(() => readSeenIds(seenScope), [seenScope, seenVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fresh = annotations.filter((annotation) => annotation?.id && !seen.has(annotation.id)).length;
   const unread = (notifications || []).filter((item) => !item.read);
   const latest = online ? unread[0] : null;
-  const base = barMood({ count, questions, seen, online });
+  const base = barMood({ count, questions, fresh, online });
   const shortcut = openShortcutLabel();
   const baseLabel = !online
     ? `Offline${count ? `, ${plural(count, "comment")}` : ""}`
     : count
       ? `Open feedback, ${plural(count, "comment")}${base.mood === "waiting" ? `, ${base.primary}` : ""}`
       : "Leave feedback";
-  const open = () => {
-    if (count) {
-      markFeedbackSeen(route, count);
-      setSeen(count);
-    }
-    onOpen?.(count > 0, false);
-  };
+  const open = () => onOpen?.(count > 0, false);
 
   // Shrinking or restoring moves focus to the control that's now there, rather than dropping it.
   const wasShrunk = useRef(shrunk);
@@ -109,7 +106,7 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
 
   // Shrunk to a dot (board 09, 29b): the count stays so nothing new slips past.
   if (shrunk) {
-    const waiting = latest ? unread.length : Math.max(0, count - seen);
+    const waiting = latest ? unread.length : fresh;
     return (
       <div className={`tm-bar tm-bar--shrunk tm-bar--at-${position}`} role="group" aria-label="Threadmark">
         <button ref={launcherRef} type="button" className="tm-launcher tm-bar__main"
@@ -125,7 +122,7 @@ export function IdleBar({ annotations = [], notifications = null, route, launche
   // Idle and comment mode share one Bar (2026-11-15): grip, Tools, More | Comments, Inbox | and the shrink dot
   // where comment mode has Close. Tools and More start commenting with that menu open, so nothing jumps.
   // What is waiting (new comments, questions, offline) is in the Comments button's name and badge.
-  const waitingCount = Math.max(0, count - seen);
+  const waitingCount = fresh;
   const badge = (value) => <span className="tm-count-badge" aria-hidden="true">{value > 99 ? "99+" : value}</span>;
   return (
     <div className={`tm-bar tm-bar--idle tm-bar--${base.mood} tm-bar--at-${position}${away ? " is-away" : ""}`} role="group" aria-label="Threadmark"

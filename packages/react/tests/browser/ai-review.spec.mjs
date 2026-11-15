@@ -44,6 +44,17 @@ test('a page review comes back as drafts; nothing posts until someone says so', 
   expect(posted).toHaveLength(1);
   expect(posted[0]).toMatchObject({ source: 'ai', comment: 'Button text is too faint. White on Forest at this size is 3.1:1.', author: { id: 'alice' } });
   expect(posted[0].target.locatorCandidates.stableId).toBe('cta');
+  // One suggestion is still undecided: closing asks once, with Keep looking focused.
+  await panel.getByRole('button', { name: 'Close AI review' }).click();
+  const confirm = panel.getByRole('alertdialog');
+  await expect(confirm).toContainText('drop 1 suggestion nobody kept');
+  await expect(confirm.getByRole('button', { name: 'Keep looking' })).toBeFocused();
+  await confirm.getByRole('button', { name: 'Keep looking' }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(panel.locator('[data-finding="ghost"]')).toBeVisible();
+  await panel.getByRole('button', { name: 'Close AI review' }).click();
+  await panel.getByRole('alertdialog').getByRole('button', { name: 'Drop them' }).click();
+  await expect(panel).toHaveCount(0);
 });
 test('Stop keeps what was found so far, and a clean review says nothing stood out', async ({ page }) => {
   await open(page, () => { window.hangReview = true; });

@@ -316,12 +316,35 @@ export async function openTabStream(mediaDevices = globalThis.navigator?.mediaDe
     surfaceSwitching: "exclude",
     monitorTypeSurfaces: "exclude",
   };
+  let stream;
   try {
-    return await mediaDevices.getDisplayMedia(preferred);
+    stream = await mediaDevices.getDisplayMedia(preferred);
   } catch (error) {
     // Older engines reject unknown capture hints with a TypeError; a reviewer's refusal is not retried.
     if (error?.name !== "TypeError") throw error;
-    return mediaDevices.getDisplayMedia({ video, audio: false });
+    stream = await mediaDevices.getDisplayMedia({ video, audio: false });
+  }
+  // The hints above are only hints: Firefox and Safari let people pick a window or their whole screen. Blur,
+  // the cursor track and the "this tab" labels only hold for a tab, so anything else is stopped before a frame
+  // is recorded. Engines that don't report the surface are allowed through.
+  const surface = sharedSurface(stream);
+  if (surface && surface !== "browser") {
+    stream.getTracks().forEach((track) => track.stop());
+    const error = new Error("Only this tab can be recorded.");
+    error.name = "WrongSurfaceError";
+    error.surface = surface;
+    throw error;
+  }
+  return stream;
+}
+
+/** What the person actually shared: "browser" (a tab), "window", "monitor", or null when the engine doesn't say. */
+export function sharedSurface(stream) {
+  try {
+    const value = stream?.getVideoTracks?.()[0]?.getSettings?.().displaySurface;
+    return typeof value === "string" && value ? value : null;
+  } catch {
+    return null;
   }
 }
 

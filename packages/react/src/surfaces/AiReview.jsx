@@ -207,6 +207,10 @@ function DismissMenu({ onPick, onClose }) {
 /** 27d, 29b-d: what it found, as drafts to post or dismiss. */
 function ReviewResults({ result, route, activeId, onActivate, onPost, onPostAll, onDismiss, onAgain, onClose }) {
   const [dismissing, setDismissing] = useState(null);
+  // Suggestions nobody has kept or dismissed exist only here: closing with some left asks once first.
+  const [confirmClose, setConfirmClose] = useState(false);
+  const keepLookingRef = useRef(null);
+  useEffect(() => { if (confirmClose) keepLookingRef.current?.focus({ preventScroll: true }); }, [confirmClose]);
   const [busy, setBusy] = useState(null);
   const listRef = useRef(null);
   const headingRef = useRef(null);
@@ -218,6 +222,7 @@ function ReviewResults({ result, route, activeId, onActivate, onPost, onPostAll,
   });
   const drafts = result.findings.filter((finding) => finding.status === "draft");
   const visible = result.findings.filter((finding) => finding.status !== "dismissed");
+  const requestClose = () => (drafts.length ? setConfirmClose(true) : onClose());
   useEffect(() => {
     if (activeId) listRef.current?.querySelector(`[data-finding="${CSS.escape(activeId)}"]`)?.scrollIntoView({ block: "nearest" });
   }, [activeId]);
@@ -228,13 +233,26 @@ function ReviewResults({ result, route, activeId, onActivate, onPost, onPostAll,
   return (
     <aside className="tm-comments-panel tm-ai-panel" aria-label="AI review">
       <header className="tm-ai-panel__header">
-        <button type="button" aria-label="Back" onClick={onClose}><ArrowLeftIcon size={16} aria-hidden="true" focusable="false" /></button>
+        <button type="button" aria-label="Back" onClick={requestClose}><ArrowLeftIcon size={16} aria-hidden="true" focusable="false" /></button>
         <AiIcon size={14} className="tm-ai-panel__icon" aria-hidden="true" focusable="false" />
         <h2 ref={headingRef} tabIndex={-1}>AI review</h2>
         <span>{route} · {result.stopped ? "stopped" : timeAgo(result.at)}</span>
-        <button type="button" aria-label="Close AI review" onClick={onClose}><CloseIcon size={16} aria-hidden="true" focusable="false" /></button>
+        <button type="button" aria-label="Close AI review" onClick={requestClose}><CloseIcon size={16} aria-hidden="true" focusable="false" /></button>
       </header>
       <div className="tm-ai-panel__body" ref={listRef}>
+        {confirmClose && (
+          <div className="tm-send__problem tm-ai-stopped" role="alertdialog" aria-labelledby="tm-ai-close-title"
+            onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setConfirmClose(false); } }}>
+            <ErrorIcon size={14} aria-hidden="true" focusable="false" />
+            <div>
+              <p id="tm-ai-close-title">Close and drop {drafts.length} suggestion{drafts.length === 1 ? "" : "s"} nobody kept? They aren’t saved anywhere.</p>
+              <div className="tm-send__fixes">
+                <button ref={keepLookingRef} type="button" onClick={() => setConfirmClose(false)}>Keep looking</button>
+                <button type="button" className="tm-ai-drop" onClick={onClose}>Drop them</button>
+              </div>
+            </div>
+          </div>
+        )}
         {result.stopped && (
           <div className="tm-send__problem tm-ai-stopped" role="alert">
             <ErrorIcon size={14} aria-hidden="true" focusable="false" />

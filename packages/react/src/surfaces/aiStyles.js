@@ -40,6 +40,7 @@ export const aiStyles = `
   .tm-ai-summary small { color: var(--tm-text-secondary); font: 400 12px/16px var(--tm-font); }
   .tm-ai-pad { padding: 12px 16px 0; }
   .tm-ai-stopped { margin: 0 12px 4px; }
+  .tm-send__fixes .tm-ai-drop { color: var(--tm-orange-on-dark); }
   .tm-ai-findings { margin: 0; padding: 0; list-style: none; }
   .tm-ai-findings li { display: flex; gap: 10px; padding: 14px 16px; border-bottom: 1px solid rgba(251, 250, 246, .08); }
   .tm-ai-findings li.is-active { background: var(--tm-surface); }
