@@ -595,6 +595,8 @@ export const overlayStyles = `
     user-select: none;
     animation: tm-toolbar-in var(--tm-motion-surface) var(--tm-ease-emphasized) both;
   }
+  /* An open Tools or More menu belongs above the side panel (41, or 46 as a drawer on tablets and phones). */
+  .tm-modebar.has-open-menu { z-index: 47; }
 
   .tm-modebar button {
     width: 34px;

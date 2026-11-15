@@ -28,7 +28,7 @@ The review overlay is rebuilt on the November brand, and gains surveys, an Inbox
 - **You** (board 08): a You menu, a face sheet (host-supplied `faces`), Your settings and Leave. New props: `faces`, `notificationSettings`, `projectName`, `onReviewerChange`, `onNotificationSettingsChange`, `onLeaveProject` and `onSignOut`.
 - **The Bar, your way** (board 09): drag it to one of six spots, shrink it to a dot (⌘.) or hide it on a page. Choices are saved per browser. A shortcut sheet opens with ?.
 - **Share** (board 04): copy the review link, set link access, and invite people as chips with a note and roles. New props: `shareUrl`, `linkAccess`, `members`, `inviteSuggestions`, `onInvite`, `onMemberChange`, `onResendInvite` and `onLinkAccessChange`.
-- **Your dashboard** (`dashboardUrl`): **Open the dashboard** in the More menu and the panel header. Sending a comment to GitHub, Linear or Slack lives there, not in the overlay. Links your backend adds to `feedback.links` (such as "GitHub #482 · Open") show on the thread.
+- **Your dashboard** (`dashboardUrl`): **Open the dashboard** in the More menu. Sending a comment to GitHub, Linear or Slack lives there, not in the overlay. Links your backend adds to `feedback.links` (such as "GitHub #482 · Open") show on the thread.
 - **Tours** (board 06): a restyled player and Tour mode, a Save sheet with **Send to your AI** (`aiConnection`, `onTourSendToAi`, `onConnectAi`), and a preview bar that follows each step.
 - **AI review** (board 12): "Ask AI to review this page" gives draft findings with AI pins (Post one, Post all, or Dismiss with a reason). **Ask AI** (⌘K) answers about one element. Your host supplies the model through `onAiReview`, `onAskAi` and `onAiDismiss`. Posted findings are marked "From an AI review". The beta.14 `onPageReview` flow is included.
 - **Phones and tablets** (board 11): bottom sheets and 44px targets on phones, and a drawer on touch tablets in portrait.
@@ -53,6 +53,7 @@ The review overlay is rebuilt on the November brand, and gains surveys, an Inbox
 - Typing in a poll answer no longer jumps to the question when the composer moves.
 - Thumbnails only show real screenshots.
 - Esc closes only the innermost sheet or menu.
+- The Tools and More menus open above the side panel instead of under it.
 
 ### Security
 

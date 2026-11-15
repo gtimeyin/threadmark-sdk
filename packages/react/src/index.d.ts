@@ -634,8 +634,8 @@ export interface ThreadmarkProps {
    */
   nextSteps?: ThreadmarkNextSteps | readonly ThreadmarkNextStep[] | null;
   /**
-   * Your dashboard, as an http(s) URL or a same-site path. Adds **Open the dashboard** to the More menu and
-   * the side panel. Sending comments to trackers lives there, not in the overlay.
+   * Your dashboard, as an http(s) URL or a same-site path. Adds **Open the dashboard** to the More menu.
+   * Sending comments to trackers lives there, not in the overlay.
    */
   dashboardUrl?: string;
   /** Replies, mentions and other things for this reviewer. Passing an array shows the Inbox tab and lets the bar say "Maya mentioned you". */

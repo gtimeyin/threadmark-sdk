@@ -40,3 +40,27 @@ test('the Bar and panel link to the dashboard only when the host gives a safe ad
   await page.getByRole('button', { name: 'More actions' }).click();
   await expect(page.getByRole('menuitem', { name: 'Open the dashboard' })).toHaveCount(0);
 });
+
+test('the More menu opens above the side panel, not under it', async ({ page }) => {
+  await load(page, 'https://app.example.com/acme');
+  // At 800px wide the bar's menu and the 380px panel overlap.
+  await page.setViewportSize({ width: 800, height: 1000 });
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Feedback panel', exact: true }).click();
+  await expect(page.locator('#tm-all-comments')).toBeVisible();
+  await page.getByRole('button', { name: 'More actions' }).click();
+  const item = page.getByRole('menuitem', { name: 'Open the dashboard' });
+  await expect(item).toBeVisible();
+  const overlaps = await item.evaluate((element) => {
+    const a = element.getBoundingClientRect(), b = element.getRootNode().querySelector('#tm-all-comments').getBoundingClientRect();
+    return a.right > b.left && a.left < b.right;
+  });
+  expect(overlaps).toBe(true);
+  // Whatever is drawn at the item's centre must be the item itself, not the panel on top of it.
+  const onTop = await item.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const hit = element.getRootNode().elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return element.contains(hit);
+  });
+  expect(onTop).toBe(true);
+});

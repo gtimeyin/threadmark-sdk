@@ -695,7 +695,7 @@ function formatShortAge(iso, now = Date.now()) {
 
 function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, onClose, onOpen, tab, onTabChange, pageVersions, onSelectPageVersion,
   nextSteps, canTickNextSteps, onNextStepDone, onOpenNextStepSource, onCopyNextSteps, notifications = null, onOpenNotification, onNotificationsSeen,
-  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null, members = [], youMenu = null, dashboardUrl = null, onNotice = null }) {
+  surveys = null, surveyResults = {}, openSurveyId = null, onOpenSurvey, onSurveyEnd, onOpenYou = null, onOpenShare = null, members = [], youMenu = null, onNotice = null }) {
   const [halfSheet, setHalfSheet] = useState(false);
   const [youMenuOpen, setYouMenuOpen] = useState(false);
   const youButtonRef = useRef(null);
@@ -875,8 +875,6 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
             disabled={!nextSteps?.steps.some((step) => !step.completed)} onClick={onCopyNextSteps}>
             <Bot size={17} />
           </button>}
-          {dashboardUrl && <a className="tm-comments-dashboard" href={dashboardUrl} target="_blank" rel="noopener noreferrer"
-            aria-label="Open the dashboard (opens in a new tab)" title="Open the dashboard"><ExternalLink size={16} aria-hidden="true" focusable="false" /></a>}
           {onOpenShare && <button type="button" className="tm-comments-share" aria-label="Share" title="Share" onClick={onOpenShare}>
             <ShareIcon size={16} aria-hidden="true" focusable="false" />
           </button>}
@@ -2586,7 +2584,7 @@ function Overlay({
           )}
 
           <div
-            className={`tm-modebar tm-bar--at-${barPosition}`}
+            className={`tm-modebar tm-bar--at-${barPosition}${toolbarMenu ? " has-open-menu" : ""}`}
             role="toolbar"
             aria-label="Threadmark annotation tools"
             style={toolbarPosition ? {
@@ -2826,7 +2824,7 @@ function Overlay({
           notifications={notifications} onOpenNotification={onOpenNotification} onNotificationsSeen={onNotificationsSeen}
           surveys={surveys} surveyResults={surveyResults} openSurveyId={openSurveyId} onOpenSurvey={setOpenSurveyId} onSurveyEnd={onSurveyEnd}
           onOpenYou={canEditYou ? () => setYouOpen("settings") : null} onOpenShare={canShare ? () => setShareOpen(true) : null} members={members}
-          dashboardUrl={dashboardUrl} onNotice={onAiNotice}
+          onNotice={onAiNotice}
           youMenu={hasYouMenu ? {
             email: reviewerEmail,
             onFace: onReviewerChange ? () => setYouOpen("face") : null,
