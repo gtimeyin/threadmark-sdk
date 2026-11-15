@@ -18,7 +18,7 @@ The review overlay is rebuilt on the November brand, and gains surveys, an Inbox
 - Wording says "comment", not "annotation", throughout the overlay.
 
 ### Added
-- The idle Bar is now the same bar as comment mode: grip, **Tools**, **⋯ More** | **Comments** with its count, **Inbox** with its unread count | a shrink dot where comment mode has Close. Tools and More start commenting with that menu open, and in comment mode the Tools button turns Lime so you can tell the two apart. The message ("Sam mentioned you · on Home", "All caught up") and the ⌘⇧F key hint are gone; the shortcut still works and the Comments button's accessible name still says what is waiting.
+- The idle Bar is now the same bar as comment mode: grip, **Tools**, **⋯ More** | **Comments** with its count, **Inbox** with its unread count | a shrink dot where comment mode has Close. Tools and More start commenting with that menu open, and in comment mode the Tools button turns Lime so you can tell the two apart. C starts commenting from the resting Bar too, except while typing or when the Bar is hidden on the page. The message ("Sam mentioned you · on Home", "All caught up") and the ⌘⇧F key hint are gone; the shortcut still works and the Comments button's accessible name still says what is waiting.
 - The Bar drops its standing "Click anything, or select text · Esc" hint. It shows a hint only while something is happening: several elements selected, a drag, or a repin.
 - **Comments** and **Inbox** buttons on the Bar replace the single Feedback panel button. Each opens the panel on its own view, and clicking the one already showing closes it. Inbox appears when the host passes `notifications` and carries the unread count. Next steps stays a tab inside the panel.
 

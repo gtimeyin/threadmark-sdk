@@ -312,6 +312,24 @@ test("the idle Bar is the comment-mode Bar: Tools, More, Comments, and Inbox wit
   expect(pageErrors).toEqual([]);
 });
 
+test("C starts commenting from the resting Bar, but not while typing in the page", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "inbox=1");
+  const close = page.getByRole("button", { name: "Close annotations (Esc)" });
+  if (await close.isVisible()) await close.click();
+  const tools = page.locator(".tm-modebar .tm-tool-switch");
+  await expect(page.locator(".tm-bar--idle")).toBeVisible();
+
+  await page.getByLabel("Interaction search").focus();
+  await page.keyboard.press("c");
+  await expect(page.getByLabel("Interaction search")).toHaveValue("c");
+  await expect(tools).toHaveCount(0);
+
+  await page.getByLabel("Interaction search").blur();
+  await page.keyboard.press("c");
+  await expect(tools).toHaveClass(/is-active/);
+  expect(pageErrors).toEqual([]);
+});
+
 test("the Bar's Comments and Inbox buttons open the panel on their own view, and close it when it's already showing", async ({ page }) => {
   const pageErrors = await mountFixture(page, "inbox=1");
   await page.setViewportSize({ width: 1280, height: 800 });

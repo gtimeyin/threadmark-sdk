@@ -2631,7 +2631,15 @@ export function Threadmark({
         }
         return;
       }
-      if (mode === "idle") return;
+      if (mode === "idle") {
+        // C starts commenting from the resting Bar too (2026-11-15), unless the Bar is hidden on this page.
+        // shortcutAction has already ignored it while someone is typing.
+        if (action === "comment" && !hiddenPages.includes(activeRoute)) {
+          event.preventDefault();
+          startReview();
+        }
+        return;
+      }
       if (mode === "recording" || mode === "video-setup" || mode === "tour") return;
       // Tool keys switch away from Comment only from the toolbar's own state; anywhere else they
       // belong to the open composer or capture and pass through.
