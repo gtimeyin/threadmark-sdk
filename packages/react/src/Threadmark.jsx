@@ -1466,6 +1466,8 @@ export function Threadmark({
     if (!annotation || submitting || composerMode === "edit") return;
     const reply = typeof replyId === "string" ? (annotation.payload.replies || []).find((item) => item.id === replyId) : null;
     if (typeof replyId === "string" && (!reply || reply.author?.id !== normalizedReviewer?.id)) return;
+    // The first comment is its author's too (the platform refuses anyone else's edit).
+    if (!reply && annotation.payload.author?.id && annotation.payload.author.id !== normalizedReviewer?.id) return;
     replyDraftRef.current = { comment, target: replyTarget };
     setEditingReplyId(reply ? reply.id : null);
     setComposerMode("edit");
@@ -2583,6 +2585,15 @@ export function Threadmark({
       // A running video belongs to the reviewer's walkthrough: host keys pass through, and only the
       // recorder controls can stop or discard it.
       if (mode === "video-recording") return;
+      // Closing review from a shortcut never throws away work: an unsaved comment asks first (as Esc does), and a
+      // running interaction recording is stopped with its own Stop.
+      const closingWouldLoseWork = (action === "toggle" || (action === "shrink" && !barPrefs.shrunk))
+        && (mode === "recording" || (mode === "selected" && hasUnsavedComment));
+      if (closingWouldLoseWork) {
+        event.preventDefault();
+        if (mode === "selected" && !submitting) setDiscardPending(true);
+        return;
+      }
       if (action === "toggle") {
         event.preventDefault();
         // A bar hidden on this page comes back with the same keys (board 09, 29c).
@@ -2616,6 +2627,9 @@ export function Threadmark({
       if (action === "escape" && event.composedPath?.().some((node) => node?.dataset?.mentionOpen === "true" || node?.dataset?.menuOpen === "true")) return;
       // During a preview the tour card owns Escape.
       if (mode === "tour-preview") return;
+      // While recording an interaction, Esc belongs to the page being recorded (closing its own dialog is part of
+      // the flow); the recorder's Cancel and Stop end it, as the video recorder's controls do.
+      if (action === "escape" && mode === "recording") return;
       if (action === "escape" && mode !== "idle") {
         event.preventDefault();
         if (!submitting) {
@@ -2624,7 +2638,6 @@ export function Threadmark({
             setAllCommentsOpen(false);
             (portalRoot.querySelector(".tm-all-comments-trigger.is-active") || portalRoot.querySelector(".tm-all-comments-trigger"))?.focus();
           }
-          else if (mode === "recording") cancelInteractionRecording();
           else if (mode === "video-setup") cancelVideoSetup();
           else if (mode === "markup" || mode === "screenshot-select") cancelScreenshotMarkup();
           else if (mode === "selected" && discardPending) setDiscardPending(false);
@@ -2666,6 +2679,7 @@ export function Threadmark({
     hiddenPages,
     activeRoute,
     barPrefs.shrunk,
+    hasUnsavedComment,
     updateBarPrefs,
     shortcutsOpen,
     portalRoot,
@@ -3711,6 +3725,8 @@ export function Threadmark({
     } catch (error) {
       showNotice("Your vote wasn’t saved. Try again.");
       safeCall(callbacks.onError, { code: "poll_vote_failed", message: error?.message || "The vote could not be saved." });
+      // The poll card shows picks before the host answers; failing tells it to put the saved vote back.
+      throw error;
     }
   }, [annotationsRef, callbacks.onError, callbacks.onPollVote, safeCall, showNotice]);
 
@@ -4083,6 +4099,18 @@ export function Threadmark({
     setComment(text);
     postVideoPendingRef.current = text;
   };
+
+  // A video lives only in this tab until it's posted: leaving the page while recording, or before Post, asks first.
+  const videoAtRisk = mode === "video-recording" || Boolean(videoSelection);
+  useEffect(() => {
+    if (!videoAtRisk || typeof window === "undefined") return undefined;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [videoAtRisk]);
 
   // Retired in beta.16: this API posted AI comments with no person choosing them. AI suggests; people decide.
   const warnedRetiredReview = useRef(false);

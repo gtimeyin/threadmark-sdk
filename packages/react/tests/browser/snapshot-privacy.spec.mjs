@@ -241,6 +241,10 @@ test("records and restores a privacy-safe interaction trace while leaving the pa
   await page.locator("#secondary-target").click();
   await expect(page.locator("#interaction-output")).toHaveText("Results updated");
   await expect.poll(() => page.evaluate(() => window.__threadmarkHostEvents)).toContain("secondary-click");
+  // Esc belongs to the page while recording (closing its own dialog is part of the flow): the trace keeps going.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  expect(await page.evaluate(() => Boolean(document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-interaction-recorder")))).toBe(true);
 
   await page.evaluate(() => {
     document.querySelector("[data-threadmark-root]").shadowRoot.querySelector(".tm-recording-stop").click();

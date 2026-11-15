@@ -17,7 +17,9 @@ window.__threadmarkCarryForwards = [];
 
 const fixtureParams = new URLSearchParams(window.location.search);
 // ?polls=1 stores poll votes in memory, the way a host's onPollVote would.
-const pollsEnabled = fixtureParams.get("polls") === "1";
+const pollsEnabled = ["1", "slow"].includes(fixtureParams.get("polls"));
+// ?polls=slow answers each vote after 400ms, like a host on a slow network.
+const slowPolls = fixtureParams.get("polls") === "slow";
 // ?tours=1 passes one tour to Tour mode and records what "Save to code" receives.
 const toursEnabled = fixtureParams.get("tours") === "1";
 // ?surveys=1 lets reviewers publish survey questions, kept in memory the way a host would.
@@ -31,7 +33,8 @@ const fixtureTours = [{
   steps: [{ id: "custom", target: "custom-text-control", title: "The custom control" }],
 }];
 window.__threadmarkVotes = {};
-function fixturePollVote(feedback, optionIds) {
+async function fixturePollVote(feedback, optionIds) {
+  if (slowPolls) await new Promise((resolve) => setTimeout(resolve, 400));
   const votes = (window.__threadmarkVotes[feedback.id] ||= {});
   if (optionIds.length) votes.fixture_reviewer = optionIds;
   else delete votes.fixture_reviewer;

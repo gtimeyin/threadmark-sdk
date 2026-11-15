@@ -9,6 +9,16 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 - **Session replay masks editable regions.** Text typed into rich-text editors and other `contenteditable` areas was recorded in clear; it is now masked like form fields, as screenshots already did.
 - **Survey export can't run formulas.** Written answers starting with `=`, `+`, `-` or `@` get a leading apostrophe so Excel and Sheets show them as text. The file now starts with a UTF-8 marker so Excel reads accents and other non-ASCII text correctly.
 
+### Fixed
+- Tools and More open below a Bar snapped to a top spot, instead of off the top of the window.
+- Only a comment's author is offered Edit on the first comment of a thread (replies already worked this way).
+- ⌘⇧F and ⌘. no longer throw away an unsaved comment: they ask first, as Esc does. During an interaction recording they do nothing; Stop ends it.
+- The resting Bar's Comments button opens Comments, not Next steps when that was the last tab used.
+- Pick any polls keep quick picks: choosing A then B before the host answers sends [A] then [A, B], not [B]. A failed vote puts the saved vote back.
+- Esc no longer discards an interaction recording; it belongs to the page being recorded (for example to close its own dialog). Cancel and Stop end it.
+- Leaving or reloading the page while a video is recording, or before it's posted, asks first.
+- Closing an AI review with suggestions nobody kept or dismissed asks once before dropping them.
+
 ### Changed — please read before upgrading
 - **`onPageReviewRequested` is retired and ignored**, with a one-time console warning. It posted AI comments without a person choosing them. Use `onAiReview`, where suggestions stay drafts until someone keeps or dismisses each one. `collectPageReview()` is unchanged.
 

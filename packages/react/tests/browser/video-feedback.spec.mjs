@@ -302,6 +302,13 @@ test("a running recording ignores Escape; the review asks before Retake or Delet
 
   await page.keyboard.press("Escape");
   await expect(page.locator(".tm-video-recorder")).toBeVisible();
+  // Leaving the page mid-recording asks first: the video exists only in this tab.
+  const leaveIsHeld = () => page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(await leaveIsHeld()).toBe(true);
 
   // The microphone mutes without stopping; pausing turns the frame into a quiet dashed one.
   const microphone = page.getByRole("button", { name: "Microphone" });
@@ -320,6 +327,7 @@ test("a running recording ignores Escape; the review asks before Retake or Delet
   // Esc asks first, and the safe choice has focus.
   const review = page.locator(".tm-video-review");
   await expect(review).toBeVisible();
+  expect(await leaveIsHeld()).toBe(true);
   await page.keyboard.press("Escape");
   await expect(review).toContainText("Delete this video?");
   await expect(page.getByRole("button", { name: "Keep it" })).toBeFocused();
@@ -340,6 +348,8 @@ test("a running recording ignores Escape; the review asks before Retake or Delet
   await page.locator(".tm-video-review .tm-video-danger").click();
   await expect(review).toHaveCount(0);
   await expect(page.locator(".tm-modebar")).toBeVisible();
+  // Once the video is gone there's nothing to lose, so leaving no longer asks.
+  expect(await leaveIsHeld()).toBe(false);
   expect(await allCapturedTracksEnded(page)).toBe(true);
   expect(await page.evaluate(() => window.__threadmarkFeedback.length)).toBe(0);
 });

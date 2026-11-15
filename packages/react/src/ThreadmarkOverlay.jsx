@@ -1849,7 +1849,19 @@ function PollEditor({ options, onChange, multiple, onMultipleChange, onRemove, d
  * results, with a tick on your vote and the Lime bar on the leader. Change vote goes back to the answers. */
 function PollCard({ ask, results, closed, onVote }) {
   const total = results?.total || 0;
-  const mine = results?.mine || [];
+  const saved = results?.mine || [];
+  // Picks the host hasn't answered yet: each new pick builds on these, so clicking A then B quickly sends
+  // [A] then [A, B] instead of losing A. They give way to the host's answer once it matches, or on failure.
+  const [pending, setPending] = useState(null);
+  const savedKey = [...saved].sort().join("\u0000");
+  useEffect(() => {
+    if (pending && [...pending].sort().join("\u0000") === savedKey) setPending(null);
+  }, [savedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mine = pending ?? saved;
+  const sendVote = (ids) => {
+    setPending(ids);
+    Promise.resolve(onVote(ids)).catch(() => setPending(null));
+  };
   const [changing, setChanging] = useState(false);
   const voted = mine.length > 0;
   const showResults = closed || (voted && !changing);
@@ -1860,11 +1872,11 @@ function PollCard({ ask, results, closed, onVote }) {
     if (closed || !onVote) return;
     if (ask.multiple) {
       // Pick any: each answer toggles; the answers stay up until Done.
-      onVote(mine.includes(id) ? mine.filter((item) => item !== id) : [...mine, id]);
+      sendVote(mine.includes(id) ? mine.filter((item) => item !== id) : [...mine, id]);
       setChanging(true);
     } else {
       // Pick one: choosing shows the results; choosing your own answer again takes the vote back.
-      onVote(mine.includes(id) ? [] : [id]);
+      sendVote(mine.includes(id) ? [] : [id]);
       setChanging(false);
     }
   };
@@ -2305,7 +2317,10 @@ function Overlay({
   }, []);
   const runToolbarItem = (run) => () => { setToolbarMenu(null); run(); };
   // A dragged toolbar near the top of the window opens its menus downward.
-  const toolbarMenusBelow = Boolean(toolbarPosition && typeof window !== "undefined" && toolbarPosition.top < window.innerHeight / 2);
+  // Menus open toward the middle of the window: below a bar snapped to a top spot (or dragged into the top half).
+  const toolbarMenusBelow = toolbarPosition
+    ? typeof window !== "undefined" && toolbarPosition.top < window.innerHeight / 2
+    : String(barPosition || "").startsWith("top");
 
   useEffect(() => { if (mode !== "picking") setToolbarMenu(null); }, [mode]);
   // Pressing X arms Clear; the More menu opens so the confirmation is visible.
@@ -2448,6 +2463,8 @@ function Overlay({
           onOpen={(hasComments, toInbox) => {
             onStart();
             setInboxOpen(Boolean(toInbox));
+            // Comments and Inbox open their own view, never the tab that happened to be open last time.
+            onShowNextSteps?.(false);
             if ((hasComments || toInbox) && !allCommentsOpen) onToggleAllComments();
           }}
           onOpenTools={() => { onStart(); setToolbarMenu("tools"); }}
@@ -3072,7 +3089,7 @@ function Overlay({
                   currentReviewer={reviewer}
                   onReply={onBeginReply}
                   onDelete={onRequestDelete}
-                  onEdit={repinning ? undefined : onBeginEdit}
+                  onEdit={repinning || (editingAnnotation.payload.author?.id && editingAnnotation.payload.author.id !== reviewer?.id) ? undefined : onBeginEdit}
                   editor={composerMode === "edit" && !repinning && !editingReplyId ? (
                     <div className="tm-inline-edit" data-menu-open="true">
                       <label className="tm-sr-only" htmlFor="tm-comment">Edit comment</label>

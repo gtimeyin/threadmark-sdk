@@ -314,13 +314,17 @@ test("the idle Bar is the comment-mode Bar: Tools, More, Comments, and Inbox wit
 
 test("C starts commenting from the resting Bar, but not while typing in the page", async ({ page }) => {
   const pageErrors = await mountFixture(page, "inbox=1");
+  // The fixture opens comment mode shortly after loading; settle on the resting Bar first.
   const close = page.getByRole("button", { name: "Close annotations (Esc)" });
-  if (await close.isVisible()) await close.click();
+  await expect(async () => {
+    if (await close.isVisible()) await close.click();
+    await expect(page.locator(".tm-bar--idle")).toBeVisible({ timeout: 500 });
+    await page.waitForTimeout(400);
+    await expect(page.locator(".tm-modebar")).toHaveCount(0);
+  }).toPass();
   const tools = page.locator(".tm-modebar .tm-tool-switch");
-  await expect(page.locator(".tm-bar--idle")).toBeVisible();
 
-  await page.getByLabel("Interaction search").focus();
-  await page.keyboard.press("c");
+  await page.getByLabel("Interaction search").press("c");
   await expect(page.getByLabel("Interaction search")).toHaveValue("c");
   await expect(tools).toHaveCount(0);
 

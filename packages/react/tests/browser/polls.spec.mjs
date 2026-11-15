@@ -211,3 +211,28 @@ test("reviewers ask people a survey question in three steps; problems are named 
   await expect(results).toContainText("Ended");
   expect(pageErrors).toEqual([]);
 });
+
+test("with Pick any, quick picks on a slow host keep each other instead of the last one winning", async ({ page }) => {
+  const pageErrors = await mountFixture(page, "?polls=slow");
+  await page.locator(".tm-launcher").click();
+  await page.locator("#secondary-target").click();
+  await page.getByRole("button", { name: "Add a poll" }).click();
+  await setComment(page, "Which should stay?");
+  await page.getByLabel("Answer 1", { exact: true }).fill("Search");
+  await page.getByLabel("Answer 2", { exact: true }).fill("Filters");
+  await page.getByLabel("Pick any").check();
+  await page.locator(".tm-submit").click();
+  await expect(page.locator(".tm-popover")).toHaveCount(0);
+  const poll = await page.evaluate(() => window.__threadmarkFeedback.at(-1));
+
+  await page.locator(".tm-marker").last().click();
+  const card = page.getByRole("region", { name: "Poll" });
+  const answer = (label) => card.getByRole("checkbox", { name: label, exact: true });
+  await answer("Search").click();
+  // Picked before the host answered the first vote.
+  await answer("Filters").click();
+  await expect(answer("Search")).toHaveAttribute("aria-checked", "true");
+  await expect(answer("Filters")).toHaveAttribute("aria-checked", "true");
+  await expect.poll(() => page.evaluate((id) => window.__threadmarkVotes[id]?.fixture_reviewer, poll.id)).toEqual(["option-1", "option-2"]);
+  expect(pageErrors).toEqual([]);
+});
