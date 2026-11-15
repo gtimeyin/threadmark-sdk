@@ -595,13 +595,15 @@ export interface ThreadmarkAiPageReview {
   findings: ThreadmarkPageReviewFinding[];
 }
 export interface ThreadmarkProps {
-  /** Explicit page-review command; the consumer owns agent dispatch and persistence. */
+  /**
+   * @deprecated Retired in beta.16 and ignored (a console warning says so): it posted AI comments with no person
+   * choosing them. Use `onAiReview`, where people keep or dismiss each suggestion.
+   */
   onPageReviewRequested?: (input: ThreadmarkPageReview, context: ThreadmarkPageReviewContext) => Promise<ThreadmarkPageReviewResult>;
   /**
    * AI page review. Adds **Review this page** to the tools menu; the host sends the request to its reviewer (the
    * Supabase store's `reviewPage`) and returns the review. Suggestions stay in the reviewer's panel until they
-   * keep one, which is posted through `onFeedbackCreate` with `source: "ai_review"` and `aiReview`. Takes
-   * precedence over `onPageReviewRequested`.
+   * keep one, which is posted through `onFeedbackCreate` with `source: "ai_review"` and `aiReview`. 
    */
   onPageReview?: (request: ThreadmarkPageReviewRequest, context: { signal: AbortSignal }) => Promise<ThreadmarkAiPageReview>;
   /** Records that the reviewer dismissed a suggestion (the Supabase store's `dismissPageReviewFinding`). */

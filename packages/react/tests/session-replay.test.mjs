@@ -204,6 +204,8 @@ test("a recorder session captures a compressed, replayable buffer", async () => 
   const record = (options) => {
     emit = options.emit;
     assert.equal(options.maskAllInputs, true);
+    // Rich-text editors and other editable regions are masked too, not only form fields.
+    assert.ok(options.maskTextSelector.split(",").includes("[contenteditable]:not([contenteditable='false'])"));
     assert.match(options.blockSelector, /\[data-threadmark-root\]/);
     assert.match(options.blockSelector, /\.secret-panel/);
     return () => {};

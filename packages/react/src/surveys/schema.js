@@ -182,7 +182,14 @@ function resultRows(survey, results) {
   return [];
 }
 
-const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+// Written answers can come from anyone visiting the site. Text that starts like a formula (= + - @, or a tab or
+// return before one) would run in Excel or Sheets, so it gets a leading apostrophe; numbers are left alone.
+const FORMULA_START = /^[=+\-@\t\r]/;
+const csvCell = (value) => {
+  const text = String(value ?? "");
+  const safe = typeof value !== "number" && FORMULA_START.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
+};
 
 /** Export (board 03, 11d): the question, the spread and every written answer, as CSV. */
 export function surveyResultsCsv(survey, results) {

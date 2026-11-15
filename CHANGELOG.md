@@ -4,6 +4,14 @@ All notable changes to Threadmark are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+### Security and privacy
+- **Video records this tab only.** Firefox and Safari let people share a window or their whole screen even when the tab is asked for. Threadmark now checks what was shared and stops anything that isn't a tab before a frame is recorded, saying why. Engines that don't report what was shared are still allowed.
+- **Session replay masks editable regions.** Text typed into rich-text editors and other `contenteditable` areas was recorded in clear; it is now masked like form fields, as screenshots already did.
+- **Survey export can't run formulas.** Written answers starting with `=`, `+`, `-` or `@` get a leading apostrophe so Excel and Sheets show them as text. The file now starts with a UTF-8 marker so Excel reads accents and other non-ASCII text correctly.
+
+### Changed — please read before upgrading
+- **`onPageReviewRequested` is retired and ignored**, with a one-time console warning. It posted AI comments without a person choosing them. Use `onAiReview`, where suggestions stay drafts until someone keeps or dismisses each one. `collectPageReview()` is unchanged.
+
 ## [0.1.0-beta.15] — 2026-11-10
 
 The review overlay is rebuilt on the November brand, and gains surveys, an Inbox, sharing, AI review, a link to your dashboard, and layouts for phones and tablets. This release also carries the SDK changes from the unpublished beta.14.

@@ -28,6 +28,9 @@ import {
   sanitizeCanvasFrame,
 } from "./canvasReplay.js";
 import { OTHER_TOOLS_BLOCK_SELECTORS, OTHER_TOOLS_MASK_SELECTORS } from "./privacy.js";
+
+/** Editable regions whose text is masked in replays, like form fields. */
+export const EDITABLE_SELECTOR = "[contenteditable]:not([contenteditable='false'])";
 import { sanitizeReplayUrl, scrubConsoleText } from "./scrub.js";
 
 export { isSecretName, sanitizeReplayUrl, scrubCardNumbers, scrubConsoleText, scrubCredentials } from "./scrub.js";
@@ -754,7 +757,9 @@ export async function startSessionReplay({
           // A canvas's pixels can't have their text masked, so canvases in masked regions are left out.
           ...(canvasOptions ? canvasBlockSelectors([...OTHER_TOOLS_MASK_SELECTORS, ...maskTextSelectors]) : []),
         ].join(","),
-        maskTextSelector: ["[data-threadmark-sensitive]", ...OTHER_TOOLS_MASK_SELECTORS, ...maskTextSelectors].join(",") || null,
+        // maskAllInputs covers form fields only; text typed into editable regions (rich-text editors, chat boxes)
+        // is masked here, as screenshots already do.
+        maskTextSelector: ["[data-threadmark-sensitive]", EDITABLE_SELECTOR, ...OTHER_TOOLS_MASK_SELECTORS, ...maskTextSelectors].join(",") || null,
         recordCanvas: Boolean(canvasOptions),
         ...(canvasOptions ? { dataURLOptions: { type: "image/webp", quality: canvasOptions.quality } } : {}),
         collectFonts: false,

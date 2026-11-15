@@ -26,32 +26,14 @@ test('page scanning bounds findings and excludes protected content and labelled 
   await page.evaluate(() => { for (let i = 0; i < 10; i++) { const el = document.createElement('button'); el.style.cssText = 'width:30px;height:30px'; document.body.append(el); } });
   expect((await page.evaluate(() => window.scanPage())).findings).toHaveLength(5);
 });
-test('requested review posts saved agent discussions, attaches evidence and skips duplicate reruns', async ({ page }) => {
+test('the retired onPageReviewRequested shows no review button, posts nothing and warns once', async ({ page }) => {
+  const warnings = [];
+  page.on('console', (message) => { if (message.type() === 'warning') warnings.push(message.text()); });
   await open(page);
   await page.getByRole('button', { name: 'Leave feedback', exact: true }).click();
-  await page.getByRole('button', { name: 'Ask Threadmark' }).click();
-  await page.getByRole('button', { name: 'Review this page', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Added 3 comments.' })).toBeVisible({ timeout: 30000 });
-  expect(await page.evaluate(() => window.lastEvidence)).toBeGreaterThan(0);
-  await page.getByRole('button', { name: 'Review this page', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Skipped 3 duplicates.' })).toBeVisible({ timeout: 30000 });
-  await page.getByRole('button', { name: 'Close agent panel' }).click();
-  await page.getByRole('button', { name: 'Comments', exact: true }).click();
-  await expect(page.getByText('Threadmark Agent', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('This control has no accessible name.', { exact: false }).first()).toBeVisible();
-});
-
-test('stop prevents a pending local review from posting and retains a safe retry', async ({ page }) => {
-  await open(page);
-  await page.evaluate(() => { window.pauseReview = true; });
-  await page.getByRole('button', { name: 'Leave feedback', exact: true }).click();
-  await page.getByRole('button', { name: 'Ask Threadmark' }).click();
-  await page.getByRole('button', { name: 'Review this page', exact: true }).click();
-  await page.waitForFunction(() => window.resumeReview);
-  await page.getByRole('button', { name: 'Stop review' }).click();
-  await page.evaluate(() => { window.pauseReview = false; window.resumeReview(); });
-  await expect(page.getByRole('status').filter({ hasText: 'Stopped locally.' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Edit annotation/ })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Review this page', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Added 3 comments.' })).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('.tm-modebar')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ask Threadmark' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Review this page', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => window.lastInput)).toBeUndefined();
+  expect(warnings.filter((text) => text.includes('onPageReviewRequested is retired'))).toHaveLength(1);
 });

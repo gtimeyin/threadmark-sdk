@@ -905,15 +905,11 @@ New comments include optional `feedback.captureEnvironment`: coarse browser/vers
 
 `presence` accepts a consumer-owned transport with `connect(scope, onMembers, onError)`, returning `publish(cursor)` and `close()`. It is mounted only when Threadmark activation succeeds. Without it, the SDK makes no presence requests and needs no account. Named cursors and the page reviewer count live in the isolated overlay, and cursor movement does not rerender the host page. Stable `data-threadmark-id` anchors align positions across viewports. Untagged content uses document coordinates, so responsive layouts may differ. Hidden tabs disconnect; idle pointers fade; Hide cursors affects local display. Presence never transmits typed values or drafts.
 
-## Built-in page checks (older API)
+## Built-in page checks
 
-> For AI review, use `onAiReview` and `onAskAi` (see the [changelog](https://github.com/gtimeyin/threadmark-sdk/blob/main/CHANGELOG.md)). `onPageReviewRequested` stays for compatibility and may be removed before 1.0.
+`collectPageReview()` returns the page outline and the built-in checks (unnamed controls, missing image alt text, heading jumps, text below 12px, possible horizontal overflow) without form values, protected content, the overlay or ignored selectors. `onAiReview` receives the same outline as `page`.
 
-Mount `onPageReviewRequested` to enable **Ask Threadmark → Review this page**. The SDK captures up to five issues and supplies masked screenshots for targets inside the current viewport. It excludes hidden/protected content, form values, the overlay and configured ignored selectors. Screenshot failures do not block text comments. Traversal stops at 3,000 elements with a partial-review notice. It never clicks controls, navigates or changes the page.
-
-This starter uses built-in checks for unnamed controls, missing image alt attributes, heading jumps, text below 12px and possible horizontal overflow. It needs no model API key, and does not perform model-based design critique, comprehensive accessibility audits or interaction tests. Ordinary comment mentions do not dispatch tasks; the displayed `@threadmark review this page` command uses the explicit review button. Consumers can replace the callback with a separately authorized provider.
-
-Stop cancels local work; comments your callback already saved remain.
+> `onPageReviewRequested` was retired in beta.16 and is now ignored, with a console warning. It posted AI comments without a person choosing them. Use `onAiReview`: its suggestions stay drafts until someone keeps or dismisses each one.
 
 `collectPageReview({ route, buildId, ignoredSelectors, signal })` is also exported for consumer-owned command surfaces. It returns `{ version, route, buildId, findings, truncated }` without posting feedback or making network requests.
 

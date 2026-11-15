@@ -328,14 +328,6 @@ export function App() {
   return (
     <>
       <Threadmark
-        onPageReviewRequested={async (input, context) => {
-          const result = await localPageReviewer(input, context);
-          if (!context.signal.aborted) {
-            setAnnotations(result.records);
-            setFeedbackEntries(result.records.map(logEntry).reverse().slice(0, MAX_LOG_ENTRIES));
-          }
-          return result;
-        }}
         projectKey={PROJECT_KEY}
         reviewer={me}
         faces={EXAMPLE_FACES}

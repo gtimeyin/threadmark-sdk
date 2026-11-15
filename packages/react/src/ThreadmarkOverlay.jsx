@@ -908,7 +908,7 @@ function AllCommentsPanel({ annotations, restorations, reviewer, route, hidden, 
             onEnd={onSurveyEnd ? (item) => onSurveyEnd(item) : null}
             onExport={(item) => {
               // Export: a CSV of the spread and every written answer, saved by the browser.
-              const blob = new Blob([surveyResultsCsv(item, surveyResults[item.id])], { type: "text/csv;charset=utf-8" });
+              const blob = new Blob(["\uFEFF", surveyResultsCsv(item, surveyResults[item.id])], { type: "text/csv;charset=utf-8" });
               const url = URL.createObjectURL(blob);
               const link = document.createElement("a");
               link.href = url;

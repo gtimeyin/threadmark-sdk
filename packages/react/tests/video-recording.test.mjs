@@ -465,3 +465,26 @@ test("the countdown defaults to three seconds and stays between 0 and 5", () => 
   assert.equal(resolveVideoRecordingOptions({ countdownSeconds: 30 }).countdownSeconds, 5);
   assert.equal(resolveVideoRecordingOptions({}).countdownSeconds, 3);
 });
+
+function fakeDisplay(surface) {
+  const stopped = [];
+  const track = { kind: "video", stop: () => stopped.push("video"), getSettings: () => (surface === undefined ? {} : { displaySurface: surface }) };
+  const stream = { getVideoTracks: () => [track], getTracks: () => [track] };
+  return { stopped, mediaDevices: { getDisplayMedia: async () => stream }, stream };
+}
+
+test("a shared window or whole screen is stopped before anything is recorded; a tab goes through", async () => {
+  const { openTabStream, sharedSurface } = await import("../src/videoRecording.js");
+  for (const surface of ["window", "monitor"]) {
+    const fake = fakeDisplay(surface);
+    await assert.rejects(openTabStream(fake.mediaDevices), (error) => error.name === "WrongSurfaceError" && error.surface === surface);
+    assert.deepEqual(fake.stopped, ["video"]);
+  }
+  const tab = fakeDisplay("browser");
+  assert.equal(await openTabStream(tab.mediaDevices), tab.stream);
+  assert.deepEqual(tab.stopped, []);
+  // An engine that doesn't report the surface can't be checked, so it isn't blocked.
+  const unknown = fakeDisplay(undefined);
+  assert.equal(await openTabStream(unknown.mediaDevices), unknown.stream);
+  assert.equal(sharedSurface(unknown.stream), null);
+});

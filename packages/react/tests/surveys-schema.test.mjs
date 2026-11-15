@@ -111,3 +111,19 @@ test("survey results export as CSV and share as a short read (board 03, 11d)", (
   assert.match(text, /Mostly clear\./);
   assert.match(text, /“Fine”/);
 });
+
+test("written answers that look like formulas export as plain text, so a spreadsheet won't run them", () => {
+  const survey = normalizeSurvey({ ...createSurveyDraft("/pricing"), id: "s2", status: "live",
+    question: { kind: "scale", text: "=Rate us", scale: { points: 5, display: "numbers", low: "Hard", high: "Easy" } } });
+  const texts = ["=HYPERLINK(\"https://evil.test\",\"click\")", "+1 love it", "-5 bad", "@SUM(A1)", "\t=1+1", "Fine = good"];
+  const csv = surveyResultsCsv(survey, { total: 6, counts: { 5: 6 }, average: 5, texts });
+  assert.match(csv, /"Question","'=Rate us"/);
+  assert.match(csv, /"'=HYPERLINK\(""https:\/\/evil.test"",""click""\)"/);
+  assert.match(csv, /"'\+1 love it"/);
+  assert.match(csv, /"'-5 bad"/);
+  assert.match(csv, /"'@SUM\(A1\)"/);
+  assert.match(csv, /"'\t=1\+1"/);
+  assert.match(csv, /"Fine = good"/);
+  // Counts are numbers and stay numbers.
+  assert.match(csv, /"Answers","6"/);
+});

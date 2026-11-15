@@ -78,7 +78,6 @@ import {
   suggestVideoTitle,
 } from "./videoRecording.js";
 
-import { AgentReview } from "./AgentReview.jsx";
 import { HostedPageReview } from "./HostedPageReview.jsx";
 import { Presence } from "./Presence.jsx";
 
@@ -2121,14 +2120,17 @@ export function Threadmark({
       } catch (error) {
         if (generation !== videoPreviewGenerationRef.current || modeRef.current !== "video-setup") return;
         const declined = error?.name === "NotAllowedError";
+        const wrongSurface = error?.name === "WrongSurfaceError";
         // Tab capture is a privilege the reviewer can refuse; voice + cursor still records the review.
         setVideoSetup((current) => current && {
           ...current,
           mode: current.support.voice ? "voice" : current.mode,
           status: "ready",
-          error: declined
-            ? "Tab sharing was declined. Record voice and cursor instead, or choose This tab to try again."
-            : "This tab couldn’t be captured here. Record voice and cursor instead.",
+          error: wrongSurface
+            ? `You shared ${error.surface === "monitor" ? "your whole screen" : "a window"}, so nothing was recorded. Choose This tab and share this tab only.`
+            : declined
+              ? "Tab sharing was declined. Record voice and cursor instead, or choose This tab to try again."
+              : "This tab couldn’t be captured here. Record voice and cursor instead.",
         });
         return;
       }
@@ -4082,6 +4084,14 @@ export function Threadmark({
     postVideoPendingRef.current = text;
   };
 
+  // Retired in beta.16: this API posted AI comments with no person choosing them. AI suggests; people decide.
+  const warnedRetiredReview = useRef(false);
+  useEffect(() => {
+    if (!onPageReviewRequested || warnedRetiredReview.current) return;
+    warnedRetiredReview.current = true;
+    console.warn("[threadmark] onPageReviewRequested is retired and ignored: it posted AI comments without a person choosing them. Use onAiReview, where people keep or dismiss each suggestion.");
+  }, [onPageReviewRequested]);
+
   if (!portalRoot) return null;
 
   const openListedAnnotation = (id) => {
@@ -4159,11 +4169,6 @@ export function Threadmark({
           .map((item) => ({ comment: item.payload.comment, target: item.payload.target }))}
         onAiReview={onPageReview} onAccept={acceptPageReviewFinding} onDismiss={onPageReviewDismiss} />
     </div>}
-    {!onPageReview && onPageReviewRequested && mode === 'picking' && <div className="tm-root"><AgentReview route={activeRoute} buildId={buildId} ignoredSelectors={ignoredSelectors}
-      onReview={onPageReviewRequested} onRecords={(records) => {
-        const accepted = records.filter(record => record.feedback?.projectKey === projectKey && record.feedback?.route === activeRoute).map(record => recordToAnnotation(record)).filter(Boolean);
-        setAnnotations(current => [...current.filter(item => !accepted.some(next => next.id === item.id)), ...accepted]);
-      }} /></div>}
     {presence && <Presence transport={presence} route={activeRoute} buildId={buildId} projectKey={projectKey} ignoredSelectors={ignoredSelectors} />}
     <Overlay
       mode={mode}
